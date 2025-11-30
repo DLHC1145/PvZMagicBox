@@ -1,0 +1,1490 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+	<title>软件搜索下载</title>
+	<style>
+		* {
+			margin: 0;
+			padding: 0;
+			box-sizing: border-box;
+		}
+
+		body {
+			font-family: Arial, sans-serif;
+			background-color: #f5f5f5;
+			padding: 0;
+			touch-action: pan-x pan-y;
+			overflow-x: hidden;
+			padding-bottom: 60px;
+		}
+
+		/* 防止页面缩放 */
+		html {
+			touch-action: manipulation;
+			-webkit-text-size-adjust: none;
+			-ms-text-size-adjust: none;
+			text-size-adjust: none;
+		}
+
+		/* 搜索区域 - 白色背景，与下方融合（第2张图样式） */
+		.search-section {
+			background-color: white;
+			padding: 8px 15px;
+			border-bottom: none;
+			position: relative;
+		}
+		.search-container {
+			display: flex;
+			align-items: center;
+			background-color: white;
+			border: 1px solid #ddd;
+			border-radius: 25px;
+			overflow: hidden;
+			transition: all 0.3s ease;
+			margin-left: -5px;
+			width: calc(85% - 5px);
+		}
+		.search-container:focus-within {
+			border-color: #2196F3;
+		}
+		
+		/* 搜索图标区域 */
+		.search-icon-area {
+			width: 50px;
+			height: 36px;
+			background-image: url('搜索.png');
+			background-size: cover;
+			background-position: center;
+			background-repeat: no-repeat;
+			background-color: #f5f5f5;
+			flex-shrink: 0;
+			margin-right: 0;
+		}
+		
+		.search-box {
+			flex: 1;
+			padding: 8px 16px;
+			border: none;
+			font-size: 15px;
+			outline: none;
+			background-color: #f5f5f5;
+			min-width: 0;
+			transition: background-color 0.3s;
+		}
+		.search-box::placeholder {
+			color: #999;
+			font-size: 14px;
+		}
+		.search-actions {
+			display: flex;
+			align-items: center;
+			padding: 0 8px 0 0;
+			margin-left: 8px;
+		}
+		.refresh-btn, .download-btn {
+			width: 26px;
+			height: 26px;
+			border: none;
+			background: none;
+			cursor: pointer;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			border-radius: 50%;
+			position: relative;
+			font-size: 16px;
+		}
+		.refresh-btn:hover, .download-btn:hover {
+			background-color: #f0f0f0;
+		}
+
+		/* 纯文字搜索样式 */
+		.search-text {
+			color: #666;
+			font-size: 14px;
+			cursor: pointer;
+			padding: 4px 8px;
+			border-radius: 4px;
+			transition: background-color 0.2s;
+			white-space: nowrap;
+		}
+		.search-text:hover {
+			background-color: #f0f0f0;
+			color: #333;
+		}
+
+		/* 历史记录按钮 - 图片样式 */
+		.history-btn {
+			position: absolute;
+			right: 15px;
+			top: 50%;
+			transform: translateY(-50%);
+			width: 40px;
+			height: 40px;
+			background-image: url('历史记录.jpg');
+			background-size: contain;
+			background-position: center;
+			background-repeat: no-repeat;
+			background-color: transparent;
+			border: none;
+			cursor: pointer;
+			padding: 0;
+			transition: all 0.2s;
+			border-radius: 6px;
+		}
+
+		.history-btn:hover {
+			background-color: #f5f5f5;
+			transform: translateY(-50%) scale(1.05);
+		}
+
+		.history-btn:active {
+			transform: translateY(-50%) scale(0.95);
+		}
+
+		/* 取消按钮 - 蓝色字体 */
+		.cancel-btn {
+			position: absolute;
+			right: 15px;
+			top: 50%;
+			transform: translateY(-50%);
+			background: none;
+			border: none;
+			color: #2196F3;
+			font-size: 14px;
+			padding: 6px 12px;
+			cursor: pointer;
+			transition: all 0.2s;
+			font-weight: bold;
+			white-space: nowrap;
+		}
+		.cancel-btn:hover {
+			background-color: #f0f0f0;
+			border-radius: 4px;
+		}
+
+		/* 搜索结果页面 - 全白背景 */
+		.search-result-page {
+			position: fixed;
+			top: 0;
+			left: 0;
+			width: 100%;
+			height: 100%;
+			background-color: white;
+			z-index: 1000;
+			display: none;
+			flex-direction: column;
+		}
+		.search-result-page.active {
+			display: flex;
+		}
+		
+		/* 搜索结果页面的搜索栏 - 保持与原搜索框相同宽度 */
+		.search-result-header {
+			background-color: white;
+			padding: 8px 15px;
+			border-bottom: 1px solid #e5e5e5;
+			display: flex;
+			align-items: center;
+			position: sticky;
+			top: 0;
+			z-index: 1001;
+			width: 100%;
+		}
+		
+		/* 保持与原搜索框完全相同的容器 */
+		.search-result-input-wrapper {
+			display: flex;
+			align-items: center;
+			background-color: white;
+			border: 1px solid #ddd;
+			border-radius: 25px;
+			overflow: hidden;
+			transition: all 0.3s ease;
+			margin-left: -5px;
+			width: calc(85% - 5px);
+			flex-shrink: 0;
+		}
+		.search-result-input-wrapper:focus-within {
+			border-color: #2196F3;
+		}
+		
+		.search-result-icon-area {
+			width: 50px;
+			height: 36px;
+			background-image: url('搜索.png');
+			background-size: cover;
+			background-position: center;
+			background-repeat: no-repeat;
+			background-color: #f5f5f5;
+			flex-shrink: 0;
+			margin-right: 0;
+		}
+		
+		.search-result-input {
+			flex: 1;
+			padding: 8px 16px;
+			border: none;
+			font-size: 15px;
+			outline: none;
+			background-color: #f5f5f5;
+			min-width: 0;
+			transition: background-color 0.3s;
+		}
+		.search-result-input::placeholder {
+			color: #999;
+			font-size: 14px;
+		}
+		
+		.search-result-actions {
+			display: flex;
+			align-items: center;
+			padding: 0 8px 0 0;
+			margin-left: 8px;
+		}
+
+		/* 软件列表 */
+		.software-list {
+			padding: 0;
+			flex: 1;
+			overflow-y: auto;
+			background-color: white;
+		}
+		.software-item {
+			display: flex;
+			align-items: center;
+			padding: 15px;
+			background-color: white;
+			border-bottom: 1px solid #f0f0f0;
+			transition: background-color 0.2s;
+		}
+		.software-item:hover {
+			background-color: #f9f9f9;
+		}
+		.software-img {
+			width: 50px;
+			height: 50px;
+			border-radius: 8px;
+			margin-right: 15px;
+			object-fit: cover;
+		}
+		.software-info {
+			flex: 1;
+			display: flex;
+			flex-direction: column;
+		}
+		.software-name {
+			font-size: 16px;
+			font-weight: bold;
+			color: #333;
+			margin-bottom: 5px;
+		}
+		.software-score {
+			color: #ff6b35;
+			font-weight: bold;
+			font-size: 14px;
+		}
+		.download-btn-main {
+			padding: 8px 16px;
+			background-color: #2196F3;
+			color: white;
+			border: none;
+			border-radius: 15px;
+			cursor: pointer;
+			font-size: 14px;
+			transition: background-color 0.3s;
+			text-decoration: none;
+		}
+		.download-btn-main:hover {
+			background-color: #1976D2;
+		}
+		.no-results {
+			text-align: center;
+			padding: 40px;
+			color: #666;
+			font-size: 16px;
+			background-color: white;
+		}
+		.software-list.hidden {
+			display: none;
+		}
+
+		/* 历史记录页面 - 从第一个代码移植的样式 */
+		.history-page {
+			position: fixed;
+			top: 0;
+			left: 0;
+			width: 100%;
+			height: 100%;
+			background-color: #f5f5f5;
+			z-index: 1000;
+			display: none;
+			overflow-y: auto;
+		}
+		.history-page.active {
+			display: block;
+		}
+		.history-header {
+			background-color: white;
+			padding: 8px 15px;
+			border-bottom: 1px solid #e5e5e5;
+			display: flex;
+			align-items: center;
+			position: sticky;
+			top: 0;
+			z-index: 1001;
+		}
+		.back-btn {
+			background: none;
+			border: none;
+			font-size: 18px;
+			color: #2196F3;
+			margin-right: 15px;
+			cursor: pointer;
+			padding: 5px;
+			border-radius: 50%;
+			width: 35px;
+			height: 35px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+		}
+		.back-btn:hover {
+			background-color: #f0f0f0;
+		}
+		.history-title {
+			font-size: 16px;
+			font-weight: bold;
+			color: #333;
+			flex: 1;
+		}
+		.history-content {
+			padding: 15px;
+		}
+		.history-search-item {
+			background-color: white;
+			margin-bottom: 15px;
+			border-radius: 8px;
+			overflow: hidden;
+			box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+		}
+		.history-search-header {
+			background-color: #f8f9fa;
+			padding: 12px 15px;
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			border-bottom: 1px solid #e5e5e5;
+		}
+		.history-search-keyword {
+			font-size: 14px;
+			color: #666;
+			flex: 1;
+		}
+		.history-search-keyword strong {
+			color: #333;
+		}
+		.history-search-btn {
+			background-color: #81C784;
+			color: white;
+			border: none;
+			border-radius: 15px;
+			padding: 6px 12px;
+			font-size: 12px;
+			cursor: pointer;
+			display: flex;
+			align-items: center;
+			gap: 4px;
+			transition: background-color 0.3s;
+		}
+		.history-search-btn:hover {
+			background-color: #66BB6A;
+		}
+		.history-search-results {
+			padding: 0;
+		}
+		.history-result-item {
+			display: flex;
+			align-items: center;
+			padding: 12px 15px;
+			border-bottom: 1px solid #f0f0f0;
+			transition: background-color 0.2s;
+		}
+		.history-result-item:last-child {
+			border-bottom: none;
+		}
+		.history-result-item:hover {
+			background-color: #f9f9f9;
+		}
+		.history-result-img {
+			width: 40px;
+			height: 40px;
+			border-radius: 6px;
+			margin-right: 12px;
+			object-fit: cover;
+		}
+		.history-result-info {
+			flex: 1;
+			display: flex;
+			flex-direction: column;
+		}
+		.history-result-name {
+			font-size: 14px;
+			font-weight: bold;
+			color: #333;
+			margin-bottom: 3px;
+		}
+		.history-result-score {
+			font-size: 12px;
+			color: #ff6b35;
+		}
+		.empty-history {
+			text-align: center;
+			padding: 60px 20px;
+			color: #999;
+			font-size: 14px;
+		}
+
+		/* 锁定页面的遮罩层 */
+		.page-lock-overlay {
+			position: fixed;
+			top: 0;
+			left: 0;
+			width: 100%;
+			height: 100%;
+			background-color: transparent;
+			z-index: 99;
+			display: none;
+		}
+		.page-lock-overlay.active {
+			display: block;
+		}
+
+		/* 弹窗遮罩层 */
+		.modal-overlay {
+			position: fixed;
+			top: 0;
+			left: 0;
+			width: 100%;
+			height: 100%;
+			background-color: rgba(0, 0, 0, 0.5);
+			z-index: 2000;
+			display: none;
+			align-items: center;
+			justify-content: center;
+		}
+		.modal-overlay.active {
+			display: flex;
+		}
+
+		/* 大弹窗样式 */
+		.large-modal {
+			background-color: white;
+			border-radius: 16px;
+			width: 90%;
+			max-width: 400px;
+			max-height: 80vh;
+			overflow-y: auto;
+			position: relative;
+			animation: modalSlideIn 0.3s ease-out;
+		}
+		@keyframes modalSlideIn {
+			from {
+				opacity: 0;
+				transform: scale(0.8) translateY(-20px);
+			}
+			to {
+				opacity: 1;
+				transform: scale(1) translateY(0);
+			}
+		}
+
+		.large-modal-header {
+			padding: 20px;
+			border-bottom: 1px solid #eee;
+			position: relative;
+		}
+
+		.large-modal-close {
+			position: absolute;
+			top: 15px;
+			right: 15px;
+			background: none;
+			border: none;
+			font-size: 24px;
+			color: #999;
+			cursor: pointer;
+			width: 30px;
+			height: 30px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			border-radius: 50%;
+			transition: all 0.2s;
+		}
+
+		.large-modal-close:hover {
+			background-color: #f5f5f5;
+			color: #333;
+		}
+
+		.large-modal-title {
+			font-size: 20px;
+			font-weight: bold;
+			color: #333;
+			margin: 0;
+			padding-right: 40px;
+		}
+
+		.large-modal-body {
+			padding: 20px;
+		}
+
+		.large-modal-text {
+			font-size: 14px;
+			color: #666;
+			line-height: 1.5;
+			margin-bottom: 30px;
+		}
+
+		.large-modal-button {
+			display: block;
+			width: 120px;
+			margin: 0 auto;
+			padding: 12px 24px;
+			background-color: #2196F3;
+			color: white;
+			border: none;
+			border-radius: 25px;
+			font-size: 16px;
+			font-weight: bold;
+			cursor: pointer;
+			transition: background-color 0.3s;
+			text-decoration: none;
+			text-align: center;
+		}
+
+		.large-modal-button:hover {
+			background-color: #1976D2;
+		}
+
+		/* 长方形选择弹窗 - 替换原来的圆形弹窗 */
+		.rectangle-modal {
+			background-color: white;
+			border-radius: 16px;
+			width: 90%;
+			max-width: 320px;
+			min-height: 250px;
+			position: relative;
+			animation: rectangleModalSlideIn 0.3s ease-out;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			padding: 30px 20px 20px;
+			max-height: 80vh;
+			overflow-y: auto;
+		}
+		@keyframes rectangleModalSlideIn {
+			from {
+				opacity: 0;
+				transform: scale(0.8) translateY(-20px);
+			}
+			to {
+				opacity: 1;
+				transform: scale(1) translateY(0);
+			}
+		}
+
+		.rectangle-modal-title {
+			font-size: 18px;
+			font-weight: bold;
+			color: #333;
+			margin-bottom: 20px;
+			text-align: center;
+		}
+
+		.rectangle-modal-options {
+			display: flex;
+			flex-direction: column;
+			gap: 12px;
+			width: 100%;
+		}
+
+		.rectangle-modal-option {
+			padding: 12px 20px;
+			background-color: #f5f5f5;
+			border: none;
+			border-radius: 8px;
+			font-size: 14px;
+			color: #333;
+			cursor: pointer;
+			transition: all 0.2s;
+			text-align: center;
+		}
+
+		.rectangle-modal-option:hover {
+			background-color: #2196F3;
+			color: white;
+			transform: translateY(-1px);
+		}
+
+		.rectangle-modal-option:active {
+			transform: translateY(0);
+		}
+
+		.rectangle-modal-close {
+			position: absolute;
+			top: 15px;
+			right: 15px;
+			background: none;
+			border: none;
+			font-size: 20px;
+			color: #999;
+			cursor: pointer;
+			width: 25px;
+			height: 25px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			border-radius: 50%;
+			transition: all 0.2s;
+		}
+
+		.rectangle-modal-close:hover {
+			background-color: #f5f5f5;
+			color: #333;
+		}
+
+		/* 底部导航栏 */
+		.bottom-nav {
+			position: fixed;
+			bottom: 0;
+			left: 0;
+			width: 100%;
+			height: 60px;
+			background-color: #fff;
+			border-top: 1px solid #e5e5e5;
+			display: flex;
+			justify-content: space-around;
+			align-items: center;
+			z-index: 200;
+			box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+		}
+		.nav-item {
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			flex: 1;
+			height: 100%;
+			text-decoration: none;
+			color: #999;
+			transition: color 0.3s;
+			position: relative;
+		}
+		.nav-item.active {
+			color: #4CAF50;
+		}
+		.nav-item:hover {
+			color: #4CAF50;
+		}
+		.nav-icon {
+			width: 24px;
+			height: 24px;
+			margin-bottom: 4px;
+			font-size: 20px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+		}
+		.nav-text {
+			font-size: 12px;
+			font-weight: normal;
+		}
+		.icon-home::before { content: "🏠"; }
+		.icon-page::before { content: "📄"; }
+		.icon-profile::before { content: "👤"; }
+	</style>
+</head>
+<body>
+
+	<!-- 原始页面 -->
+	<div class="search-section">
+		<div class="search-container">
+			<div class="search-icon-area"></div>
+			<input type="text" id="searchInput" class="search-box" placeholder="搜索软件名称">
+			<div class="search-actions">
+				<span id="searchText" class="search-text">搜索</span>
+			</div>
+		</div>
+		<button id="historyBtn" class="history-btn"></button>
+		<button id="cancelBtn" class="cancel-btn" style="display: none;">取消</button>
+	</div>
+
+	<!-- 软件列表 -->
+	<div id="softwareList" class="software-list">
+		<!-- JS 动态生成 -->
+	</div>
+
+	<!-- 搜索结果页面 - 全白背景 -->
+	<div id="searchResultPage" class="search-result-page">
+		<div class="search-result-header">
+			<!-- 使用完全相同的搜索框结构 -->
+			<div class="search-result-input-wrapper">
+				<div class="search-result-icon-area"></div>
+				<input type="text" id="searchResultInput" class="search-result-input" placeholder="搜索软件名称">
+				<div class="search-result-actions">
+					<span class="search-text">搜索</span>
+				</div>
+			</div>
+			<button id="resultCancelBtn" class="cancel-btn">取消</button>
+		</div>
+		<div id="resultSoftwareList" class="software-list">
+			<!-- 搜索结果将在这里显示 -->
+		</div>
+	</div>
+
+	<!-- 历史记录页面 - 从第一个代码移植 -->
+	<div id="historyPage" class="history-page">
+		<div class="history-header">
+			<button id="backBtn" class="back-btn">←</button>
+			<div class="history-title">历史记录</div>
+		</div>
+		<div id="historyContent" class="history-content">
+			<!-- JS 动态生成 - 显示搜索历史和对应结果 -->
+		</div>
+	</div>
+
+	<!-- 大弹窗 -->
+	<div id="largeModal" class="modal-overlay">
+		<div class="large-modal">
+			<div class="large-modal-header">
+				<h2 id="largeModalTitle" class="large-modal-title"></h2>
+				<button id="largeModalClose" class="large-modal-close">×</button>
+			</div>
+			<div class="large-modal-body">
+				<p id="largeModalText" class="large-modal-text"></p>
+				<button id="largeModalButton" class="large-modal-button">获取</button>
+			</div>
+		</div>
+	</div>
+
+	<!-- 长方形选择弹窗 - 替换原来的圆形弹窗 -->
+	<div id="rectangleModal" class="modal-overlay">
+		<div class="rectangle-modal">
+			<button id="rectangleModalClose" class="rectangle-modal-close">×</button>
+			<h3 id="rectangleModalTitle" class="rectangle-modal-title"></h3>
+			<div id="rectangleModalOptions" class="rectangle-modal-options">
+				<!-- 动态生成选项 -->
+			</div>
+		</div>
+	</div>
+
+<!-- 底部导航栏 -->
+<div class="bottom-nav">
+	<!-- 主页按钮：添加onclick阻止默认行为 -->
+	<a href="index.html" class="nav-item active" data-page="home" onclick="return false;">
+		<div class="nav-icon icon-home"></div>
+		<div class="nav-text">主页</div>
+	</a>
+	<a href="index2.html" class="nav-item" data-page="page">
+		<div class="nav-icon icon-page"></div>
+		<div class="nav-text">作者</div>
+	</a>
+	<a href="index3.html" class="nav-item" data-page="profile">
+		<div class="nav-icon icon-profile"></div>
+		<div class="nav-text">我的</div>
+	</a>
+</div>
+
+	<script>
+		// 软件数据 - 只给繁茂版添加了 downloadText 字段
+		const softwareData = [
+			{
+				rank: 1,
+				name: "植物大战僵尸2官方版",
+				score: "8.7分  原汁原味的中文官方版本",
+				download: "https://pvz2apk-cdn.ditwan.cn/1730/baokai_3.9.0_1730_381_dj2.0-3.0.0.apk",
+				download2: null,
+				image: "植物大战僵尸2.jpg"
+			},
+			{
+				rank: 1,
+				name: "植物大战僵尸2时空再旅1.0.4",
+				score: "8.8分  作者：想不出名字、Mz工作室",
+				download: "链接",
+				download2: "时空再旅.html",
+				image: "植物大战僵尸2时空再旅.jpg"
+			},
+			{
+				rank: 1,
+				name: "植物大战僵尸2Ark版",
+				score: "8.7分  作者：今霄是飘逸的利己主义者",
+				download: "https://www.123684.com/s/zWgIjv-XcA8",
+				download2: "时空再旅.html",
+				image: "植物大战僵尸2ark.jpg"
+			},
+			{
+				rank: 1,
+				name: "植物大战僵尸2衍生版",
+				score: "7.8分  作者：东北雨姐的粉丝",
+				download: "https://www.123684.com/s/zWgIjv-ncA8",
+				download2: "时空再旅.html",
+				image: "植物大战僵尸2衍生.jpg"
+			},
+			{
+				rank: 1,
+				name: "植物大战僵尸2国际版（汉化+恢复拓展+恢复音乐）",
+				score: "9.0分  作者：特别的伊将军 版本12.7.1",
+				download: "http://www.123865.com/s/Xpv9-ndDxh",
+				download2: "时空再旅.html",
+				image: "植物大战僵尸2国际版汉化.jpg"
+			},
+			{
+				rank: 1,
+				name: "植物大战僵尸2返茂版（PvZ 2: Reflourished）",
+				score: "8.9分  总作者：PvZABFan＆PeaMix",
+				download: "",
+				download2: "",
+				image: "植物大战僵尸2返茂.jpg",
+				downloadText: "获取" // 只为繁茂版添加了自定义下载按钮文本
+			},
+			{
+				rank: 1,
+				name: "Team Sparks Il PvZ2 Modders（需要魔法）",
+				score: "8分 一个由画师和模组作者组成的团队，致力于创建、动画和编写素材，供模组社区免费使用!",
+				download: "https://discord.gg/fAuHJNRM2y",
+				download2: "",
+				image: "TeamSpark.jpg",
+				downloadText: "前往" // 只为繁茂版添加了自定义下载按钮文本
+			},
+			{
+				rank: 1,
+				name: "植物大战僵尸2：迷宫回响",
+				score: "7.9分  一款不错的迷宫改版，内含丰富的游戏内容！",
+				download: "",
+				download2: "",
+				image: "植物大战僵尸2迷宫回响.jpg",
+				downloadText: "前往" // 只为繁茂版添加了自定义下载按钮文本
+			},
+			{
+				rank: 1,
+				name: "植物大战僵尸2：迷宫拓展版",
+				score: "8.1分  完成度很的迷宫改版，拥有妙趣横生的游戏体验！",
+				download: "",
+				download2: "",
+				image: "植物大战僵尸2迷宫拓展.jpg",
+				downloadText: "前往" // 只为繁茂版添加了自定义下载按钮文本
+			},
+			{
+				rank: 1,
+				name: "小马宝莉大战僵尸5",
+				score: "8.6分  小马宝莉大战僵尸的第五部，小马大战僵尸收官之作！",
+				download: "",
+				download2: "",
+				image: "植物大战僵尸2小马.jpg",
+				downloadText: "前往" // 只为繁茂版添加了自定义下载按钮文本
+			},
+			{
+				rank: 1,
+				name: "植物大战僵尸2天空之城内购破解",
+				score: "7.9分  经典迷宫版v1.6.1内购破解版！无须花钱即可获取资源 此版本纯琨曲！",
+				download: "https://www.123684.com/s/zWgIjv-VcA8",
+				download2: "",
+				image: "植物大战僵尸2天空之城.jpg",
+				
+			},
+			{
+				rank: 1,
+				name: "植物大战僵尸无尽版内购破解",
+				score: "7.7分  经典一代官方版本内购破解，包含西游、龙宫、长城三大内容！",
+				download: "https://www.123684.com/s/zWgIjv-VcA8",
+				download2: "",
+				image: "植物大战僵尸无尽版.jpg",
+				
+			},
+			{
+				rank: 1,
+				name: "植物大战僵尸全明星qwq版",
+				score: "8.5分  经典全明星版本的改版！内涵丰富内容和无与伦比的新奇体验",
+				download: "无",
+				download2: "1",
+				image: "植物大战僵尸全明星qwq.jpg",
+				
+			},
+			{
+				rank: 1,
+				name: "Plants vs Zombies：Brave New World",
+				score: "8.8分  目前仅支持电脑端游玩，加入群聊在群文件中下载游戏包",
+				download: "无",
+				download2: "1",
+				image: "PlantsvsZombies：BraveNewWorld.jpg",
+				
+			},
+			{
+				rank: 1,
+				name: "植物大战僵尸：乐Pad版",
+				score: "6.8分 在一众一代版本中，此版本十分高清！对高版本系统的适配也是一流的。",
+				download: "无",
+				download2: "1",
+				image: "植物大战僵尸乐pad版.jpg",
+				
+			}
+		];
+
+		// 弹窗数据
+		const popupData = [
+			{
+				name: "植物大战僵尸2返茂版（PvZ 2: Reflourished）",
+				text: "加入官方代理社区！",
+				downloads: [
+					{
+						url: "链接1",
+						text: "加入QQ5群"
+					},
+					{
+						url: "链接2",
+						text: "加入QQ3群"
+					},
+					{
+						url: "链接3",
+						text: "加入QQ2群"
+					},
+					{
+						url: "链接4",
+						text: "加入QQ4群"
+					},
+					{
+						url: "https://discord.gg/ba9rC7Qdkb",
+						text: "加入Discord！（需要您会魔法）"
+					}
+				]
+			},
+			{
+				name: "植物大战僵尸2：迷宫回响",
+				text: "加入官方群！在群内获取游戏资源",
+				downloads: [
+					{
+						url: "https://qun.qq.com/universal-share/share?ac=1&authKey=cvrccBe19rE5c9UGSdpw7ZphWwWT1GHHlThgDodYXqVkSyDgW9FQP%2BKKWYii1rVk&busi_data=eyJncm91cENvZGUiOiI4MzIyODcwOTgiLCJ0b2tlbiI6Im1Xb3ZwMWI5dEVlbkxaL2pzQllkaC9JWS9lbGJ6M1hsaGkyK2VqVndReXFBQy9RVHBPUVlId2NDbVNTRlFlTEciLCJ1aW4iOiIxMzIyMDMzNTkyIn0=&data=oi3-XRWXuYVNGnErhbB3YMpemyq_gnifJmv3NtJNXfPxB3riOG97HAeXzQBiEobSQaMNPjGzKHgUjG1Hu0StcV3D9gw3VD2QsMXZMow3iUM&svctype=5&tempid=h5_group_info",
+						text: "加入QQ交流群获取"
+					}
+				]
+			},
+			{
+				name: "植物大战僵尸全明星qwq版",
+				text: "加入官方群！在群内获取游戏资源",
+				downloads: [
+					{
+						url: "https://qun.qq.com/universal-share/share?ac=1&authKey=VrThaikUN6pnRjni858gy8f7Dc7VrkJcRHHAgfT6wVFp6l6Q6x2ZUy7pYeaiqK2k&busi_data=eyJncm91cENvZGUiOiIxMDUzMjcwMzA2IiwidG9rZW4iOiJpSHcxWmlaL1d6N0ovU2tKSGVtMXplM2pXZFI1RDlsYWdKYTBzTDBZZGpacy95ZW13MDF1UGVVK0VoNVZIa1ZTIiwidWluIjoiMjAxOTk0NzA4NSJ9&data=_U9WSDDR7BNvN6vDUl-XmJCqSen9uSB2caP3hsd34DiAb6547Uu7ZxlAFXaFobAnkeeTggnrreyN_6ZU46IZsTtk1sRnumBcbAIcYr9UCLo&svctype=5&tempid=h5_group_info",
+						text: "加入QQ交流群获取"
+					}
+				]
+			},
+			{
+				name: "Team Sparks Il PvZ2 Modders（需要魔法）",
+				text: "加入官方Discord社区！",
+				downloads: [
+					{
+						url: "https://discord.gg/fAuHJNRM2y",
+						text: "加入Discord"
+					}
+				]
+			},
+			{
+				name: "小马宝莉大战僵尸5",
+				text: "经多年守卫控住僵尸，但小马谷已成废墟。星光熠熠决定穿越到第一天剿灭僵尸，重启时空扭转残局！",
+				downloads: [
+					{
+						url: "https://qun.qq.com/universal-share/share?ac=1&authKey=ICKWdXFQqBR%2BaHrB9/JPygRkqF6DEspJxwRCDW/D74YpMuDTGYQfhaPWiU8sOKmu&busi_data=eyJncm91cENvZGUiOiI1NDc2NTgyOTUiLCJ0b2tlbiI6ImZHSUpDT09Zc2tmYWt2aXRHY0ZDZy9hMW5ibFBFd1VpRnFkWWlQR0dxTzRCZ1k5aE1CSE5zS2pGQW1GT2huTCsiLCJ1aW4iOiIyMDE5OTQ3MDg1In0=&data=ZbIpXGFKVTxPpzZ6cgQI-1O9cD5gWFfsfbf4cNwmOUJIA1Hy9D-UzcjY135YMCmtzfBl4RIulZJJbU5AIseRT8cIvcvCgWXIS0aFTmLLago&svctype=5&tempid=h5_group_info",
+						text: "加入QQ官方群获取"
+					},
+					{
+						url: "https://www.123684.com/s/zWgIjv-tcA8",
+						text: "在线123云盘下载"
+					}
+				]
+			},
+			{
+				name: "植物大战僵尸2：迷宫拓展版",
+				text: "加入官方QQ群！下载最新游戏资源",
+				downloads: [
+					{
+						url: "https://qun.qq.com/universal-share/share?ac=1&authKey=4CX14sTwi007tFiMdmoY8%2BdRZ9MPsDJ0gKuxL850OQw6xP6KVOQvnmGCQM/vp%2B4g&busi_data=eyJncm91cENvZGUiOiIxMDQ0OTMyNjM2IiwidG9rZW4iOiJLSDU3Z2padlhlMVFaR2lScjJCM3FkVGMxN1NTM2NtWHl3bkNXRGlpbUxRMVZMUktxcHlJbEFpV2dZRzJpMCtpIiwidWluIjoiMjAxOTk0NzA4NSJ9&data=yf5Zly7jOcjnvn1SGtouhSK2YIFKTngQnOP17PrbdFKVQ6HM0r_QR8oYjYJNJEblDLZm_Q91KN4cuTVxFk-FNUSrUSfTT7nPJWx-YLAwvQ8&svctype=5&tempid=h5_group_info",
+						text: "查看群简介，加入拓展QQ官方群"
+					},
+					{
+						url: "https://1drv.ms/f/c/ca303ad2d43918b2/ErIYOdTSOjAggMqpAAAAAAABaYJBklXNYVebE24ZXcG_yQ",
+						text: "使用onedrive在线下载（需要魔法）"
+					}
+				]
+			},
+			{
+				name: "植物大战僵尸无尽版内购破解",
+				text: "该版本较为远古，内购破解会闪退，但可正常到账。高系统手机启动时小概率闪退，但第三次必定进入。",
+				downloads: [
+					{
+						url: "https://www.123684.com/s/zWgIjv-deA8",
+						text: "云盘下载"
+					}
+				]
+			},
+			{
+				name: "Plants vs Zombies：Brave New World",
+				text: "《植物大战僵尸：美丽新世界》重拾系列经典玩法。开放更多的自定义插件项目，带来无与伦比的体验。玩家将再度开启跨时空冒险，收集并运用植物，全力抵御僵尸浪潮的入侵，重温原味塔防体验。",
+				downloads: [
+					{
+						url: "https://qun.qq.com/universal-share/share?ac=1&authKey=Kc5oaRXj%2Byj5JFQBXIb6%2BahpROq501Hkc37JlZJV39e5LRpkLK6T7f7nCs%2BLB6VX&busi_data=eyJncm91cENvZGUiOiI5NDU4MzkyNzUiLCJ0b2tlbiI6ImcxMFBXTjlEdHpwS2tFV0pwWWFsVjdVSXhqT291VDlwSFk2THBCMGJGQWZ3VnBIYlNrN0hUdm01Tk50ZjlNQVIiLCJ1aW4iOiIyMDE5OTQ3MDg1In0%3D&data=nRCXpJvEAtbQCGSi49sXjuGj_uFc1dwXcLyMfNpqV72DHD68TxSqnQi4LQB2US8s7cINSag_xnr0VPPc27gEJNtEQXQfVGMeoQGGdX5auEg&svctype=5&tempid=h5_group_info",
+						text: "点击加群获取"
+					}
+				]
+			},
+			{
+				name: "植物大战僵尸：乐Pad版",
+				text: "版本相对于原版没有花园、解谜元素，但是在关卡中会出现灌木丛。而对比移动端的其他版本，这个版本的特点在于支持1280x800分辨率画面。且对于PAD的适配更好！",
+				downloads: [
+					{
+						url: "https://www.123684.com/s/zWgIjv-xeA8",
+						text: "云盘下载"
+					}
+				]
+			}
+		];
+
+		const searchInput = document.getElementById('searchInput');
+		const searchResultInput = document.getElementById('searchResultInput');
+		const softwareList = document.getElementById('softwareList');
+		const resultSoftwareList = document.getElementById('resultSoftwareList');
+		const searchResultPage = document.getElementById('searchResultPage');
+		const searchText = document.getElementById('searchText');
+		const resultSearchText = document.querySelector('.search-result-actions .search-text');
+		const historyBtn = document.getElementById('historyBtn');
+		const cancelBtn = document.getElementById('cancelBtn');
+		const resultCancelBtn = document.getElementById('resultCancelBtn');
+		const historyPage = document.getElementById('historyPage');
+		const backBtn = document.getElementById('backBtn');
+		const historyContent = document.getElementById('historyContent');
+
+		// 弹窗元素 - 替换为长方形弹窗
+		const largeModal = document.getElementById('largeModal');
+		const largeModalTitle = document.getElementById('largeModalTitle');
+		const largeModalText = document.getElementById('largeModalText');
+		const largeModalButton = document.getElementById('largeModalButton');
+		const largeModalClose = document.getElementById('largeModalClose');
+
+		const rectangleModal = document.getElementById('rectangleModal');
+		const rectangleModalTitle = document.getElementById('rectangleModalTitle');
+		const rectangleModalOptions = document.getElementById('rectangleModalOptions');
+		const rectangleModalClose = document.getElementById('rectangleModalClose');
+
+		// 按分数从高到低排序
+		const sortedSoftware = [...softwareData].sort((a, b) => {
+			const scoreA = parseFloat(a.score);
+			const scoreB = parseFloat(b.score);
+			return scoreB - scoreA;
+		});
+
+		// 搜索历史记录
+		let searchHistory = JSON.parse(localStorage.getItem('searchHistory') || '[]');
+		
+		// 渲染软件列表
+		function renderSoftwareList(softwareToShow, container = softwareList) {
+			if (softwareToShow.length === 0) {
+				container.innerHTML = '<div class="no-results">没有找到相关软件</div>';
+				return;
+			}
+			const listHTML = softwareToShow.map(item => {
+				let downloadButton = '';
+				
+				// 确定下载按钮文本
+				let buttonText = item.downloadText || '下载';
+				
+				// 检查是否有对应的弹窗数据
+				const popupInfo = popupData.find(popup => popup.name === item.name);
+				
+				// 如果有弹窗数据，总是显示弹窗（无论有多少个下载选项）
+				if (popupInfo) {
+					const buttonAction = `onclick="showPopup('${item.name}')"`;
+					downloadButton = `<button class="download-btn-main" ${buttonAction}>${buttonText}</button>`;
+				} else if (item.download && item.download !== '链接' && item.download !== 'null' && item.download.trim() !== '') {
+					// 只有直接下载链接且没有弹窗数据时，才直接下载
+					downloadButton = `<a href="${item.download}" class="download-btn-main" target="_blank">${buttonText}</a>`;
+				} else if (item.download2 && item.download2 !== 'null' && item.download2.trim() !== '' && !item.download2.endsWith('.html')) {
+					// 如果download2不是.html文件，理论上应该也有弹窗数据，但以防万一
+					downloadButton = `<a href="${item.download2}" class="download-btn-main" target="_blank">${buttonText}</a>`;
+				} else if (item.download2 && item.download2 !== 'null' && item.download2.trim() !== '' && item.download2.endsWith('.html')) {
+					// .html文件直接跳转
+					downloadButton = `<a href="${item.download2}" class="download-btn-main" target="_blank">${buttonText}</a>`;
+				} else {
+					downloadButton = `<span class="download-btn-main" style="background-color: #ccc; cursor: not-allowed;">暂无下载</span>`;
+				}
+				
+				return `
+					<div class="software-item">
+						<img src="${item.image}" class="software-img" alt="${item.name}">
+						<div class="software-info">
+							<div class="software-name">${item.name}</div>
+							<div class="software-score">${item.score}</div>
+						</div>
+						${downloadButton}
+					</div>
+				`;
+			}).join('');
+			container.innerHTML = listHTML;
+		}
+
+		// 显示弹窗
+		function showPopup(softwareName) {
+			const popupInfo = popupData.find(popup => popup.name === softwareName);
+			if (!popupInfo) return;
+
+			// 显示长方形选择弹窗
+			showRectangleModal(popupInfo);
+		}
+
+		// 显示大弹窗
+		function showLargeModal(title, text, url) {
+			largeModalTitle.textContent = title;
+			largeModalText.textContent = text;
+			largeModalButton.onclick = () => {
+				window.open(url, '_blank');
+				hideLargeModal();
+			};
+			largeModal.classList.add('active');
+		}
+
+		// 隐藏大弹窗
+		function hideLargeModal() {
+			largeModal.classList.remove('active');
+		}
+
+		// 显示长方形选择弹窗 - 修复后的版本，显示描述文本
+		function showRectangleModal(popupInfo) {
+			rectangleModalTitle.textContent = popupInfo.name; // 使用软件名称作为标题
+			
+			// 清空现有选项
+			rectangleModalOptions.innerHTML = '';
+			
+			// 先添加描述文本
+			const descriptionDiv = document.createElement('div');
+			descriptionDiv.style.cssText = `
+				font-size: 14px;
+				color: #666;
+				line-height: 1.5;
+				margin-bottom: 20px;
+				text-align: center;
+				padding: 0 10px;
+			`;
+			descriptionDiv.textContent = popupInfo.text;
+			rectangleModalOptions.appendChild(descriptionDiv);
+			
+			// 添加分割线
+			const divider = document.createElement('div');
+			divider.style.cssText = `
+				width: 100%;
+				height: 1px;
+				background-color: #e5e5e5;
+				margin-bottom: 15px;
+			`;
+			rectangleModalOptions.appendChild(divider);
+			
+			// 添加下载选项标题
+			const optionsTitle = document.createElement('div');
+			optionsTitle.style.cssText = `
+				font-size: 14px;
+				font-weight: bold;
+				color: #333;
+				margin-bottom: 12px;
+				text-align: center;
+			`;
+			optionsTitle.textContent = '请选择下载方式：';
+			rectangleModalOptions.appendChild(optionsTitle);
+			
+			// 添加选项
+			popupInfo.downloads.forEach((download, index) => {
+				const option = document.createElement('button');
+				option.className = 'rectangle-modal-option';
+				option.textContent = download.text;
+				option.onclick = () => {
+					window.open(download.url, '_blank');
+					hideRectangleModal();
+				};
+				rectangleModalOptions.appendChild(option);
+			});
+			
+			rectangleModal.classList.add('active');
+		}
+
+		// 隐藏长方形选择弹窗
+		function hideRectangleModal() {
+			rectangleModal.classList.remove('active');
+		}
+
+		// 保存搜索历史
+		function saveSearchHistory(keyword) {
+			if (!keyword.trim()) return;
+			
+			// 移除重复的关键词
+			searchHistory = searchHistory.filter(item => item.keyword !== keyword);
+			
+			// 添加新的搜索记录到开头
+			searchHistory.unshift({
+				keyword: keyword,
+				timestamp: Date.now()
+			});
+			
+			// 只保留最近10次搜索
+			if (searchHistory.length > 10) {
+				searchHistory = searchHistory.slice(0, 10);
+			}
+			
+			localStorage.setItem('searchHistory', JSON.stringify(searchHistory));
+		}
+
+		// 执行搜索
+		function performSearch(keyword, container = resultSoftwareList) {
+			console.log('执行搜索:', keyword);
+			
+			if (!keyword.trim()) {
+				renderSoftwareList(sortedSoftware, container);
+				return;
+			}
+			
+			// 保存搜索历史
+			saveSearchHistory(keyword);
+			
+			const filteredSoftware = sortedSoftware.filter(item =>
+				item.name.toLowerCase().includes(keyword.toLowerCase())
+			);
+			renderSoftwareList(filteredSoftware, container);
+		}
+
+		// 显示搜索结果页面
+		function showSearchResultPage() {
+			searchResultPage.classList.add('active');
+			// 将原搜索框的内容复制到结果页面的搜索框
+			searchResultInput.value = searchInput.value;
+			searchResultInput.focus();
+		}
+
+		// 隐藏搜索结果页面
+		function hideSearchResultPage() {
+			searchResultPage.classList.remove('active');
+			searchInput.value = '';
+			searchResultInput.value = '';
+		}
+
+		// 渲染历史记录页面 - 从第一个代码移植的功能
+		function renderHistoryPage() {
+			if (searchHistory.length === 0) {
+				historyContent.innerHTML = '<div class="empty-history">暂无搜索历史</div>';
+				return;
+			}
+
+			// 用于跟踪已经显示过的软件
+			const displayedSoftware = new Set();
+			let historyHTML = '';
+
+			// 按顺序处理每个搜索关键词，跳过已显示的软件
+			searchHistory.forEach(historyItem => {
+				// 对该关键词搜索软件，排除已显示的
+				const results = sortedSoftware.filter(item => {
+					const isMatch = item.name.toLowerCase().includes(historyItem.keyword.toLowerCase());
+					const isNotDisplayed = !displayedSoftware.has(item.name);
+					return isMatch && isNotDisplayed;
+				}).slice(0, 2); // 每个关键词最多显示2个结果
+
+				if (results.length > 0) {
+					// 将结果显示并标记为已显示
+					const resultsHTML = results.map(result => {
+						// 标记该软件为已显示
+						displayedSoftware.add(result.name);
+						
+						return `
+							<div class="history-result-item">
+								<img src="${result.image}" class="history-result-img" alt="${result.name}">
+								<div class="history-result-info">
+									<div class="history-result-name">${result.name}</div>
+									<div class="history-result-score">${result.score}</div>
+								</div>
+								<a href="${result.download && result.download !== '链接' ? result.download : result.download2}" 
+								   class="download-btn-main" target="_blank" style="padding: 6px 12px; font-size: 12px;">
+									下载
+								</a>
+							</div>
+						`;
+					}).join('');
+
+					historyHTML += `
+						<div class="history-search-item">
+							<div class="history-search-header">
+								<div class="history-search-keyword">
+									搜索：<strong>"${historyItem.keyword}"</strong>
+								</div>
+								<button class="history-search-btn" onclick="quickSearch('${historyItem.keyword}')">
+									搜索
+								</button>
+							</div>
+							<div class="history-search-results">
+								${resultsHTML}
+							</div>
+						</div>
+					`;
+				}
+			});
+
+			// 检查是否有结果显示
+			if (historyHTML === '') {
+				historyContent.innerHTML = '<div class="empty-history">所有软件已在上方显示完毕</div>';
+			} else {
+				historyContent.innerHTML = historyHTML;
+			}
+		}
+
+		// 快速搜索函数 - 在历史记录中点击搜索按钮时调用
+		function quickSearch(keyword) {
+			// 关闭历史记录页面
+			historyPage.classList.remove('active');
+			
+			// 设置搜索框的值
+			searchInput.value = keyword;
+			searchResultInput.value = keyword;
+			
+			// 执行搜索
+			performSearch(keyword, resultSoftwareList);
+			
+			// 显示搜索结果页面
+			showSearchResultPage();
+			
+			// 聚焦到搜索框
+			searchResultInput.focus();
+		}
+
+		// 初始化
+		renderSoftwareList(sortedSoftware);
+
+		// 搜索框获得焦点 - 显示白色搜索页面
+		searchInput.addEventListener('focus', () => {
+			showSearchResultPage();
+			cancelBtn.style.display = 'block';
+			historyBtn.style.display = 'none';
+		});
+
+		// 原始页面搜索按钮点击事件
+		searchText.addEventListener('click', () => {
+			const keyword = searchInput.value.trim();
+			if (keyword) {
+				performSearch(keyword, softwareList);
+			}
+		});
+
+		// 搜索结果页面搜索按钮点击事件
+		resultSearchText.addEventListener('click', () => {
+			const keyword = searchResultInput.value.trim();
+			if (keyword) {
+				performSearch(keyword, resultSoftwareList);
+			}
+		});
+
+		// 原始页面取消按钮
+		cancelBtn.addEventListener('click', () => {
+			hideSearchResultPage();
+			cancelBtn.style.display = 'none';
+			historyBtn.style.display = 'block';
+		});
+
+		// 搜索结果页面取消按钮
+		resultCancelBtn.addEventListener('click', () => {
+			hideSearchResultPage();
+			cancelBtn.style.display = 'none';
+			historyBtn.style.display = 'block';
+		});
+
+		// 历史记录按钮点击事件
+		historyBtn.addEventListener('click', () => {
+			renderHistoryPage();
+			historyPage.classList.add('active');
+		});
+
+		// 返回按钮点击事件
+		backBtn.addEventListener('click', () => {
+			historyPage.classList.remove('active');
+		});
+
+		// 搜索结果页面输入框回车搜索
+		searchResultInput.addEventListener('keypress', e => {
+			if (e.key === 'Enter') {
+				const keyword = searchResultInput.value.trim();
+				performSearch(keyword, resultSoftwareList);
+			}
+		});
+
+		// 原始页面输入框回车搜索
+		searchInput.addEventListener('keypress', e => {
+			if (e.key === 'Enter') {
+				const keyword = searchInput.value.trim();
+				if (keyword) {
+					performSearch(keyword, softwareList);
+				}
+			}
+		});
+
+		// 同步两个搜索框的内容
+		searchInput.addEventListener('input', () => {
+			searchResultInput.value = searchInput.value;
+		});
+
+		searchResultInput.addEventListener('input', () => {
+			searchInput.value = searchResultInput.value;
+		});
+
+		// 弹窗关闭事件
+		largeModalClose.addEventListener('click', hideLargeModal);
+		rectangleModalClose.addEventListener('click', hideRectangleModal);
+
+		// 点击遮罩层关闭弹窗
+		largeModal.addEventListener('click', (e) => {
+			if (e.target === largeModal) {
+				hideLargeModal();
+			}
+		});
+
+		rectangleModal.addEventListener('click', (e) => {
+			if (e.target === rectangleModal) {
+				hideRectangleModal();
+			}
+		});
+
+		// 底部导航激活状态
+		document.addEventListener('DOMContentLoaded', () => {
+			const navItems = document.querySelectorAll('.nav-item');
+			navItems.forEach(item => {
+				item.addEventListener('click', function(e) {
+					const targetPage = this.getAttribute('data-page');
+					const currentPage = window.location.pathname.split('/').pop() || 'index.html';
+					if ((targetPage === 'home' && currentPage === 'index.html') ||
+						(targetPage === 'page' && currentPage === 'index2.html') ||
+						(targetPage === 'profile' && currentPage === 'index3.html')) {
+						e.preventDefault();
+						return false;
+					}
+					navItems.forEach(i => i.classList.remove('active'));
+					this.classList.add('active');
+				});
+			});
+			const currentPage = window.location.pathname.split('/').pop() || 'index.html';
+			if (currentPage === 'index.html') setActiveNavItem('home');
+			else if (currentPage === 'index2.html') setActiveNavItem('page');
+			else if (currentPage === 'index3.html') setActiveNavItem('profile');
+		});
+
+		function setActiveNavItem(targetPage) {
+			const navItems = document.querySelectorAll('.nav-item');
+			navItems.forEach(item => {
+				item.classList.toggle('active', item.getAttribute('data-page') === targetPage);
+			});
+		}
+	</script>
+</body>
+</html>

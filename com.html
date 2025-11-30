@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>跳转中</title>
+  <!-- 立即跳转（0 秒） -->
+  <meta http-equiv="refresh" content="0;url=" />
+</head>
+<body>
+  <p>正在跳转到 <strong>COM</strong> …</p>
+  <!-- 兜底：若 meta 刷新被拦截，再用 JS 跳转 -->
+  <script>
+	// 若已离开当前页（说明 meta 已生效），则不再跳转
+	if (performance.navigation.type === 1) {
+	  location.replace('COM.html');
+	} else {
+	  // 立即跳转；如被拦截，用户可手动点此链接
+	  window.location.href = 'indexhome.html';
+	  document.body.insertAdjacentHTML('beforeend',
+		'<p>若未自动跳转，请 <a href="COM">点击这里</a>。</p>');
+	}
+  </script>
+</body>
+</html>

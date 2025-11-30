@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>电力红茶的个人空间</title>
+	<style>
+		* {
+			margin: 0;
+			padding: 0;
+			box-sizing: border-box;
+		}
+
+		body {
+			background: #f5f5f5;
+			font-family: Arial, sans-serif;
+			height: 100vh;
+			display: flex;
+			flex-direction: column;
+			padding-bottom: 60px;
+		}
+
+		/* 主内容区域 - 嵌入B站页面 */
+		.main-content {
+			flex: 1;
+			position: relative;
+			overflow: hidden;
+			background: white;
+		}
+
+		.bilibili-frame {
+			width: 100%;
+			height: 100%;
+			border: none;
+		}
+
+		/* 防止页面缩放 */
+		html {
+			touch-action: manipulation;
+			-webkit-text-size-adjust: none;
+			-ms-text-size-adjust: none;
+			text-size-adjust: none;
+		}
+
+		/* 底部导航栏样式 - 参考您提供的样式 */
+		.bottom-nav {
+			position: fixed;
+			bottom: 0;
+			left: 0;
+			width: 100%;
+			height: 60px;
+			background-color: #fff;
+			border-top: 1px solid #e5e5e5;
+			display: flex;
+			justify-content: space-around;
+			align-items: center;
+			z-index: 200;
+			box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+		}
+
+		.nav-item {
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			flex: 1;
+			height: 100%;
+			text-decoration: none;
+			color: #999;
+			transition: color 0.3s;
+			position: relative;
+			border: none;
+			background: none;
+			cursor: pointer;
+			font-family: inherit;
+		}
+
+		.nav-item.active {
+			color: #4CAF50;
+		}
+
+		.nav-item:hover {
+			color: #4CAF50;
+		}
+
+		.nav-item.center:hover {
+			color: #999;
+			cursor: not-allowed;
+		}
+
+		.nav-icon {
+			width: 24px;
+			height: 24px;
+			margin-bottom: 4px;
+			font-size: 20px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+		}
+
+		.nav-text {
+			font-size: 12px;
+			font-weight: normal;
+		}
+
+		/* 简单的图标样式 */
+		.icon-home::before {
+			content: "🏠";
+		}
+
+		.icon-author::before {
+			content: "📄";
+		}
+
+		.icon-profile::before {
+			content: "👤";
+		}
+
+		/* 响应式设计 */
+		@media (max-width: 768px) {
+			.nav-text {
+				font-size: 11px;
+			}
+			
+			.nav-icon {
+				font-size: 18px;
+			}
+		}
+
+		@media (max-width: 480px) {
+			.nav-text {
+				font-size: 10px;
+			}
+			
+			.nav-icon {
+				font-size: 16px;
+			}
+			
+			.bottom-nav {
+				height: 55px;
+			}
+			
+			body {
+				padding-bottom: 55px;
+			}
+		}
+
+		/* 加载提示 */
+		.loading-hint {
+			position: absolute;
+			top: 50%;
+			left: 50%;
+			transform: translate(-50%, -50%);
+			text-align: center;
+			color: #666;
+			z-index: 10;
+		}
+
+		.loading-hint h2 {
+			margin-bottom: 10px;
+			font-size: 18px;
+		}
+
+		.loading-hint p {
+			font-size: 14px;
+			margin-bottom: 20px;
+		}
+
+		.fallback-link {
+			display: inline-block;
+			padding: 10px 20px;
+			background: #007bff;
+			color: white;
+			text-decoration: none;
+			border-radius: 5px;
+			transition: background 0.3s;
+		}
+
+		.fallback-link:hover {
+			background: #0056b3;
+		}
+	</style>
+</head>
+<body>
+	<!-- 主内容区域 -->
+	<div class="main-content">
+		<iframe 
+			src="https://b23.tv/pbWxHtb" 
+			class="bilibili-frame" 
+			allowfullscreen>
+			<!-- 如果iframe加载失败，显示备用内容 -->
+			<div class="loading-hint">
+				<h2>页面加载中...</h2>
+				<p>B站页面正在加载</p>
+				<a href="https://b23.tv/pbWxHtb" class="fallback-link" target="_blank">
+					在新窗口打开链接
+				</a>
+			</div>
+		</iframe>
+	</div>
+
+	<!-- 底部导航栏 - 参考您提供的样式 -->
+	<div class="bottom-nav">
+		<button class="nav-item active" onclick="goToHome()">
+			<div class="nav-icon icon-home"></div>
+			<div class="nav-text">主页</div>
+		</button>
+		<button class="nav-item center" onclick="noAction()">
+			<div class="nav-icon icon-author"></div>
+			<div class="nav-text">作者</div>
+		</button>
+		<a href="index3.html" class="nav-item" onclick="setActiveProfile(event)">
+			<div class="nav-icon icon-profile"></div>
+			<div class="nav-text">我的</div>
+		</a>
+	</div>
+
+	<script>
+		// 主页按钮点击事件
+		function goToHome() {
+			// 更新活跃状态
+			document.querySelectorAll('.nav-item').forEach(item => {
+				item.classList.remove('active');
+			});
+			event.currentTarget.classList.add('active');
+			
+			window.location.href = 'indexhome-En.html';
+		}
+
+		// 作者按钮点击事件（无反应）
+		function noAction() {
+			// 不执行任何操作，保持当前状态
+			console.log('作者按钮被点击，但无反应');
+		}
+
+		// 我的按钮点击事件 - 设置活跃状态
+		function setActiveProfile(event) {
+			document.querySelectorAll('.nav-item').forEach(item => {
+				item.classList.remove('active');
+			});
+			event.currentTarget.classList.add('active');
+		}
+
+		// 防止iframe加载失败
+		document.querySelector('.bilibili-frame').onerror = function() {
+			this.style.display = 'none';
+			document.querySelector('.main-content').innerHTML = `
+				<div class="loading-hint">
+					<h2>页面加载失败</h2>
+					<p>B站页面无法正常显示</p>
+					<a href="https://b23.tv/pbWxHtb" class="fallback-link" target="_blank">
+						在新窗口打开链接
+					</a>
+				</div>
+			`;
+		};
+
+		// 页面加载完成后的处理
+		window.onload = function() {
+			// 根据当前页面设置活跃状态
+			const currentPage = window.location.pathname.split('/').pop() || 'index.html';
+			
+			// 重置所有活跃状态
+			document.querySelectorAll('.nav-item').forEach(item => {
+				item.classList.remove('active');
+			});
+			
+			// 设置对应页面的活跃状态
+			if (currentPage === 'index.html') {
+				document.querySelector('.nav-item:first-child').classList.add('active');
+			} else if (currentPage === 'index3.html') {
+				document.querySelector('.nav-item:last-child').classList.add('active');
+			}
+		};
+	</script>
+</body>
+</html>

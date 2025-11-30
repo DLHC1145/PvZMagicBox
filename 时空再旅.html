@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>时空再旅展示</title>
+<style>
+* {
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
+}
+
+body {
+	background: #ffffff; /* 改为白色背景 */
+	height: 100vh;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	font-family: 'Microsoft YaHei', Arial, sans-serif;
+	padding: 40px;
+}
+
+.container {
+	width: 80%;
+	max-width: 800px;
+	height: auto;
+	min-height: 70%;
+	background: rgba(255, 255, 255, 1); /* 纯白色背景 */
+	border-radius: 20px;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+	border: 1px solid rgba(0, 0, 0, 0.05);
+	position: relative;
+}
+
+/* 左上角返回按钮 */
+.back-button {
+	position: absolute;
+	top: 20px;
+	left: 20px;
+	width: 50px;
+	height: 50px;
+	background: rgba(0, 0, 0, 0.7); /* 半透明黑色背景 */
+	border: none;
+	border-radius: 50%; /* 圆形按钮 */
+	color: white;
+	font-size: 20px;
+	cursor: pointer;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	z-index: 1000; /* 确保按钮在最上层 */
+	transition: all 0.3s ease;
+	text-decoration: none;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.back-button:hover {
+	background: rgba(0, 0, 0, 0.9); /* 悬停时更暗的黑色 */
+	transform: translateX(-2px) translateY(-2px);
+	box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+
+.back-button:active {
+	transform: translateX(-1px) translateY(-1px);
+	background: rgba(0, 0, 0, 1);
+}
+
+.content-section {
+	width: 100%;
+	height: 50%;
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+	padding: 40px;
+	text-align: center;
+	/* 确保内容不被返回按钮遮挡 */
+	padding-top: 80px; /* 为返回按钮留出空间 */
+}
+
+.section-top {
+	background: linear-gradient(135deg, #74b9ff 0%, #0984e3 100%);
+	color: white;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.section-bottom {
+	background: linear-gradient(135deg, #00b894 0%, #00a085 100%);
+	color: white;
+}
+
+.content-title {
+	font-size: 2.5rem;
+	font-weight: bold;
+	margin-bottom: 20px;
+	text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+	line-height: 1.2;
+}
+
+.content-description {
+	font-size: 1.1rem;
+	line-height: 1.6;
+	opacity: 0.95;
+	max-width: 600px;
+	margin-bottom: 30px;
+	text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.highlight-text {
+	background: rgba(255, 255, 255, 0.2);
+	padding: 2px 8px;
+	border-radius: 4px;
+	font-weight: bold;
+}
+
+.feature-list {
+	list-style: none;
+	margin: 20px 0;
+}
+
+.feature-list li {
+	margin: 8px 0;
+	position: relative;
+	padding-left: 20px;
+}
+
+.feature-list li:before {
+	content: "✨";
+	position: absolute;
+	left: 0;
+	top: 0;
+}
+
+/* 按钮样式 */
+.action-button {
+	padding: 15px 30px;
+	border-radius: 30px;
+	color: white;
+	font-size: 18px;
+	font-weight: bold;
+	text-decoration: none;
+	cursor: pointer;
+	transition: all 0.3s ease;
+	box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+	border: 2px solid rgba(255, 255, 255, 0.3);
+	min-width: 200px;
+	text-align: center;
+	background: rgba(255, 255, 255, 0.1);
+	backdrop-filter: blur(10px);
+}
+
+.action-button:hover {
+	background: rgba(255, 255, 255, 0.2);
+	transform: translateY(-3px);
+	box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+	border-color: rgba(255, 255, 255, 0.5);
+}
+
+.qq-group-button {
+	background: linear-gradient(45deg, #0080FF, #0066CC);
+}
+
+.netdisk-button {
+	background: linear-gradient(45deg, #00AA44, #008833);
+}
+
+/* 装饰元素 */
+.decoration {
+	position: absolute;
+	width: 100px;
+	height: 100px;
+	border-radius: 50%;
+	background: rgba(255, 255, 255, 0.1);
+	animation: float 6s ease-in-out infinite;
+}
+
+.decoration:nth-child(1) {
+	top: 10%;
+	left: 10%;
+	animation-delay: 0s;
+}
+
+.decoration:nth-child(2) {
+	top: 20%;
+	right: 15%;
+	animation-delay: 2s;
+}
+
+.decoration:nth-child(3) {
+	bottom: 15%;
+	left: 20%;
+	animation-delay: 4s;
+}
+
+@keyframes float {
+	0%, 100% { transform: translateY(0px); }
+	50% { transform: translateY(-20px); }
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+	body {
+		padding: 20px;
+	}
+	
+	.container {
+		width: 95%;
+		height: auto;
+		min-height: 80%;
+		border-radius: 15px;
+	}
+	
+	.content-section {
+		padding: 20px;
+		padding-top: 70px; /* 移动端为返回按钮调整间距 */
+	}
+	
+	.content-title {
+		font-size: 1.8rem;
+		margin-bottom: 15px;
+	}
+	
+	.content-description {
+		font-size: 1rem;
+		margin-bottom: 20px;
+	}
+	
+	.action-button {
+		font-size: 16px;
+		padding: 12px 24px;
+		min-width: 160px;
+	}
+	
+	.back-button {
+		width: 45px;
+		height: 45px;
+		font-size: 18px;
+		top: 15px;
+		left: 15px;
+	}
+}
+
+@media (max-width: 480px) {
+	body {
+		padding: 15px;
+	}
+	
+	.content-title {
+		font-size: 1.5rem;
+	}
+	
+	.content-description {
+		font-size: 0.9rem;
+	}
+	
+	.container {
+		width: 98%;
+	}
+	
+	.content-section {
+		padding: 15px;
+		padding-top: 65px; /* 小屏幕进一步调整 */
+	}
+	
+	.back-button {
+		width: 40px;
+		height: 40px;
+		font-size: 16px;
+		top: 12px;
+		left: 12px;
+	}
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+	<!-- 左上角返回按钮 -->
+	<a href="javascript:history.back()" class="back-button" title="返回上一页">
+		←
+	</a>
+	
+	<div class="content-section section-top">
+		<div class="decoration"></div>
+		<div class="decoration"></div>
+		<div class="decoration"></div>
+		<h1 class="content-title">🚀 QQ群下载</h1>
+		<div class="content-description">
+			<span class="highlight-text">下载选项1：前往QQ群获取最新版本</span><br>
+			与制作组<span class="highlight-text">面对面交流</span>！<br>
+			在这里，您将获得：
+		</div>
+		<ul class="feature-list">
+			<li>第一时间获取最新版本更新</li>
+			<li>与开发者直接沟通反馈</li>
+			<li>加入活跃玩家交流社区</li>
+		</ul>
+		<a href="https://qun.qq.com/universal-share/share?ac=1&authKey=pMvpgZU0YPz7bZCqelq7X1Mr8tY16MbElo0AVgeyirj8d%2BIMxxPkir4znIuzKpDw&busi_data=eyJncm91cENvZGUiOiI2MTU4ODQyMzAiLCJ0b2tlbiI6IjZnVGY1MTdrTzEwSTdIR2tIYUR2eFhRN2NGeEN1NXV5YXNwMGhwWm1neDJaV3JPZXZteTNDbm1mWWFhNE9xa28iLCJ1aW4iOiIyMDE5OTQ3MDg1In0%3D&data=Jqwb4iWeIUYCZWtT7RbO0BNx8su2riRaiXx1Aj7sLpM1T81ggFQ7fwBwn-X8ZODiX9YxVfk0wmeP3-wjvPCfEA&svctype=4&tempid=h5_group_info" class="action-button qq-group-button" target="_blank">
+			📱 前往QQ群获取
+		</a>
+	</div>
+	
+	<!-- 下半部分 - 网盘选项 -->
+	<div class="content-section section-bottom">
+		<div class="decoration"></div>
+		<div class="decoration"></div>
+		<div class="decoration"></div>
+		<h1 class="content-title">在线云盘下载</h1>
+		<div class="content-description">
+			<span class="highlight-text">下载选项2：前往123网盘在线下载</span><br>
+			<span class="highlight-text">不限速</span>，只需手机号登录即可下载！<br>
+			贴心提示：如无法下载可先保存到APP
+		</div>
+		<a href="https://www.123684.com/s/zWgIjv-JcA8" class="action-button netdisk-button" target="_blank">
+			⬇️ 在线网盘下载
+		</a>
+	</div>
+</div>
+</body>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+	<meta charset="UTF-8">
+	<!-- 强制锁定70%缩放，禁止用户调整 -->
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0.7, maximum-scale=0.7, user-scalable=no">
+	<title>锁定70%缩放页面</title>
+	<style>
+		/* 可选基础样式，不影响缩放功能 */
+		body { margin: 0; padding: 20px; font-size: 16px; }
+	</style>
+</head>
+<body>
+	<!-- 页面原有内容放这里，粘贴时替换此部分即可 -->
+</body>
+</html>
+
+</html>

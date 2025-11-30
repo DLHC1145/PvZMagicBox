@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>第一章节-绝处逢生</title>
+  <style>
+	* {
+	  margin: 0;
+	  padding: 0;
+	  box-sizing: border-box;
+	}
+
+	html, body {
+	  height: 100%;
+	  overflow: hidden;
+	  position: fixed;
+	  width: 100%;
+	}
+
+	body {
+	  font-family: 'Microsoft YaHei', Arial, sans-serif;
+	  background: #000;
+	  height: 100vh;
+	  display: flex;
+	  justify-content: center;
+	  align-items: center;
+	  overflow: hidden;
+	  position: fixed;
+	  top: 0;
+	  left: 0;
+	  right: 0;
+	  bottom: 0;
+	}
+
+	/* 进入图片样式 */
+	.enter-image {
+	  position: fixed;
+	  top: 0;
+	  left: 0;
+	  width: 100%;
+	  height: 100%;
+	  object-fit: cover;
+	  z-index: 9999;
+	}
+
+	/* 视频播放器样式 */
+	.video-player {
+	  width: 100%;
+	  height: 100%;
+	  object-fit: cover;
+	}
+
+	/* 隐藏音量控制（根据需要调整） */
+	.video-player::-webkit-media-controls-volume-slider,
+	.video-player::-webkit-media-controls-mute-button,
+	.video-player::-webkit-media-controls-volume-control-container {
+	  display: none !important;
+	}
+  </style>
+</head>
+<body>
+  <!-- 进入图片 -->
+  <img id="enterImage" class="enter-image" src="进入图片.jpg" alt="进入图片">
+
+  <!-- 视频播放器 -->
+  <video id="mainVideo" 
+		 class="video-player"
+		 src="进入视频.mp4" 
+		 autoplay 
+		 muted 
+		 loop="false"
+		 playsinline
+		 webkit-playsinline>
+	  您的浏览器不支持视频播放。
+	</video>
+
+  <script>
+	// 获取元素
+	const enterImage = document.getElementById('enterImage');
+	const mainVideo = document.getElementById('mainVideo');
+
+	// 页面加载完成后执行
+	window.addEventListener('load', function () {
+	  // 0.5秒（500毫秒）后隐藏进入图片
+	  setTimeout(function() {
+		enterImage.style.display = 'none';
+		
+		// 显示视频并开始播放
+		mainVideo.style.display = 'block';
+		mainVideo.play().catch(function (error) {
+		  console.log('视频播放被阻止:', error);
+		});
+
+		// 7.5秒后自动跳转到 indexhome.html（从页面加载开始计算）
+		setTimeout(function() {
+		  window.location.href = 'indexhome.html';
+		}, 7000); // 7500 - 500 = 7000，因为已经用了0.5秒显示图片
+		
+	  }, 500); // 0.5秒后隐藏进入图片
+	});
+
+	// 处理视频播放结束事件
+	mainVideo.addEventListener('ended', function() {
+	  // 如果视频播放完毕，也跳转到 indexhome.html
+	  window.location.href = 'indexhome.html';
+	});
+  </script>
+</body>
+</html>

@@ -1,0 +1,1541 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+	<title>软件搜索下载</title>
+	<style>
+		* {
+			margin: 0;
+			padding: 0;
+			box-sizing: border-box;
+		}
+
+		body {
+			font-family: Arial, sans-serif;
+			background-color: #f5f5f5;
+			padding: 0;
+			touch-action: pan-x pan-y;
+			overflow-x: hidden;
+			padding-bottom: 60px;
+		}
+
+		/* 防止页面缩放 */
+		html {
+			touch-action: manipulation;
+			-webkit-text-size-adjust: none;
+			-ms-text-size-adjust: none;
+			text-size-adjust: none;
+		}
+
+		/* 用户信息栏 */
+		.user-info-bar {
+			background-color: #45a049;
+			height: 40px;
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			padding: 0 15px;
+			color: white;
+			font-size: 14px;
+		}
+
+		.welcome-text {
+			font-weight: bold;
+		}
+
+		.login-btn, .logout-btn {
+			background-color: rgba(255,255,255,0.2);
+			color: white;
+			border: 1px solid rgba(255,255,255,0.3);
+			border-radius: 15px;
+			padding: 5px 12px;
+			cursor: pointer;
+			font-size: 12px;
+		}
+
+		.login-btn:hover, .logout-btn:hover {
+			background-color: rgba(255,255,255,0.3);
+		}
+
+		/* 登录弹窗 */
+		.modal-overlay {
+			position: fixed;
+			top: 0;
+			left: 0;
+			width: 100%;
+			height: 100%;
+			background-color: rgba(0, 0, 0, 0.5);
+			z-index: 1000;
+			display: none;
+			justify-content: center;
+			align-items: center;
+		}
+
+		.modal-overlay.show {
+			display: flex;
+		}
+
+		.login-modal {
+			background-color: white;
+			border-radius: 10px;
+			padding: 30px;
+			width: 90%;
+			max-width: 400px;
+			box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+		}
+
+		.modal-header h2 {
+			color: #333;
+			font-size: 20px;
+			margin-bottom: 15px;
+			text-align: center;
+		}
+
+		.form-group {
+			margin-bottom: 20px;
+		}
+
+		.form-group label {
+			display: block;
+			margin-bottom: 8px;
+			color: #333;
+			font-weight: bold;
+		}
+
+		.form-input {
+			width: 100%;
+			padding: 12px;
+			border: 2px solid #ddd;
+			border-radius: 8px;
+			font-size: 16px;
+		}
+
+		.form-input:focus {
+			outline: none;
+			border-color: #4CAF50;
+		}
+
+		.error-message {
+			color: #f44336;
+			font-size: 12px;
+			margin-top: 5px;
+			display: none;
+		}
+
+		.modal-buttons {
+			display: flex;
+			gap: 10px;
+			justify-content: flex-end;
+		}
+
+		.btn {
+			padding: 10px 20px;
+			border: none;
+			border-radius: 8px;
+			cursor: pointer;
+			font-size: 14px;
+			font-weight: bold;
+		}
+
+		.btn-primary {
+			background-color: #4CAF50;
+			color: white;
+		}
+
+		.btn-secondary {
+			background-color: #f5f5f5;
+			color: #666;
+		}
+
+		/* 底部导航栏 */
+		.bottom-nav {
+			position: fixed;
+			bottom: 0;
+			left: 0;
+			width: 100%;
+			height: 60px;
+			background-color: #fff;
+			border-top: 1px solid #e5e5e5;
+			display: flex;
+			justify-content: space-around;
+			align-items: center;
+			z-index: 200;
+		}
+
+		.nav-item {
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			flex: 1;
+			height: 100%;
+			text-decoration: none;
+			color: #999;
+			transition: color 0.3s;
+		}
+
+		.nav-item.active {
+			color: #4CAF50;
+		}
+
+		.nav-icon {
+			width: 24px;
+			height: 24px;
+			margin-bottom: 4px;
+			font-size: 20px;
+		}
+
+		.nav-text {
+			font-size: 12px;
+		}
+
+		/* 功能列表样式 */
+		.function-list {
+			background-color: white;
+			margin: 20px;
+			border-radius: 10px;
+			box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+			overflow: hidden;
+			transition: all 0.3s ease;
+		}
+
+		.list-item {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			padding: 15px 20px;
+			border-bottom: 1px solid #f0f0f0;
+			cursor: pointer;
+			transition: background-color 0.3s;
+		}
+
+		.list-item:last-child {
+			border-bottom: none;
+		}
+
+		.list-item:hover {
+			background-color: #f9f9f9;
+		}
+
+		.list-item-left {
+			display: flex;
+			align-items: center;
+		}
+
+		.list-icon {
+			width: 20px;
+			height: 20px;
+			margin-right: 12px;
+			font-size: 16px;
+		}
+
+		.list-text {
+			font-size: 16px;
+			color: #333;
+		}
+
+		.view-btn {
+			background-color: #2196F3;
+			color: white;
+			border: none;
+			border-radius: 6px;
+			padding: 6px 12px;
+			font-size: 12px;
+			cursor: pointer;
+			transition: background-color 0.3s;
+		}
+
+		.view-btn:hover {
+			background-color: #1976D2;
+		}
+
+		/* 联系作者弹窗 */
+		.contact-modal {
+			background-color: white;
+			border-radius: 10px;
+			padding: 30px;
+			width: 90%;
+			max-width: 350px;
+			box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+			text-align: center;
+		}
+
+		.contact-title {
+			color: #333;
+			font-size: 18px;
+			margin-bottom: 20px;
+		}
+
+		.qq-info {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 10px;
+			margin-bottom: 20px;
+			padding: 15px;
+			background-color: #f5f5f5;
+			border-radius: 8px;
+		}
+
+		.qq-number {
+			font-size: 18px;
+			font-weight: bold;
+			color: #333;
+		}
+
+		.contact-buttons {
+			display: flex;
+			gap: 10px;
+			justify-content: center;
+		}
+
+		/* 关于我们页面样式 */
+		.about-page {
+			background-color: #f5f5f5;
+			min-height: 100vh;
+			position: fixed;
+			top: 0;
+			left: 0;
+			width: 100%;
+			padding: 80px 20px 20px;
+			z-index: 500;
+			display: none;
+		}
+
+		.about-header {
+			position: fixed;
+			top: 0;
+			left: 0;
+			width: 100%;
+			background-color: #fff;
+			border-bottom: 1px solid #e5e5e5;
+			padding: 15px 20px;
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			z-index: 600;
+		}
+
+		.back-btn {
+			background: none;
+			border: none;
+			font-size: 18px;
+			cursor: pointer;
+			padding: 5px 10px;
+			border-radius: 5px;
+		}
+
+		.back-btn:hover {
+			background-color: #f0f0f0;
+		}
+
+		.header-title {
+			font-size: 16px;
+			font-weight: bold;
+			color: #333;
+		}
+
+		.app-info {
+			text-align: center;
+			margin-top: 20px;
+		}
+
+		.app-icon {
+			width: 80px;
+			height: 80px;
+			background-color: #4CAF50;
+			border-radius: 15px;
+			margin: 0 auto 10px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			font-size: 36px;
+			color: white;
+		}
+
+		.app-icon img {
+			width: 100%;
+			height: 100%;
+			object-fit: cover;
+			border-radius: 15px;
+		}
+
+		.app-name {
+			font-size: 18px;
+			font-weight: bold;
+			color: #333;
+			margin-bottom: 5px;
+		}
+
+		.version-display {
+			font-size: 14px;
+			color: #666;
+		}
+
+		/* 设置页面样式 - 修改后的简洁版本 */
+		.settings-page {
+			background-color: #f5f5f5;
+			min-height: 100vh;
+			position: fixed;
+			top: 0;
+			left: 0;
+			width: 100%;
+			padding: 80px 20px 20px;
+			z-index: 500;
+			display: none;
+		}
+
+		.settings-header {
+			position: fixed;
+			top: 0;
+			left: 0;
+			width: 100%;
+			background-color: #fff;
+			border-bottom: 1px solid #e5e5e5;
+			padding: 15px 20px;
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			z-index: 600;
+		}
+
+		/* 新增：顶部图标区域 */
+		.settings-icon-container {
+			margin: 20px auto;
+			width: 80px;
+			height: 80px;
+			border-radius: 18px;
+			overflow: hidden;
+			box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+			background-color: white;
+		}
+
+		.settings-icon {
+			width: 100%;
+			height: 100%;
+			object-fit: cover;
+		}
+
+		/* 修改后的设置内容区域 */
+		.settings-content {
+			background-color: white;
+			border-radius: 10px;
+			padding: 20px;
+			margin-top: 20px;
+			box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+		}
+
+		.setting-item {
+			padding: 15px 0;
+			border-bottom: 1px solid #f0f0f0;
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+		}
+
+		.setting-item:last-child {
+			border-bottom: none;
+		}
+
+		.setting-label {
+			font-size: 16px;
+			color: #333;
+		}
+
+		.setting-value {
+			font-size: 14px;
+			color: #666;
+		}
+
+		/* 多语言开关样式 */
+		.language-switch {
+			position: relative;
+			display: inline-block;
+			width: 50px;
+			height: 24px;
+		}
+
+		.language-switch input {
+			opacity: 0;
+			width: 0;
+			height: 0;
+		}
+
+		.slider {
+			position: absolute;
+			cursor: pointer;
+			top: 0;
+			left: 0;
+			right: 0;
+			bottom: 0;
+			background-color: #ccc;
+			transition: .4s;
+			border-radius: 24px;
+		}
+
+		.slider:before {
+			position: absolute;
+			content: "";
+			height: 18px;
+			width: 18px;
+			left: 3px;
+			bottom: 3px;
+			background-color: white;
+			transition: .4s;
+			border-radius: 50%;
+		}
+
+		input:checked + .slider {
+			background-color: #4CAF50;
+		}
+
+		input:checked + .slider:before {
+			transform: translateX(26px);
+		}
+
+		/* 微信风格通知弹窗 */
+		.wechat-notification {
+			position: fixed;
+			top: -200px;
+			left: 50%;
+			transform: translateX(-50%);
+			width: 90%;
+			max-width: 320px;
+			background: linear-gradient(135deg, #07bb07, #00d100);
+			border-radius: 8px;
+			padding: 15px;
+			box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+			z-index: 2000;
+			transition: top 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+			color: white;
+			cursor: pointer;
+		}
+
+		.wechat-notification.show {
+			top: 20px;
+		}
+
+		.wechat-notification:active {
+			top: -200px !important;
+		}
+
+		.notification-header {
+			display: flex;
+			align-items: center;
+			margin-bottom: 8px;
+		}
+
+		.studio-name {
+			font-size: 16px;
+			font-weight: bold;
+			margin-left: 8px;
+		}
+
+		.notification-content {
+			font-size: 13px;
+			opacity: 0.9;
+			line-height: 1.4;
+		}
+
+		.notification-icon {
+			width: 20px;
+			height: 20px;
+			background-color: rgba(255,255,255,0.2);
+			border-radius: 50%;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			font-size: 12px;
+		}
+
+		/* 复制成功提示弹窗 */
+		.copy-success-modal {
+			position: fixed;
+			top: 50%;
+			left: 50%;
+			transform: translate(-50%, -50%);
+			background-color: rgba(0, 0, 0, 0.8);
+			color: white;
+			padding: 15px 25px;
+			border-radius: 8px;
+			z-index: 1500;
+			display: none;
+			font-size: 16px;
+		}
+
+		.copy-success-modal.show {
+			display: block;
+			animation: fadeInOut 2s ease-in-out;
+		}
+
+		@keyframes fadeInOut {
+			0% { opacity: 0; }
+			20% { opacity: 1; }
+			80% { opacity: 1; }
+			100% { opacity: 0; }
+		}
+
+		/* 新增：霸王条款弹窗样式 */
+		.terms-overlay {
+			position: fixed;
+			top: 0;
+			left: 0;
+			width: 100%;
+			height: 100%;
+			background-color: rgba(0, 0, 0, 0.6);
+			z-index: 3000;
+			display: none;
+			justify-content: center;
+			align-items: center;
+			backdrop-filter: blur(5px);
+			-webkit-backdrop-filter: blur(5px);
+		}
+
+		.terms-overlay.show {
+			display: flex;
+		}
+
+		.terms-modal {
+			background-color: white;
+			border-radius: 15px;
+			width: 90%;
+			max-width: 600px;
+			max-height: 80vh;
+			position: relative;
+			box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+			display: flex;
+			flex-direction: column;
+		}
+
+		.terms-header {
+			padding: 20px;
+			border-bottom: 1px solid #eee;
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			background-color: #f8f9fa;
+			border-radius: 15px 15px 0 0;
+		}
+
+		.terms-title {
+			font-size: 18px;
+			font-weight: bold;
+			color: #333;
+			margin: 0;
+		}
+
+		.terms-close {
+			background: none;
+			border: none;
+			font-size: 24px;
+			color: #999;
+			cursor: pointer;
+			width: 30px;
+			height: 30px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			border-radius: 50%;
+			transition: all 0.3s;
+		}
+
+		.terms-close:hover {
+			background-color: #f0f0f0;
+			color: #333;
+		}
+
+		.terms-content {
+			padding: 20px;
+			overflow-y: auto;
+			flex: 1;
+			line-height: 1.6;
+			color: #555;
+			font-size: 14px;
+		}
+
+		.loading-text {
+			text-align: center;
+			color: #999;
+			font-style: italic;
+			padding: 40px;
+		}
+
+		.error-text {
+			text-align: center;
+			color: #f44336;
+			font-style: italic;
+			padding: 40px;
+		}
+
+		/* 安全导航指示器 */
+		.nav-safe-indicator {
+			position: fixed;
+			top: 50px;
+			right: 10px;
+			background: rgba(76, 175, 80, 0.9);
+			color: white;
+			padding: 5px 10px;
+			border-radius: 15px;
+			font-size: 12px;
+			z-index: 1000;
+			display: none;
+			animation: pulse 2s infinite;
+		}
+
+		@keyframes pulse {
+			0% { opacity: 0.7; }
+			50% { opacity: 1; }
+			100% { opacity: 0.7; }
+		}
+
+		/* 加载指示器 */
+		.loading-overlay {
+			position: fixed;
+			top: 0;
+			left: 0;
+			width: 100%;
+			height: 100%;
+			background: rgba(0, 0, 0, 0.5);
+			z-index: 9999;
+			display: none;
+			justify-content: center;
+			align-items: center;
+		}
+
+		.loading-spinner {
+			width: 50px;
+			height: 50px;
+		 border: 5px solid #f3f3f3;
+			border-top: 5px solid #4CAF50;
+			border-radius: 50%;
+			animation: spin 1s linear infinite;
+		}
+
+		@keyframes spin {
+			0% { transform: rotate(0deg); }
+			100% { transform: rotate(360deg); }
+		}
+	</style>
+</head>
+<body>
+	<!-- 安全导航指示器 -->
+	<div id="navSafeIndicator" class="nav-safe-indicator">安全导航已启用</div>
+
+	<!-- 加载指示器 -->
+	<div id="loadingOverlay" class="loading-overlay">
+		<div class="loading-spinner"></div>
+	</div>
+
+	<!-- 用户信息栏 -->
+	<div class="user-info-bar">
+		<div class="welcome-text" id="welcomeText">欢迎访问</div>
+		<div>
+			<span id="loginStatus" class="login-btn" onclick="showLoginModal()">点击登录</span>
+			<span id="logoutBtn" class="logout-btn" onclick="logout()" style="display: none; margin-left: 10px;">退出</span>
+		</div>
+	</div>
+
+	<!-- 功能列表 -->
+	<div class="function-list" id="functionList">
+		<div class="list-item" onclick="showContactModal()">
+			<div class="list-item-left">
+				<div class="list-icon">📞</div>
+				<div class="list-text" data-zh="联系作者" data-en="Contact Author">联系作者</div>
+			</div>
+			<button class="view-btn" onclick="event.stopPropagation(); showContactModal()">查看</button>
+		</div>
+		<div class="list-item" onclick="goToSettings()">
+			<div class="list-item-left">
+				<div class="list-icon">⚙️</div>
+				<div class="list-text" data-zh="设置" data-en="Settings">设置</div>
+			</div>
+		</div>
+		<div class="list-item" onclick="showAboutNotification()">
+			<div class="list-item-left">
+				<div class="list-icon">ℹ️</div>
+				<div class="list-text" data-zh="关于我们" data-en="About Us">关于我们</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- 登录弹窗 -->
+	<div id="loginModal" class="modal-overlay" onclick="closeLoginModal(event)">
+		<div class="login-modal" onclick="event.stopPropagation()">
+			<div class="modal-header">
+				<h2 data-zh="用户登录" data-en="User Login">用户登录</h2>
+			</div>
+			
+			<form id="loginForm">
+				<div class="form-group">
+					<label for="username" data-zh="账号：" data-en="Username:">账号：</label>
+					<input type="text" id="username" class="form-input" placeholder="至少2位字符" data-placeholder-zh="至少2位字符" data-placeholder-en="At least 2 characters">
+					<div id="usernameError" class="error-message" data-zh="账号至少需要2位字符" data-en="Username needs at least 2 characters">账号至少需要2位字符</div>
+				</div>
+				
+				<div class="form-group">
+					<label for="password" data-zh="密码：" data-en="Password:">密码：</label>
+					<input type="password" id="password" class="form-input" placeholder="8-12位，需含英文和数字" data-placeholder-zh="8-12位，需含英文和数字" data-placeholder-en="8-12 characters, must include letters and numbers">
+					<div id="passwordError" class="error-message" data-zh="密码需8-12位，且必须包含英文和数字" data-en="Password must be 8-12 characters and include both letters and numbers">密码需8-12位，且必须包含英文和数字</div>
+				</div>
+				
+				<div class="modal-buttons">
+					<button type="button" class="btn btn-secondary" onclick="closeLoginModal()">取消</button>
+					<button type="submit" class="btn btn-primary" data-zh="确定" data-en="Confirm">确定</button>
+				</div>
+			</form>
+		</div>
+	</div>
+
+	<!-- 联系作者弹窗 -->
+	<div id="contactModal" class="modal-overlay" onclick="closeContactModal(event)">
+		<div class="contact-modal" onclick="event.stopPropagation()">
+			<h2 class="contact-title" data-zh="联系作者" data-en="Contact Author">联系作者</h2>
+			<div class="qq-info">
+				<span data-zh="作者QQ：" data-en="Author QQ:">作者QQ：</span>
+				<span class="qq-number" id="qqDisplay">2019947085</span>
+			</div>
+			<div class="contact-buttons">
+				<button class="btn btn-secondary" onclick="closeContactModal()">关闭</button>
+				<button class="btn btn-primary" onclick="copyQQFromModal()">复制QQ号</button>
+			</div>
+		</div>
+	</div>
+
+	<!-- 微信风格通知弹窗 -->
+	<div id="wechatNotification" class="wechat-notification" onclick="hideWeChatNotification()">
+		<div class="notification-header">
+			<div class="notification-icon">💬</div>
+			<div class="studio-name">MZ工作室</div>
+		</div>
+		<div class="notification-content">
+			<div style="font-weight: bold; margin-bottom: 3px;">植创魔盒</div>
+			<div data-zh="我们只是PVZ的忠实爱好者！" data-en="We are just loyal fans of PVZ!">我们只是PVZ的忠实爱好者！</div>
+		</div>
+	</div>
+
+	<!-- 复制成功提示弹窗 -->
+	<div id="copySuccessModal" class="copy-success-modal">已复制到剪贴板</div>
+
+	<!-- 霸王条款弹窗 -->
+	<div id="termsOverlay" class="terms-overlay" onclick="closeTermsModal(event)">
+		<div class="terms-modal" onclick="event.stopPropagation()">
+			<div class="terms-header">
+				<h2 class="terms-title" data-zh="植创魔盒霸王条款" data-en="PVZ Magic Box Terms">植创魔盒霸王条款</h2>
+				<button class="terms-close" onclick="closeTermsModal()">×</button>
+			</div>
+			<div class="terms-content" id="termsContent">
+				<div class="loading-text">正在加载条款内容...</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- 底部导航栏 -->
+	<div class="bottom-nav">
+		<a href="#" class="nav-item active" onclick="handleNavigation('home', event)">
+			<div class="nav-icon">🏠</div>
+			<div class="nav-text" data-zh="主页" data-en="Home">主页</div>
+		</a>
+		<a href="#" class="nav-item" onclick="handleNavigation('author', event)">
+			<div class="nav-icon">📄</div>
+			<div class="nav-text" data-zh="作者" data-en="Author">作者</div>
+		</a>
+		<a href="#" class="nav-item" onclick="handleNavigation('profile', event)">
+			<div class="nav-icon">👤</div>
+			<div class="nav-text" data-zh="我的" data-en="Profile">我的</div>
+		</a>
+	</div>
+
+	<!-- 关于我们页面 -->
+	<div id="aboutPage" class="about-page">
+		<!-- 头部 -->
+		<div class="about-header">
+			<button class="back-btn" onclick="hideAbout()">←</button>
+			<div class="header-title" data-zh="关于我们" data-en="About Us">关于我们</div>
+		</div>
+
+		<!-- 应用信息 -->
+		<div class="app-info">
+			<div class="app-icon">
+				<img src="图标.jpg" alt="应用图标" onerror="this.style.display='none'; this.parentNode.innerHTML='📱'; this.parentNode.style.fontSize='36px'; this.parentNode.style.display='flex'; this.parentNode.style.alignItems='center'; this.parentNode.style.justifyContent='center'">
+			</div>
+			<div class="app-name" data-zh="软件搜索下载" data-en="Software Search Download">软件搜索下载</div>
+			<div class="version-display" id="versionDisplay">版本 1.1正式版</div>
+		</div>
+	</div>
+
+	<!-- 设置页面 - 修改后的简洁版本 -->
+	<div id="settingsPage" class="settings-page">
+		<!-- 头部 -->
+		<div class="settings-header">
+			<button class="back-btn" onclick="hideSettings()">←</button>
+			<div class="header-title" style="font-size: 18px; font-weight: bold; flex: 1; text-align: center;" data-zh="设置" data-en="Settings">设置</div>
+			<div style="width: 40px;"></div> <!-- 占位元素，平衡返回按钮的空间 -->
+		</div>
+
+		<!-- 顶部图标 - 调用图标.jpg -->
+		<div class="settings-icon-container">
+			<img src="图标.jpg" alt="应用图标" class="settings-icon" onerror="this.style.display='none'; this.parentNode.innerHTML='⚙️'; this.parentNode.style.fontSize='36px'; this.parentNode.style.display='flex'; this.parentNode.style.alignItems='center'; this.parentNode.style.justifyContent='center';">
+		</div>
+
+		<!-- 设置内容 -->
+		<div class="settings-content">
+			<div class="setting-item">
+				<span class="setting-label" data-zh="应用版本" data-en="App Version">应用版本</span>
+				<span class="setting-value" id="settingsVersionDisplay">1.1正式版</span>
+			</div>
+			<div class="setting-item">
+				<span class="setting-label" data-zh="开发者" data-en="Developer">开发者</span>
+				<span class="setting-value">MZ工作室</span>
+			</div>
+			<div class="setting-item">
+				<span class="setting-label" data-zh="联系方式" data-en="Contact Info">联系方式</span>
+				<span class="setting-value">QQ: 2019947085</span>
+			</div>
+			<div class="setting-item">
+				<span class="setting-label" data-zh="主题模式" data-en="Theme Mode">主题模式</span>
+				<span class="setting-value" data-zh="浅色模式" data-en="Light Mode">浅色模式</span>
+			</div>
+			<div class="setting-item">
+				<span class="setting-label" data-zh="多语言支持" data-en="Multi-language Support">多语言支持</span>
+				<span class="setting-value">
+					<label class="language-switch">
+						<input type="checkbox" id="languageToggle" onchange="toggleLanguage()">
+						<span class="slider"></span>
+					</label>
+				</span>
+			</div>
+		</div>
+
+		<!-- 新增：植创魔盒霸王条款阅读 -->
+		<div class="function-list" style="margin-top: 30px;">
+			<div class="list-item" onclick="showTermsModal()">
+				<div class="list-item-left">
+					<div class="list-icon">📋</div>
+					<div class="list-text" data-zh="植创魔盒霸王条款" data-en="PVZ Magic Box Terms">植创魔盒霸王条款</div>
+				</div>
+				<button class="view-btn" onclick="event.stopPropagation(); showTermsModal()">阅读</button>
+			</div>
+		</div>
+	</div>
+
+	<script>
+		// 多语言相关变量和函数
+		let isEnglishMode = false;
+		
+		// 保存语言设置状态
+		function saveLanguageState(isEnglish) {
+			localStorage.setItem('isEnglish', isEnglish.toString());
+		}
+
+		function getLanguageState() {
+			return localStorage.getItem('isEnglish') === 'true';
+		}
+
+		// 多重保障导航系统
+		const NavigationSafety = {
+			// 检查文件是否存在（模拟）
+			async checkFileExists(url) {
+				return new Promise((resolve) => {
+					// 模拟网络请求检查文件存在性
+					setTimeout(() => {
+						// 这里可以添加实际的fetch检查
+						// 目前模拟一些常见情况
+						const knownFiles = {
+							'indexhome-En.html': true,
+							'index2-En.html': true,
+							'index3.html': true,
+							'indexhome.html': true,
+							'index2.html': true
+						};
+						resolve(knownFiles[url] || false);
+					}, 100);
+				});
+			},
+
+			// 获取备用URL列表
+			getBackupUrls(originalUrl) {
+				const backupMap = {
+					'indexhome-En.html': ['indexhome.html', '/', 'index.html'],
+					'index2-En.html': ['index2.html', 'index.html', '/'],
+					'indexhome.html': ['/', 'index.html'],
+					'index2.html': ['index.html', '/']
+				};
+				return backupMap[originalUrl] || ['/'];
+			},
+
+			// 安全导航主函数
+			async safeNavigate(targetUrl, pageName = '') {
+				this.showLoading(true);
+				this.showSafetyIndicator(true);
+
+				try {
+					console.log(`🔍 开始安全导航检查: ${targetUrl}`);
+
+					// 第一重保障：URL安全检查
+					if (!this.validateUrl(targetUrl)) {
+						throw new Error('URL格式不安全');
+					}
+
+					// 第二重保障：文件存在性检查
+					const fileExists = await this.checkFileExists(targetUrl);
+					if (!fileExists) {
+						console.warn(`⚠️ 目标文件不存在: ${targetUrl}`);
+						
+						// 第三重保障：尝试备用URL
+						const backups = this.getBackupUrls(targetUrl);
+						let navigated = false;
+						
+						for (let backupUrl of backups) {
+							console.log(`🔄 尝试备用URL: ${backupUrl}`);
+							const backupExists = await this.checkFileExists(backupUrl);
+							if (backupExists) {
+								console.log(`✅ 使用备用URL成功: ${backupUrl}`);
+								this.performNavigation(backupUrl, pageName);
+								navigated = true;
+								break;
+							}
+						}
+
+						if (!navigated) {
+							throw new Error(`无法找到可用的页面: ${targetUrl}`);
+						}
+					} else {
+						// 文件存在，正常导航
+						this.performNavigation(targetUrl, pageName);
+					}
+
+					// 第四重保障：延迟确保导航完成
+					setTimeout(() => {
+						this.showLoading(false);
+						this.showSafetyIndicator(false);
+					}, 1000);
+
+				} catch (error) {
+					console.error('❌ 导航失败:', error);
+					this.handleNavigationError(error, targetUrl, pageName);
+					this.showLoading(false);
+					this.showSafetyIndicator(false);
+				}
+			},
+
+			// URL验证
+			validateUrl(url) {
+				// 防止路径遍历攻击
+				if (url.includes('../') || url.includes('..\\')) {
+					return false;
+				}
+				
+				// 只允许相对路径或根路径
+				if (!url.startsWith('./') && !url.startsWith('/') && !url.includes('.html')) {
+					return false;
+				}
+
+				return true;
+			},
+
+			// 执行导航
+			performNavigation(url, pageName) {
+				console.log(`🚀 执行导航: ${url}`);
+				
+				// 给用户反馈
+				const message = isEnglishMode ? 
+					`正在跳转到${pageName || url}...` : 
+					`正在跳转到${pageName || url}...`;
+				
+				// 最终导航
+				setTimeout(() => {
+					window.location.href = url;
+				}, 500);
+			},
+
+			// 处理导航错误
+			handleNavigationError(error, originalUrl, pageName) {
+				console.error('导航错误处理:', error);
+				
+				const errorMessage = isEnglishMode ?
+					`导航失败: ${error.message}\n是否返回主页？` :
+					`导航失败: ${error.message}\n是否返回主页？`;
+				
+				if (confirm(errorMessage)) {
+					this.performNavigation('/', '主页');
+				}
+			},
+
+			// 显示/隐藏加载指示器
+			showLoading(show) {
+				const overlay = document.getElementById('loadingOverlay');
+				overlay.style.display = show ? 'flex' : 'none';
+			},
+
+			// 显示/隐藏安全指示器
+			showSafetyIndicator(show) {
+				const indicator = document.getElementById('navSafeIndicator');
+				indicator.style.display = show ? 'block' : 'none';
+			}
+		};
+
+		// 获取导航链接路径
+		function getNavLinkPath(basePath) {
+			if (isEnglishMode) {
+				// 为每个页面单独指定英文路径
+				const englishPaths = {
+					'home': 'indexhome-En.html',
+					'author': 'index2-En.html', 
+					'profile': 'index3.html'
+				};
+				return englishPaths[basePath] || basePath;
+			}
+			
+			// 中文模式下的路径映射
+			const chinesePaths = {
+				'home': 'indexhome.html',
+				'author': 'index2.html',
+				'profile': 'index3.html'
+			};
+			return chinesePaths[basePath] || basePath;
+		}
+
+		// 统一的导航处理函数
+		function handleNavigation(pageType, event) {
+			if (event) {
+				event.preventDefault();
+			}
+
+			const targetPage = getNavLinkPath(pageType);
+			const pageNames = {
+				'home': isEnglishMode ? 'Home Page' : '主页',
+				'author': isEnglishMode ? 'Author Page' : '作者页',
+				'profile': isEnglishMode ? 'Profile Page' : '个人中心'
+			};
+
+			// 使用多重保障导航
+			NavigationSafety.safeNavigate(targetPage, pageNames[pageType]);
+
+			// 更新导航状态
+			updateNavigationState(pageType);
+		}
+
+		// 更新导航状态
+		function updateNavigationState(activePage) {
+			const navItems = document.querySelectorAll('.bottom-nav .nav-item');
+			navItems.forEach(item => item.classList.remove('active'));
+			
+			const activeIndex = activePage === 'home' ? 0 : activePage === 'author' ? 1 : 2;
+			navItems[activeIndex].classList.add('active');
+		}
+
+		// 切换语言
+		function toggleLanguage() {
+			const checkbox = document.getElementById('languageToggle');
+			isEnglishMode = checkbox.checked;
+			
+			if (isEnglishMode) {
+				translateToEnglish();
+				saveLanguageState(true);
+				
+				// 显示多重保障已启用的提示
+				showSafetyNotification();
+				
+				// 延迟跳转，让用户看到链接已更新
+				setTimeout(() => {
+					NavigationSafety.safeNavigate(getNavLinkPath('home'), 'Home Page');
+				}, 2000);
+			} else {
+				translateToEnglish(); // 先翻译界面
+				translateToChinese(); // 再翻译回中文
+				saveLanguageState(false);
+			}
+		}
+
+		// 显示安全导航通知
+		function showSafetyNotification() {
+			const notification = document.getElementById('wechatNotification');
+			const content = notification.querySelector('.notification-content');
+			content.innerHTML = `
+				<div style="font-weight: bold; margin-bottom: 3px;">🔒 安全导航已启用</div>
+				<div data-zh="多重保障机制已激活" data-en="Multiple security measures activated. Will automatically navigate to safe pages in English mode">多重保障机制已激活</div>
+			`;
+			
+			// 临时更改工作室名称
+			const studioName = notification.querySelector('.studio-name');
+			const originalName = studioName.textContent;
+			studioName.textContent = '安全系统';
+			
+			notification.classList.add('show');
+			
+			// 3秒后恢复
+			setTimeout(() => {
+				notification.classList.remove('show');
+				studioName.textContent = originalName;
+				// 恢复原内容
+				const content = notification.querySelector('.notification-content');
+				content.innerHTML = `
+					<div style="font-weight: bold; margin-bottom: 3px;">植创魔盒</div>
+					<div data-zh="我们只是PVZ的忠实爱好者！" data-en="We are just loyal fans of PVZ!">我们只是PVZ的忠实爱好者！</div>
+				`;
+			}, 3000);
+		}
+
+		// 翻译成英文
+		function translateToEnglish() {
+			// 更新所有带有data-zh和data-en属性的元素
+			const elements = document.querySelectorAll('[data-zh][data-en]');
+			elements.forEach(element => {
+				element.textContent = element.getAttribute('data-en');
+			});
+
+			// 更新placeholder
+			const inputs = document.querySelectorAll('[data-placeholder-zh][data-placeholder-en]');
+			inputs.forEach(input => {
+				input.placeholder = input.getAttribute('data-placeholder-en');
+			});
+
+			// 更新页面标题
+			document.title = 'Software Search Download';
+			
+			// 更新错误提示信息
+			updateErrorMessage('usernameError', 'Username needs at least 2 characters');
+			updateErrorMessage('passwordError', 'Password must be 8-12 characters and include both letters and numbers');
+		}
+
+		// 翻译成中文
+		function translateToChinese() {
+			// 更新所有带有data-zh和data-en属性的元素
+			const elements = document.querySelectorAll('[data-zh][data-en]');
+			elements.forEach(element => {
+				element.textContent = element.getAttribute('data-zh');
+			});
+
+			// 更新placeholder
+			const inputs = document.querySelectorAll('[data-placeholder-zh][data-placeholder-en]');
+			inputs.forEach(input => {
+				input.placeholder = input.getAttribute('data-placeholder-zh');
+			});
+
+			// 更新页面标题
+			document.title = '软件搜索下载';
+			
+			// 更新错误提示信息
+			updateErrorMessage('usernameError', '账号至少需要2位字符');
+			updateErrorMessage('passwordError', '密码需8-12位，且必须包含英文和数字');
+		}
+
+		// 更新错误消息
+		function updateErrorMessage(elementId, message) {
+			const errorElement = document.getElementById(elementId);
+			errorElement.textContent = message;
+		}
+
+		// 检查语言状态
+		function checkLanguageState() {
+			const savedIsEnglish = getLanguageState();
+			const checkbox = document.getElementById('languageToggle');
+			checkbox.checked = savedIsEnglish;
+			isEnglishMode = savedIsEnglish;
+			
+			if (savedIsEnglish) {
+				translateToEnglish();
+			} else {
+				translateToChinese();
+			}
+		}
+
+		// 使用localStorage替代cookie来保存登录状态
+		function saveLoginState(username) {
+			localStorage.setItem('username', username);
+			localStorage.setItem('isLoggedIn', 'true');
+			localStorage.setItem('loginTime', new Date().getTime());
+		}
+
+		function getLoginState() {
+			const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
+			const username = localStorage.getItem('username');
+			const loginTime = localStorage.getItem('loginTime');
+			
+			// 检查登录是否过期（365天）
+			if (isLoggedIn && loginTime) {
+				const now = new Date().getTime();
+				const oneYear = 365 * 24 * 60 * 60 * 1000;
+				if (now - parseInt(loginTime) > oneYear) {
+					clearLoginState();
+					return { isLoggedIn: false, username: null };
+				}
+			}
+			
+			return { isLoggedIn, username };
+		}
+
+		function clearLoginState() {
+			localStorage.removeItem('username');
+			localStorage.removeItem('isLoggedIn');
+			localStorage.removeItem('loginTime');
+		}
+
+		// 从HTML中提取版本号
+		function extractVersionFromHTML() {
+			const titleMatch = document.title.match(/(\d+\.\d+)/);
+			if (titleMatch) {
+				return `版本 ${titleMatch[1]} 内测版`;
+			}
+			return '版本 1.1正式版';
+		}
+
+		// 验证函数
+		function validateUsername(username) {
+			return username && username.length >= 2;
+		}
+
+		function validatePassword(password) {
+			if (!password || password.length < 8 || password.length > 12) {
+				return false;
+			}
+			const hasLetter = /[a-zA-Z]/.test(password);
+			const hasNumber = /\d/.test(password);
+			return hasLetter && hasNumber;
+		}
+
+		// 登录相关函数
+		function showLoginModal() {
+			document.getElementById('loginModal').classList.add('show');
+			document.getElementById('username').focus();
+		}
+
+		function closeLoginModal(event) {
+			if (event && event.target !== document.getElementById('loginModal')) return;
+			document.getElementById('loginModal').classList.remove('show');
+			clearErrors();
+			document.getElementById('loginForm').reset();
+		}
+
+		function clearErrors() {
+			document.getElementById('usernameError').style.display = 'none';
+			document.getElementById('passwordError').style.display = 'none';
+		}
+
+		function showError(elementId, message) {
+			const errorElement = document.getElementById(elementId);
+			errorElement.textContent = message;
+			errorElement.style.display = 'block';
+		}
+
+		function handleLogin(event) {
+			event.preventDefault();
+			
+			const username = document.getElementById('username').value.trim();
+			const password = document.getElementById('password').value;
+
+			clearErrors();
+
+			let isValid = true;
+
+			if (!validateUsername(username)) {
+				showError('usernameError', isEnglishMode ? 'Username needs at least 2 characters' : '账号至少需要2位字符');
+				isValid = false;
+			}
+
+			if (!validatePassword(password)) {
+				showError('passwordError', isEnglishMode ? 'Password must be 8-12 characters and include both letters and numbers' : '密码需8-12位，且必须包含英文和数字');
+				isValid = false;
+			}
+
+			if (!isValid) return;
+
+			// 保存登录状态到localStorage
+			saveLoginState(username);
+
+			updateUserInterface(username);
+			closeLoginModal();
+			alert(isEnglishMode ? 'Login successful! Welcome ' + username : '登录成功！欢迎 ' + username);
+		}
+
+		function logout() {
+			const confirmMsg = isEnglishMode ? 'Are you sure you want to log out?' : '确定退出登录吗？';
+			if (confirm(confirmMsg)) {
+				clearLoginState();
+				updateUserInterface(null);
+				alert(isEnglishMode ? 'Logged out successfully' : '已退出登录');
+			}
+		}
+
+		function updateUserInterface(username) {
+			const welcomeText = document.getElementById('welcomeText');
+			const loginStatus = document.getElementById('loginStatus');
+			const logoutBtn = document.getElementById('logoutBtn');
+
+			if (username) {
+				welcomeText.textContent = isEnglishMode ? `Welcome, ${username}` : `欢迎您，${username}`;
+				loginStatus.textContent = isEnglishMode ? 'Logged in' : '已登录';
+				loginStatus.onclick = null;
+				logoutBtn.style.display = 'inline-block';
+			} else {
+				welcomeText.textContent = isEnglishMode ? 'Welcome to visit' : '欢迎访问';
+				loginStatus.textContent = isEnglishMode ? 'Click to login' : '点击登录';
+				loginStatus.onclick = showLoginModal;
+				logoutBtn.style.display = 'none';
+			}
+		}
+
+		// 检查登录状态
+		function checkLoginStatus() {
+			const loginState = getLoginState();
+			if (loginState.isLoggedIn && loginState.username) {
+				updateUserInterface(loginState.username);
+			}
+		}
+
+		// 联系作者相关函数
+		function showContactModal() {
+			document.getElementById('contactModal').classList.add('show');
+		}
+
+		function closeContactModal(event) {
+			if (event && event.target !== document.getElementById('contactModal')) return;
+			document.getElementById('contactModal').classList.remove('show');
+		}
+
+		function copyQQFromModal() {
+			const qqNumber = '2019947085';
+			
+			// 使用可靠的复制方法
+			const textArea = document.createElement("textarea");
+			textArea.value = qqNumber;
+			textArea.style.top = "0";
+			textArea.style.left = "0";
+			textArea.style.position = "fixed";
+			textArea.style.opacity = "0";
+			
+			document.body.appendChild(textArea);
+			textArea.focus();
+			textArea.select();
+			
+			try {
+				const successful = document.execCommand('copy');
+				if (successful) {
+					showCopySuccess();
+					setTimeout(() => {
+						closeContactModal({ target: document.getElementById('contactModal') });
+					}, 1500);
+				} else {
+					alert(isEnglishMode ? 'Copy failed, please manually copy QQ number: ' + qqNumber : '复制失败，请手动复制QQ号：' + qqNumber);
+				}
+			} catch (err) {
+				console.error('复制失败: ', err);
+				alert(isEnglishMode ? 'Copy failed, please manually copy QQ number: ' + qqNumber : '复制失败，请手动复制QQ号：' + qqNumber);
+			}
+			
+			document.body.removeChild(textArea);
+		}
+
+		// 显示复制成功提示
+		function showCopySuccess() {
+			const modal = document.getElementById('copySuccessModal');
+			modal.textContent = isEnglishMode ? 'Copied to clipboard' : '已复制到剪贴板';
+			modal.classList.add('show');
+			setTimeout(() => {
+				modal.classList.remove('show');
+			}, 2000);
+		}
+
+		// 显示微信风格通知
+		function showWeChatNotification() {
+			const notification = document.getElementById('wechatNotification');
+			notification.classList.add('show');
+		}
+
+		// 隐藏微信风格通知（点击通知立即收回）
+		function hideWeChatNotification() {
+			const notification = document.getElementById('wechatNotification');
+			notification.classList.remove('show');
+		}
+
+		// CD控制变量 - 基于时间而不是状态
+		let lastShowTime = 0;
+		const COOLDOWN_TIME = 3000; // 3秒CD
+
+		// 关于我们功能 - 只显示通知，不进入页面，添加3秒CD
+		function showAboutNotification() {
+			const currentTime = new Date().getTime();
+			
+			// 检查是否在CD时间内（当前时间 - 上次显示时间 < 3秒）
+			if (currentTime - lastShowTime < COOLDOWN_TIME) {
+				return; // 如果在CD中，直接返回不执行
+			}
+			
+			showWeChatNotification();
+			// 记录本次显示的时间
+			lastShowTime = currentTime;
+			
+			// 3秒后自动隐藏通知
+			setTimeout(() => {
+				hideWeChatNotification();
+			}, 3000);
+		}
+
+		// 设置功能 - 显示页面，隐藏功能列表，不显示通知
+		function goToSettings() {
+			document.getElementById('functionList').style.display = 'none';
+			document.getElementById('settingsPage').style.display = 'block';
+			
+			// 提取并显示版本号
+			const version = extractVersionFromHTML();
+			document.getElementById('settingsVersionDisplay').textContent = version.replace('版本 ', '');
+		}
+
+		function hideSettings() {
+			document.getElementById('settingsPage').style.display = 'none';
+			document.getElementById('functionList').style.display = 'block';
+		}
+
+		// 霸王条款相关函数
+		function loadTermsContent() {
+			const termsContent = document.getElementById('termsContent');
+			
+			// 创建AJAX请求读取txt文件
+			const xhr = new XMLHttpRequest();
+			xhr.open('GET', '霸王条款.txt', true);
+			xhr.onreadystatechange = function() {
+				if (xhr.readyState === 4) {
+					if (xhr.status === 200) {
+						// 成功读取文件，直接显示文本内容
+						const content = xhr.responseText;
+						// 将换行符转换为HTML换行
+						termsContent.innerHTML = content.replace(/\n/g, '<br>');
+					} else {
+						// 文件读取失败，显示错误信息
+						termsContent.innerHTML = '<div class="error-text">' + (isEnglishMode ? 'Failed to read terms. Please ensure "霸王条款.txt" file exists in the same directory' : '读取霸王条款失败，请确保"霸王条款.txt"文件存在于同目录下') + '</div>';
+					}
+				}
+			};
+			xhr.send();
+		}
+
+		function showTermsModal() {
+			// 重置内容并显示加载状态
+			document.getElementById('termsContent').innerHTML = '<div class="loading-text">' + (isEnglishMode ? 'Loading terms...' : '正在加载条款内容...') + '</div>';
+			// 显示弹窗
+			document.getElementById('termsOverlay').classList.add('show');
+			// 加载条款内容
+			loadTermsContent();
+		}
+
+		function closeTermsModal(event) {
+			// 如果点击的是遮罩层或者是关闭按钮，则关闭弹窗
+			if (!event || event.target === document.getElementById('termsOverlay') || event.target.classList.contains('terms-close')) {
+				document.getElementById('termsOverlay').classList.remove('show');
+			}
+		}
+
+		// 初始化
+		document.getElementById('loginForm').addEventListener('submit', handleLogin);
+		checkLoginStatus();
+		checkLanguageState();
+
+		// 页面加载完成后的额外安全检查
+		document.addEventListener('DOMContentLoaded', function() {
+			console.log('🔒 多重保障导航系统已初始化');
+		
+		});
+	</script>
+</body>
+</html>
