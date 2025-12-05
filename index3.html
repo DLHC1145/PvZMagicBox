@@ -1409,7 +1409,7 @@ async function toggleOnlineData() {
 	
 	if (!videoExists) {
 		console.warn('网页端无法使用此功能！');
-		alert(isEnglishMode ? 'Online feature requires startup video file to be present.' : '在线功能需要启动视频文件存在才能使用。');
+		alert(isEnglishMode ? 'Online feature requires startup video file to be present.' : '网页端无法使用此功能。');
 		// 确保开关关闭状态
 		const toggle = document.getElementById('onlineDataToggle');
 		if (toggle) {
