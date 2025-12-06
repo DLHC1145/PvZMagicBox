@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>时间戳工具</title>
+	<style>
+		* {
+			margin: 0;
+			padding: 0;
+			box-sizing: border-box;
+		}
+
+		body {
+			font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+			background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+			min-height: 100vh;
+			padding: 20px;
+			color: #333;
+		}
+
+		.container {
+			max-width: 600px;
+			margin: 0 auto;
+			background: rgba(255, 255, 255, 0.95);
+			border-radius: 20px;
+			box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+			backdrop-filter: blur(10px);
+			overflow: hidden;
+		}
+
+		.header {
+			background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+			padding: 25px;
+			text-align: center;
+			color: white;
+		}
+
+		.header h1 {
+			font-size: 2em;
+			margin-bottom: 8px;
+			font-weight: 700;
+		}
+
+		.header p {
+			font-size: 0.95em;
+			opacity: 0.9;
+		}
+
+		.main-content {
+			padding: 25px;
+		}
+
+		.timestamp-grid {
+			display: grid;
+			grid-template-columns: 1fr;
+			gap: 20px;
+		}
+
+		.timestamp-card {
+			background: #fff;
+			border-radius: 15px;
+			padding: 20px;
+			box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
+			border: 1px solid #e1e8ed;
+			transition: all 0.3s ease;
+		}
+
+		.timestamp-card:hover {
+			transform: translateY(-2px);
+			box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
+		}
+
+		.card-header {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			margin-bottom: 15px;
+		}
+
+		.card-title {
+			font-size: 1.1em;
+			font-weight: 600;
+			color: #2c3e50;
+		}
+
+		.source-badge {
+			background: linear-gradient(135deg, #e17055 0%, #fdcb6e 100%);
+			color: white;
+			padding: 4px 12px;
+			border-radius: 15px;
+			font-size: 0.8em;
+			font-weight: 600;
+		}
+
+		.timestamp-display {
+			background: #f8f9fa;
+			border: 2px solid #e1e8ed;
+			border-radius: 10px;
+			padding: 15px;
+			margin-bottom: 15px;
+			font-family: 'Courier New', monospace;
+			position: relative;
+		}
+
+		.timestamp-type {
+			font-size: 0.85em;
+			color: #636e72;
+			margin-bottom: 8px;
+			font-weight: 600;
+		}
+
+		.timestamp-value {
+			font-size: 1.2em;
+			color: #2c3e50;
+			word-break: break-all;
+			line-height: 1.4;
+			cursor: pointer;
+			padding: 10px;
+			background: rgba(255, 255, 255, 0.8);
+			border-radius: 6px;
+			transition: all 0.3s ease;
+		}
+
+		.timestamp-value:hover {
+			background: rgba(255, 255, 255, 1);
+			transform: scale(1.02);
+		}
+
+		.timestamp-description {
+			font-size: 0.85em;
+			color: #636e72;
+			margin-bottom: 15px;
+			line-height: 1.4;
+		}
+
+		.card-buttons {
+			display: flex;
+			gap: 10px;
+		}
+
+		.btn {
+			background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+			color: white;
+			border: none;
+			padding: 8px 16px;
+			border-radius: 20px;
+			font-size: 0.9em;
+			font-weight: 600;
+			cursor: pointer;
+			transition: all 0.3s ease;
+			flex: 1;
+		}
+
+		.btn:hover {
+			transform: translateY(-2px);
+			box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+		}
+
+		.btn-copy {
+			background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+		}
+
+		.btn-refresh {
+			background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+		}
+
+		.refresh-btn {
+			position: absolute;
+			top: 10px;
+			right: 10px;
+			background: rgba(116, 185, 255, 0.1);
+			border: none;
+			border-radius: 50%;
+			width: 30px;
+			height: 30px;
+			cursor: pointer;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			transition: all 0.3s ease;
+			font-size: 0.8em;
+		}
+
+		.refresh-btn:hover {
+			background: rgba(116, 185, 255, 0.2);
+			transform: rotate(180deg);
+		}
+
+		@media (max-width: 768px) {
+			.header h1 {
+				font-size: 1.6em;
+			}
+			
+			.main-content {
+				padding: 20px;
+			}
+			
+			.card-buttons {
+				flex-direction: column;
+			}
+			
+			.btn {
+				width: 100%;
+			}
+		}
+
+		.animation-pulse {
+			animation: pulse 0.5s ease-in-out;
+		}
+
+		@keyframes pulse {
+			0% { transform: scale(1); }
+			50% { transform: scale(1.05); }
+			100% { transform: scale(1); }
+		}
+
+		.notification {
+			position: fixed;
+			top: 20px;
+			right: 20px;
+			padding: 12px 20px;
+			border-radius: 8px;
+			color: white;
+			font-weight: 600;
+			z-index: 1000;
+			transform: translateX(100%);
+			transition: transform 0.3s ease;
+			background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+		}
+
+		.notification.show {
+			transform: translateX(0);
+		}
+
+		.footer {
+			text-align: center;
+			padding: 20px;
+			color: #7f8c8d;
+			font-size: 0.85em;
+			border-top: 1px solid #e1e8ed;
+		}
+	</style>
+</head>
+<body>
+	<div class="container">
+		<div class="header">
+			<h1>⏰ 时间戳工具</h1>
+			<p>本地时间戳获取与复制</p>
+		</div>
+
+		<div class="main-content">
+			<div class="timestamp-grid">
+				<div class="timestamp-card">
+					<div class="card-header">
+						<div class="card-title">Unix 秒级时间戳</div>
+						<div class="source-badge">本地</div>
+					</div>
+					<div class="timestamp-display">
+						<button class="refresh-btn" onclick="refreshTimestamp('local-unix-seconds')">🔄</button>
+						<div class="timestamp-type">10位 Unix 时间戳（秒）</div>
+						<div class="timestamp-value" id="local-unix-seconds" onclick="copyToClipboard(this.textContent)">
+							点击刷新获取...
+						</div>
+					</div>
+					<div class="timestamp-description">
+						从1970年1月1日开始的秒数，常用于系统时间戳
+					</div>
+					<div class="card-buttons">
+						<button class="btn btn-copy" onclick="copyTimestamp('local-unix-seconds')">
+							📋 复制
+						</button>
+						<button class="btn btn-refresh" onclick="refreshTimestamp('local-unix-seconds')">
+							🔄 刷新
+						</button>
+					</div>
+				</div>
+
+				<div class="timestamp-card">
+					<div class="card-header">
+						<div class="card-title">Unix 毫秒级时间戳</div>
+						<div class="source-badge">本地</div>
+					</div>
+					<div class="timestamp-display">
+						<button class="refresh-btn" onclick="refreshTimestamp('local-unix-milliseconds')">🔄</button>
+						<div class="timestamp-type">13位 Unix 时间戳（毫秒）</div>
+						<div class="timestamp-value" id="local-unix-milliseconds" onclick="copyToClipboard(this.textContent)">
+							点击刷新获取...
+						</div>
+					</div>
+					<div class="timestamp-description">
+						从1970年1月1日开始的毫秒数，精度更高的时间戳
+					</div>
+					<div class="card-buttons">
+						<button class="btn btn-copy" onclick="copyTimestamp('local-unix-milliseconds')">
+							📋 复制
+						</button>
+						<button class="btn btn-refresh" onclick="refreshTimestamp('local-unix-milliseconds')">
+							🔄 刷新
+						</button>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<div class="footer">
+			<p>基于本地设备时间</p>
+		</div>
+	</div>
+
+	<script>
+		// 时间戳管理
+		let timestamps = {};
+
+		// 初始化
+		function init() {
+			refreshAllTimestamps();
+			setInterval(updateLocalTimestamps, 1000);
+		}
+
+		// 获取本地时间
+		function getLocalTime() {
+			return new Date();
+		}
+
+		// 生成 Unix 秒级时间戳
+		function generateUnixSeconds(timestamp) {
+			return Math.floor(timestamp.getTime() / 1000).toString();
+		}
+
+		// 生成 Unix 毫秒级时间戳
+		function generateUnixMilliseconds(timestamp) {
+			return timestamp.getTime().toString();
+		}
+
+		// 刷新所有时间戳
+		function refreshAllTimestamps() {
+			const localTime = getLocalTime();
+			timestamps['local-unix-seconds'] = generateUnixSeconds(localTime);
+			timestamps['local-unix-milliseconds'] = generateUnixMilliseconds(localTime);
+			updateDisplay();
+		}
+
+		// 更新本地时间戳
+		function updateLocalTimestamps() {
+			const localTime = getLocalTime();
+			timestamps['local-unix-seconds'] = generateUnixSeconds(localTime);
+			timestamps['local-unix-milliseconds'] = generateUnixMilliseconds(localTime);
+			updateDisplay(['local-unix-seconds', 'local-unix-milliseconds']);
+		}
+
+		// 刷新单个时间戳
+		function refreshTimestamp(type) {
+			updateLocalTimestamps();
+			updateDisplay([type]);
+			showNotification('时间已更新');
+		}
+
+		// 更新显示
+		function updateDisplay(types = null) {
+			const typesToUpdate = types || Object.keys(timestamps);
+			
+			typesToUpdate.forEach(type => {
+				const element = document.getElementById(type);
+				if (element && timestamps[type]) {
+					element.textContent = timestamps[type];
+					element.classList.add('animation-pulse');
+					setTimeout(() => {
+						element.classList.remove('animation-pulse');
+					}, 500);
+				}
+			});
+		}
+
+		// 复制时间戳
+		function copyTimestamp(type) {
+			const value = timestamps[type];
+			if (!value) {
+				showNotification('没有可复制的内容', 'error');
+				return;
+			}
+
+			copyToClipboard(value);
+			showNotification('已复制时间戳');
+		}
+
+		// 复制到剪贴板
+		function copyToClipboard(text) {
+			if (navigator.clipboard) {
+				navigator.clipboard.writeText(text);
+			} else {
+				const textArea = document.createElement("textarea");
+				textArea.value = text;
+				textArea.style.position = "fixed";
+				textArea.style.opacity = "0";
+				document.body.appendChild(textArea);
+				textArea.focus();
+				textArea.select();
+				document.execCommand('copy');
+				document.body.removeChild(textArea);
+			}
+		}
+
+		// 显示通知
+		function showNotification(message, type = 'success') {
+			const existingNotification = document.querySelector('.notification');
+			if (existingNotification) {
+				existingNotification.remove();
+			}
+
+			const notification = document.createElement('div');
+			notification.className = 'notification';
+			notification.textContent = message;
+			document.body.appendChild(notification);
+
+			setTimeout(() => {
+				notification.classList.add('show');
+			}, 100);
+
+			setTimeout(() => {
+				notification.classList.remove('show');
+				setTimeout(() => {
+					if (notification.parentNode) {
+						notification.remove();
+					}
+				}, 300);
+			}, 2000);
+		}
+
+		// 页面加载完成后初始化
+		document.addEventListener('DOMContentLoaded', init);
+	</script>
+</body>
+</html>
