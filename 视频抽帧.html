@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>视频抽帧打包（1.jpg、2.jpg、3.jpg...）</title>
+  <style>
+	:root {
+	  font-family: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+	  --bg: #ffffff;
+	  --fg: #1a1a1a;
+	  --muted: #555555;
+	  --border: #e5e5e5;
+	  --primary: #007bff;
+	  --primary-hover: #0056b3;
+	  --error: #d32f2f;
+	  --success: #388e3c;
+	  --radius: 8px;
+	  --shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+	  --transition: 0.2s ease;
+	}
+
+	* {
+	  box-sizing: border-box;
+	}
+
+	body {
+	  margin: 0;
+	  background-color: var(--bg);
+	  color: var(--fg);
+	  line-height: 1.6;
+	  padding: 24px;
+	}
+
+	.container {
+	  max-width: 700px;
+	  margin: 0 auto;
+	  background: var(--bg);
+	  border: 1px solid var(--border);
+	  border-radius: var(--radius);
+	  padding: 24px;
+	  box-shadow: var(--shadow);
+	}
+
+	h1 {
+	  font-size: 1.4rem;
+	  margin: 0 0 8px;
+	  font-weight: 600;
+	}
+
+	.desc {
+	  color: var(--muted);
+	  margin: 0 0 16px;
+	  font-size: 0.9rem;
+	}
+
+	.upload-group {
+	  display: flex;
+	  flex-direction: column;
+	  gap: 8px;
+	  margin-bottom: 16px;
+	}
+
+	input[type="file"] {
+	  padding: 10px;
+	  border: 1px solid var(--border);
+	  border-radius: var(--radius);
+	  background: var(--bg);
+	  font-size: 0.9rem;
+	  transition: border-color var(--transition);
+	}
+
+	input[type="file"]:focus {
+	  outline: none;
+	  border-color: var(--primary);
+	  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.15);
+	}
+
+	button {
+	  padding: 10px 14px;
+	  background: var(--primary);
+	  color: #fff;
+	  border: none;
+	  border-radius: var(--radius);
+	  font-size: 0.95rem;
+	  cursor: pointer;
+	  transition: background var(--transition), transform var(--transition);
+	}
+
+	button:disabled {
+	  opacity: 0.6;
+	  cursor: not-allowed;
+	  background: var(--muted);
+	}
+
+	button:not(:disabled):hover {
+	  background: var(--primary-hover);
+	  transform: translateY(-1px);
+	}
+
+	button:not(:disabled):active {
+	  transform: translateY(0);
+	}
+
+	#status {
+	  margin-top: 12px;
+	  font-size: 0.9rem;
+	  min-height: 1.4em;
+	  white-space: pre-wrap;
+	  transition: color var(--transition);
+	}
+
+	.error {
+	  color: var(--error);
+	}
+
+	.success {
+	  color: var(--success);
+	}
+
+	video {
+	  max-width: 100%;
+	  width: 100%;
+	  border-radius: var(--radius);
+	  background: #000;
+	  margin-top: 8px;
+	  display: block;
+	}
+
+	.footer {
+	  margin-top: 24px;
+	  font-size: 0.75rem;
+	  color: var(--muted);
+	  text-align: center;
+	}
+
+	@media (max-width: 480px) {
+	  body {
+		padding: 16px;
+	  }
+
+	  .container {
+		padding: 16px;
+	  }
+
+	  h1 {
+		font-size: 1.25rem;
+	  }
+
+	  button,
+	  input[type="file"] {
+		font-size: 0.9rem;
+	  }
+	}
+  </style>
+</head>
+<body>
+  <div class="container">
+	<h1>视频抽帧打包（1.jpg、2.jpg、3.jpg...）</h1>
+	<p class="desc">上传视频，自动按帧抽取图片，按 1.jpg、2.jpg、3.jpg… 命名并打包为 ZIP 下载。</p>
+
+	<div class="upload-group">
+	  <input id="videoFile" type="file" accept="video/*" />
+	  <button id="startBtn" disabled>开始抽帧并打包</button>
+	</div>
+
+	<div id="status">请选择视频文件。</div>
+	<video id="videoPreview" controls style="display: none;"></video>
+
+	<div class="footer">基于浏览器端实现，处理大文件时请耐心等待。</div>
+  </div>
+
+  <!-- JSZip 打包 -->
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script>
+	const videoFileInput = document.getElementById('videoFile');
+	const startBtn = document.getElementById('startBtn');
+	const statusEl = document.getElementById('status');
+	const videoPreview = document.getElementById('videoPreview');
+
+	let videoFile = null;
+	let videoUrl = '';
+
+	videoFileInput.addEventListener('change', (e) => {
+	  const file = e.target.files[0];
+	  if (!file) return;
+	  videoFile = file;
+	  if (videoUrl) URL.revokeObjectURL(videoUrl);
+	  videoUrl = URL.createObjectURL(file);
+	  videoPreview.src = videoUrl;
+	  videoPreview.style.display = 'block';
+	  startBtn.disabled = false;
+	  statusEl.textContent = `已选择：${file.name}`;
+	  statusEl.className = '';
+	});
+
+	startBtn.addEventListener('click', async () => {
+	  if (!videoFile) return;
+	  statusEl.textContent = '准备中...';
+	  statusEl.className = '';
+	  startBtn.disabled = true;
+
+	  try {
+		const frames = await extractEveryOtherFrame(videoFile);
+		const zip = await createZipFromFrames(frames);
+		downloadZip(zip, 'frames.zip');
+		statusEl.textContent = '✅ 抽帧完成，ZIP 已下载（1.jpg、2.jpg、3.jpg...）。';
+		statusEl.className = 'success';
+	  } catch (err) {
+		console.error(err);
+		statusEl.textContent = '❌ 抽帧失败：' + err.message;
+		statusEl.className = 'error';
+	  } finally {
+		startBtn.disabled = false;
+	  }
+	});
+
+	// 从视频中按“每两帧抽一帧”提取帧，返回 { blobs: [Blob], names: ['1.jpg', '2.jpg', ...] }
+	async function extractEveryOtherFrame(file) {
+	  return new Promise((resolve, reject) => {
+		const video = document.createElement('video');
+		video.muted = true;
+		video.preload = 'metadata';
+		video.src = URL.createObjectURL(file);
+		video.onloadedmetadata = () => {
+		  const duration = video.duration;
+		  const fps = 12; // 假设视频约 12fps
+		  const intervalFrames = 2; // 每隔两帧取一帧 => 每秒约 6 张
+		  const totalFrames = Math.floor(duration * fps);
+		  const framesToTake = Math.floor(totalFrames / intervalFrames);
+		  const actualInterval = Math.max(1, Math.floor(totalFrames / Math.max(10, framesToTake)));
+
+		  const canvas = document.createElement('canvas');
+		  const ctx = canvas.getContext('2d');
+		  canvas.width = video.videoWidth;
+		  canvas.height = video.videoHeight;
+
+		  const blobs = [];
+		  const names = [];
+		  let captured = 0;
+		  let frameIdx = 0;
+
+		  const captureNext = () => {
+			if (captured >= Math.min(30, Math.floor(totalFrames / actualInterval))) {
+			  URL.revokeObjectURL(video.src);
+			  resolve({ blobs, names });
+			  return;
+			}
+
+			const targetFrame = frameIdx * actualInterval;
+			const t = targetFrame / fps;
+			if (t > duration) {
+			  URL.revokeObjectURL(video.src);
+			  resolve({ blobs, names });
+			  return;
+			}
+
+			video.currentTime = t;
+		  };
+
+		  video.onseeked = () => {
+			ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+			canvas.toBlob((blob) => {
+			  if (!blob) {
+				captureNext();
+				return;
+			  }
+			  const name = `${captured + 1}.jpg`;
+			  blobs.push(blob);
+			  names.push(name);
+			  captured++;
+			  frameIdx++;
+			  statusEl.textContent = `已抽取 ${captured} 张...`;
+			  captureNext();
+			}, 'image/jpeg', 0.9);
+		  };
+
+		  video.onerror = () => reject(new Error('视频加载失败'));
+		  video.currentTime = 0;
+		};
+		video.onerror = () => reject(new Error('无法读取视频'));
+	  });
+	}
+
+	// 将图片 Blob 数组打包为 ZIP
+	async function createZipFromFrames({ blobs, names }) {
+	  const zip = new JSZip();
+	  for (let i = 0; i < blobs.length; i++) {
+		zip.file(names[i], blobs[i]);
+	  }
+	  return await zip.generateAsync({ type: 'blob' });
+	}
+
+	// 下载 ZIP 文件
+	function downloadZip(blob, filename) {
+	  const a = document.createElement('a');
+	  a.href = URL.createObjectURL(blob);
+	  a.download = filename;
+	  document.body.appendChild(a);
+	  a.click();
+	  document.body.removeChild(a);
+	  URL.revokeObjectURL(a.href);
+	}
+  </script>
+</body>
+</html>
