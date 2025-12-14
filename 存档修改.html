@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>PVZ2 存档编辑器</title>
+	<style>
+		* {
+			margin: 0;
+			padding: 0;
+			box-sizing: border-box;
+			font-family: 'Segoe UI', system-ui, sans-serif;
+		}
+		
+		body {
+			background: #f8f9fa;
+			color: #333;
+			min-height: 100vh;
+			padding: 10px;
+		}
+		
+		.container {
+			max-width: 500px;
+			margin: 0 auto;
+			background: white;
+			border-radius: 8px;
+			box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+			overflow: hidden;
+		}
+		
+		header {
+			background: linear-gradient(135deg, #2ecc71, #27ae60);
+			color: white;
+			padding: 20px;
+			text-align: center;
+		}
+		
+		h1 {
+			font-size: 1.5rem;
+			margin-bottom: 5px;
+		}
+		
+		.content {
+			padding: 20px;
+		}
+		
+		.file-upload-area {
+			background: #f8f9fa;
+			border: 2px dashed #4a6491;
+			border-radius: 6px;
+			padding: 30px 15px;
+			text-align: center;
+			cursor: pointer;
+			margin-bottom: 15px;
+		}
+		
+		.file-upload-area:hover {
+			background: #f0f7ff;
+		}
+		
+		#datFile {
+			display: none;
+		}
+		
+		#fileName {
+			font-weight: 600;
+			color: #2ecc71;
+			margin: 10px 0;
+		}
+		
+		.editor-section {
+			display: none;
+		}
+		
+		.editor-item {
+			background: #f8f9fa;
+			border-radius: 6px;
+			padding: 15px;
+			margin-bottom: 10px;
+		}
+		
+		.editor-item h3 {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			margin-bottom: 10px;
+			font-size: 0.9rem;
+		}
+		
+		.icon {
+			width: 25px;
+			height: 25px;
+			background: linear-gradient(135deg, #f1c40f, #f39c12);
+			border-radius: 50%;
+			text-align: center;
+			line-height: 25px;
+			color: white;
+		}
+		
+		.diamond-icon {
+			background: linear-gradient(135deg, #3498db, #2980b9);
+		}
+		
+		.current-value {
+			font-size: 1.2rem;
+			font-weight: bold;
+			color: #2ecc71;
+			text-align: center;
+			margin: 5px 0;
+		}
+		
+		.original-value {
+			font-size: 0.8rem;
+			color: #666;
+			text-align: center;
+		}
+		
+		.value-input {
+			width: 100%;
+			padding: 8px;
+			border: 2px solid #ddd;
+			border-radius: 6px;
+			text-align: center;
+			font-weight: bold;
+		}
+		
+		button {
+			width: 100%;
+			padding: 12px;
+			border: none;
+			border-radius: 6px;
+			font-weight: 600;
+			cursor: pointer;
+			margin-top: 10px;
+		}
+		
+		.btn-primary {
+			background: linear-gradient(135deg, #2ecc71, #27ae60);
+			color: white;
+		}
+		
+		.btn-secondary {
+			background: #e0e0e0;
+			color: #666;
+		}
+		
+		.error {
+			background: #ffeaea;
+			color: #c0392b;
+			padding: 10px;
+			border-radius: 6px;
+			margin-top: 10px;
+			display: none;
+		}
+		
+		.success {
+			background: #e8f5e8;
+			color: #27ae60;
+			padding: 10px;
+			border-radius: 6px;
+			margin-top: 10px;
+			display: none;
+		}
+		
+		.loading {
+			text-align: center;
+			padding: 10px;
+			color: #4a6491;
+			display: none;
+		}
+		
+		footer {
+			text-align: center;
+			padding: 15px;
+			color: #666;
+			font-size: 0.8rem;
+		}
+	</style>
+</head>
+<body>
+	<div class="container">
+		<header>
+			<h1>🌱 PVZ2 存档编辑器</h1>
+			<p>修改金币(c)和钻石(g)数量</p>
+		</header>
+		
+		<div class="content">
+			<div class="file-upload-area" onclick="document.getElementById('datFile').click()">
+				📁
+				<p>点击选择PP.dat文件</p>
+				<p id="fileName">未选择文件</p>
+			</div>
+			<input type="file" id="datFile" accept=".dat">
+			
+			<div class="loading" id="loadingArea">处理中...</div>
+			
+			<div id="fileError" class="error"></div>
+			<div id="fileSuccess" class="success"></div>
+			
+			<div class="editor-section" id="editorSection">
+				<div class="editor-item">
+					<h3><span class="icon">💰</span>金币 (c)</h3>
+					<div class="original-value" id="originalCoins">原始: 0</div>
+					<div class="current-value" id="currentCoins">0</div>
+					<input type="number" class="value-input" id="coinsInput" value="0" min="0" max="999999999">
+				</div>
+				
+				<div class="editor-item">
+					<h3><span class="icon diamond-icon">💎</span>钻石 (g)</h3>
+					<div class="original-value" id="originalGems">原始: 0</div>
+					<div class="current-value" id="currentGems">0</div>
+					<input type="number" class="value-input" id="gemsInput" value="0" min="0" max="999999">
+				</div>
+				
+				<button class="btn-primary" onclick="saveChanges()">💾 保存为 PP.dat</button>
+				<button class="btn-secondary" onclick="resetEditor()">🔄 重置</button>
+				
+				<div id="editorError" class="error"></div>
+				<div id="editorSuccess" class="success"></div>
+			</div>
+		</div>
+		
+		<footer>
+			数据在浏览器本地处理
+		</footer>
+	</div>
+
+	<script src="json2rton.js"></script>
+	<script src="rton2json.js"></script>
+	
+	<script>
+		let originalJson = '';
+		let originalJsonData = null;
+		let originalHexData = '';
+		
+		// 选择文件
+		document.getElementById('datFile').addEventListener('change', async function(e) {
+			const file = e.target.files[0];
+			if (!file) return;
+			
+			document.getElementById('fileName').textContent = file.name;
+			showLoading();
+			
+			try {
+				const buffer = await readFileAsArrayBuffer(file);
+				originalHexData = arrayBufferToHexString(buffer);
+				
+				// 转换RTON为JSON
+				const rton2json = new RTON2JSON();
+				rton2json.set(new Uint8Array(buffer));
+				originalJson = rton2json.get();
+				originalJsonData = JSON.parse(originalJson);
+				
+				// 查找c和g的值
+				const coins = findValue(originalJson, '"c"');
+				const gems = findValue(originalJson, '"g"');
+				
+				// 显示值
+				document.getElementById('originalCoins').textContent = '原始: ' + coins;
+				document.getElementById('currentCoins').textContent = coins;
+				document.getElementById('coinsInput').value = coins;
+				
+				document.getElementById('originalGems').textContent = '原始: ' + gems;
+				document.getElementById('currentGems').textContent = gems;
+				document.getElementById('gemsInput').value = gems;
+				
+				// 显示编辑器
+				document.getElementById('editorSection').style.display = 'block';
+				showSuccess('fileSuccess', '文件加载成功');
+				
+			} catch (error) {
+				showError('fileError', '加载失败: ' + error.message);
+			} finally {
+				hideLoading();
+			}
+		});
+		
+		// 查找JSON字符串中的值
+		function findValue(jsonStr, key) {
+			const index = jsonStr.indexOf(key);
+			if (index === -1) return 0;
+			
+			// 查找冒号后的数字
+			let start = index + key.length;
+			while (start < jsonStr.length && jsonStr[start] !== ':') start++;
+			start++; // 跳过冒号
+			
+			// 跳过空格
+			while (start < jsonStr.length && jsonStr[start] <= ' ') start++;
+			
+			// 提取数字
+			let end = start;
+			while (end < jsonStr.length && jsonStr[end] >= '0' && jsonStr[end] <= '9') end++;
+			
+			const numStr = jsonStr.substring(start, end);
+			return parseInt(numStr) || 0;
+		}
+		
+		// 替换JSON字符串中的值
+		function replaceValue(jsonStr, key, newValue) {
+			const index = jsonStr.indexOf(key);
+			if (index === -1) return jsonStr;
+			
+			// 查找冒号位置
+			let colonIndex = index + key.length;
+			while (colonIndex < jsonStr.length && jsonStr[colonIndex] !== ':') colonIndex++;
+			
+			// 查找数字开始位置
+			let numStart = colonIndex + 1;
+			while (numStart < jsonStr.length && jsonStr[numStart] <= ' ') numStart++;
+			
+			// 查找数字结束位置
+			let numEnd = numStart;
+			while (numEnd < jsonStr.length && jsonStr[numEnd] >= '0' && jsonStr[numEnd] <= '9') numEnd++;
+			
+			// 替换数字
+			const before = jsonStr.substring(0, numStart);
+			const after = jsonStr.substring(numEnd);
+			return before + newValue + after;
+		}
+		
+		// 保存修改
+		function saveChanges() {
+			if (!originalJson) {
+				showError('editorError', '请先选择文件');
+				return;
+			}
+			
+			showLoading();
+			
+			try {
+				const newCoins = document.getElementById('coinsInput').value;
+				const newGems = document.getElementById('gemsInput').value;
+				
+				// 创建修改后的JSON
+				let modifiedJson = originalJson;
+				
+				// 只替换c和g的数字
+				modifiedJson = replaceValue(modifiedJson, '"c"', newCoins);
+				modifiedJson = replaceValue(modifiedJson, '"g"', newGems);
+				
+				// 验证JSON
+				try {
+					JSON.parse(modifiedJson);
+				} catch (e) {
+					throw new Error('修改后的JSON格式错误');
+				}
+				
+				// 转换回RTON
+				const json2rton = new JSON2RTON();
+				json2rton.set(modifiedJson);
+				
+				// 尝试获取二进制数据
+				let rtonData;
+				try {
+					rtonData = json2rton.get("binary");
+				} catch (e) {
+					// 如果binary失败，尝试hex
+					const hexData = json2rton.get("hex").replace(/\s/g, '');
+					rtonData = hexToArrayBuffer(hexData);
+				}
+				
+				// 下载文件
+				downloadFile(rtonData, 'PP.dat', 'application/octet-stream');
+				
+				// 更新显示
+				document.getElementById('currentCoins').textContent = newCoins;
+				document.getElementById('currentGems').textContent = newGems;
+				document.getElementById('originalCoins').textContent = '原始: ' + newCoins;
+				document.getElementById('originalGems').textContent = '原始: ' + newGems;
+				
+				// 更新原始数据
+				originalJson = modifiedJson;
+				originalJsonData = JSON.parse(modifiedJson);
+				
+				showSuccess('editorSuccess', '保存成功！已下载PP.dat');
+				
+			} catch (error) {
+				showError('editorError', '保存失败: ' + error.message);
+			} finally {
+				hideLoading();
+			}
+		}
+		
+		// 重置修改
+		function resetEditor() {
+			if (originalJsonData) {
+				const coins = findValue(originalJson, '"c"');
+				const gems = findValue(originalJson, '"g"');
+				
+				document.getElementById('coinsInput').value = coins;
+				document.getElementById('gemsInput').value = gems;
+				document.getElementById('currentCoins').textContent = coins;
+				document.getElementById('currentGems').textContent = gems;
+				
+				showSuccess('editorSuccess', '已重置');
+			}
+		}
+		
+		// 工具函数
+		function readFileAsArrayBuffer(file) {
+			return new Promise((resolve, reject) => {
+				const reader = new FileReader();
+				reader.onload = () => resolve(reader.result);
+				reader.onerror = reject;
+				reader.readAsArrayBuffer(file);
+			});
+		}
+		
+		function arrayBufferToHexString(buffer) {
+			const bytes = new Uint8Array(buffer);
+			let hex = '';
+			for (let i = 0; i < bytes.length; i++) {
+				const byte = bytes[i].toString(16).padStart(2, '0');
+				hex += byte;
+			}
+			return hex;
+		}
+		
+		function hexToArrayBuffer(hex) {
+			hex = hex.replace(/\s/g, '');
+			const bytes = new Uint8Array(hex.length / 2);
+			for (let i = 0; i < hex.length; i += 2) {
+				bytes[i/2] = parseInt(hex.substr(i, 2), 16);
+			}
+			return bytes;
+		}
+		
+		function downloadFile(data, filename, type) {
+			const blob = new Blob([data], {type});
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = filename;
+			document.body.appendChild(a);
+			a.click();
+			document.body.removeChild(a);
+			URL.revokeObjectURL(url);
+		}
+		
+		function showError(id, msg) {
+			const el = document.getElementById(id);
+			el.textContent = msg;
+			el.style.display = 'block';
+			setTimeout(() => el.style.display = 'none', 3000);
+		}
+		
+		function showSuccess(id, msg) {
+			const el = document.getElementById(id);
+			el.textContent = msg;
+			el.style.display = 'block';
+			setTimeout(() => el.style.display = 'none', 3000);
+		}
+		
+		function showLoading() {
+			document.getElementById('loadingArea').style.display = 'block';
+		}
+		
+		function hideLoading() {
+			document.getElementById('loadingArea').style.display = 'none';
+		}
+	</script>
+</body>
+</html>
