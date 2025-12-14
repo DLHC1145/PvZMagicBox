@@ -1,0 +1,139 @@
+<!-- ===== 新增的导航栏 ===== -->
+<div class="bottom-nav" id="bottomNav">
+	<a href="indexhome.html" class="nav-item active" onclick="handleNavigation(0, event)">
+		<div class="nav-icon">
+			<img src="home.png" alt="主页" />
+		</div>
+		<div class="nav-text">主页</div>
+	</a>
+	<a href="index2.html" class="nav-item" onclick="handleNavigation(1, event)">
+		<div class="nav-icon">
+			<img src="author.png" alt="论坛" />
+		</div>
+		<div class="nav-text">论坛</div>
+	</a>
+	<a href="index3.html" class="nav-item" onclick="handleNavigation(2, event)">
+		<div class="nav-icon">
+			<img src="my.png" alt="我的" />
+		</div>
+		<div class="nav-text">我的</div>
+	</a>
+</div>
+<!-- ===== 导航栏结束 ===== -->
+
+<script>
+	// ================== 配置区 ==================
+	const CACHE_EXPIRY_MS = 10 * 60 * 1000; // 缓存保存时间：10分钟
+	const CHECK_INTERVAL_MS = 5 * 60 * 1000; // 兜底检查：每5分钟
+	const STORAGE_KEY = 'lastUnloadTime';
+	// ===========================================
+
+	const NAV_CONFIG = [
+		{
+			icon: 'home.png',
+			text: { zh: '主页', en: 'Home' },
+			link: 'indexhome.html',
+			active: true,
+		},
+		{
+			icon: 'author.png',
+			text: { zh: '论坛', en: 'Author' },
+			link: 'index2.html',
+		},
+		{
+			icon: 'my.png',
+			text: { zh: '我的', en: 'Profile' },
+			link: 'index3.html',
+		},
+	];
+
+	let isEnglishMode = false;
+
+	function getLanguageState() {
+		return localStorage.getItem('isEnglish') === 'true';
+	}
+
+	function updateBottomNav() {
+		isEnglishMode = getLanguageState();
+		const navItems = document.querySelectorAll('.bottom-nav .nav-item');
+		NAV_CONFIG.forEach((item, index) => {
+			const navItem = navItems[index];
+			const text = isEnglishMode ? item.text.en : item.text.zh;
+			const iconContainer = navItem.querySelector('.nav-icon');
+			const textContainer = navItem.querySelector('.nav-text');
+			const img = iconContainer.querySelector('img');
+
+			navItem.href = item.link;
+			textContainer.textContent = text;
+			if (img) {
+				img.src = item.icon;
+				img.alt = text;
+			}
+			navItem.classList.toggle('active', item.active);
+		});
+	}
+
+	function handleNavigation(index, event) {
+		event.preventDefault();
+		const navItems = document.querySelectorAll('.bottom-nav .nav-item');
+		navItems.forEach((item, i) => {
+			item.classList.toggle('active', i === index);
+		});
+		setTimeout(() => {
+			window.location.href = NAV_CONFIG[index].link;
+		}, 50);
+	}
+
+	// ========== 十分钟自动清缓存并刷新 ==========
+	function recordUnloadTime() {
+		try {
+			localStorage.setItem(STORAGE_KEY, Date.now().toString());
+		} catch (e) {
+			// 忽略隐私模式/存储异常
+		}
+	}
+
+	function getLastUnloadTime() {
+		try {
+			const t = localStorage.getItem(STORAGE_KEY);
+			return t ? Number(t) : 0;
+		} catch (e) {
+			return 0;
+		}
+	}
+
+	function checkAndRefreshIfExpired() {
+		const now = Date.now();
+		const last = getLastUnloadTime();
+		if (now - last > CACHE_EXPIRY_MS) {
+			// 可选：清理站点缓存（谨慎使用，会清Cookie/本地存储）
+			// if ('caches' in window) caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
+			localStorage.clear();
+			sessionStorage.clear();
+			// 触发页面重新加载
+			window.location.reload();
+		}
+	}
+
+	function onVisibilityChange() {
+		if (document.visibilityState === 'visible') {
+			checkAndRefreshIfExpired();
+		}
+	}
+
+	// 兜底：定时检查
+	let intervalId = setInterval(checkAndRefreshIfExpired, CHECK_INTERVAL_MS);
+
+	// 绑定事件
+	document.addEventListener('visibilitychange', onVisibilityChange);
+	window.addEventListener('pageshow', onVisibilityChange);
+	window.addEventListener('pagehide', recordUnloadTime);
+	window.addEventListener('beforeunload', recordUnloadTime);
+
+	// 首次进入也检查一次
+	document.addEventListener('DOMContentLoaded', () => {
+		updateBottomNav();
+		setTimeout(checkAndRefreshIfExpired, 300);
+		console.log('导航栏已锁定，初始化完成');
+	});
+</script>

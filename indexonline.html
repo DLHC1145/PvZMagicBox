@@ -5,263 +5,298 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>软件搜索下载</title>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+	* {
+	  margin: 0;
+	  padding: 0;
+	  box-sizing: border-box;
+	}
 
-    body {
-      font-family: Arial, sans-serif;
-      background-color: #f5f5f5;
-      padding: 0;
-      touch-action: pan-x pan-y;
-      overflow-x: hidden;
-      min-height: 100vh;
-      position: relative;
-      overflow: hidden;
-    }
+	body {
+	  font-family: Arial, sans-serif;
+	  background-color: #f5f5f5;
+	  padding: 0;
+	  touch-action: pan-x pan-y;
+	  overflow-x: hidden;
+	  min-height: 100vh;
+	  position: relative;
+	  overflow: hidden;
+	}
 
-    html {
-      touch-action: manipulation;
-      -webkit-text-size-adjust: none;
-      -ms-text-size-adjust: none;
-      text-size-adjust: none;
-    }
+	html {
+	  touch-action: manipulation;
+	  -webkit-text-size-adjust: none;
+	  -ms-text-size-adjust: none;
+	  text-size-adjust: none;
+	}
 
-    .afdian-container {
-      width: 100%;
-      height: 100vh;
-      border: none;
-      overflow: auto;
-      display: block;
-      position: relative;
-      z-index: 1;
-      min-height: calc(100vh - 60px);
-    }
+	.afdian-container {
+	  width: 100%;
+	  height: 100vh;
+	  border: none;
+	  overflow: auto;
+	  display: block;
+	  position: relative;
+	  z-index: 1;
+	  min-height: calc(100vh - 60px);
+	}
 
-    .bottom-nav {
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      width: 100%;
-      height: 60px;
-      background-color: #fff;
-      border-top: 1px solid #e5e5e5;
-      display: flex;
-      justify-content: space-around;
-      align-items: center;
-      z-index: 9999;
-      pointer-events: auto;
-      transform: translateZ(0);
-      -webkit-transform: translateZ(0);
-      overflow: hidden;
-      opacity: 1 !important;
-      visibility: visible !important;
-    }
+	.bottom-nav {
+	  position: fixed;
+	  bottom: 0;
+	  left: 0;
+	  width: 100%;
+	  height: 60px;
+	  background-color: #fff;
+	  border-top: 1px solid #e5e5e5;
+	  display: flex;
+	  justify-content: space-around;
+	  align-items: center;
+	  z-index: 9999;
+	  pointer-events: auto;
+	  transform: translateZ(0);
+	  -webkit-transform: translateZ(0);
+	  overflow: hidden;
+	  opacity: 1 !important;
+	  visibility: visible !important;
+	}
 
-    .nav-item {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      flex: 1;
-      height: 100%;
-      text-decoration: none;
-      color: #999;
-      transition: color 0.3s;
-      pointer-events: auto;
-      white-space: nowrap;
-    }
+	.nav-item {
+	  display: flex;
+	  flex-direction: column;
+	  align-items: center;
+	  justify-content: center;
+	  flex: 1;
+	  height: 100%;
+	  text-decoration: none;
+	  color: #999;
+	  transition: color 0.3s;
+	  pointer-events: auto;
+	  white-space: nowrap;
+	}
 
-    .nav-item.active {
-      color: #4CAF50;
-    }
+	.nav-item.active {
+	  color: #4CAF50;
+	}
 
-    .nav-icon {
-      width: 24px;
-      height: 24px;
-      margin-bottom: 4px;
-      font-size: 20px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
+	.nav-icon {
+	  width: 24px;
+	  height: 24px;
+	  margin-bottom: 4px;
+	  font-size: 20px;
+	  display: flex;
+	  align-items: center;
+	  justify-content: center;
+	}
 
-    .nav-icon img {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      transition: opacity 0.3s;
-    }
+	.nav-icon img {
+	  width: 100%;
+	  height: 100%;
+	  object-fit: contain;
+	  transition: opacity 0.3s;
+	}
 
-    .nav-text {
-      font-size: 12px;
-      -webkit-font-smoothing: antialiased;
-    }
+	.nav-text {
+	  font-size: 12px;
+	  -webkit-font-smoothing: antialiased;
+	}
 
-    .wechat-notification,
-    .copy-success-modal,
-    .modal-overlay,
-    .terms-overlay,
-    .loading-overlay,
-    .nav-safe-indicator {
-      display: none !important;
-    }
+	.wechat-notification,
+	.copy-success-modal,
+	.modal-overlay,
+	.terms-overlay,
+	.loading-overlay,
+	.nav-safe-indicator {
+	  display: none !important;
+	}
+	
+	/* 导航栏加载失败提示 */
+	.nav-load-error {
+	  position: fixed;
+	  bottom: 60px;
+	  left: 0;
+	  width: 100%;
+	  background-color: #f44336;
+	  color: white;
+	  padding: 8px 15px;
+	  font-size: 14px;
+	  text-align: center;
+	  z-index: 9998;
+	}
   </style>
 </head>
 <body>
-  <!-- 提前渲染导航栏 -->
-  <div class="bottom-nav" id="bottomNav">
-    <a href="indexhome.html" class="nav-item active" onclick="handleNavigation(0, event)">
-      <div class="nav-icon">
-        <img src="home.png" alt="主页" />
-      </div>
-      <div class="nav-text">主页</div>
-    </a>
-    <a href="index2.html" class="nav-item" onclick="handleNavigation(1, event)">
-      <div class="nav-icon">
-        <img src="author.png" alt="论坛" />
-      </div>
-      <div class="nav-text">论坛</div>
-    </a>
-    <a href="index3.html" class="nav-item" onclick="handleNavigation(2, event)">
-      <div class="nav-icon">
-        <img src="my.png" alt="我的" />
-      </div>
-      <div class="nav-text">我的</div>
-    </a>
-  </div>
-
   <!-- 主内容区域 -->
   <iframe
-    class="afdian-container"
-    src="https://dlhc1145.github.io/PvZMagicBox"
-    allowfullscreen
+	class="afdian-container"
+	src="https://dlhc1145.github.io/PvZMagicBox"
+	allowfullscreen
   ></iframe>
 
+  <!-- 内置导航栏 -->
+  <div id="bottomNav" class="bottom-nav">
+	<a href="indexhome.html" class="nav-item active" onclick="handleNavigation(0, event)">
+	  <div class="nav-icon">
+		<img src="home.png" alt="主页" onerror="this.style.display='none'; this.parentNode.innerHTML='🏠'; this.parentNode.style.fontSize='20px'; this.parentNode.style.display='flex'; this.parentNode.style.alignItems='center'; this.parentNode.style.justifyContent='center';">
+	  </div>
+	  <div class="nav-text">主页</div>
+	</a>
+	<a href="index2.html" class="nav-item" onclick="handleNavigation(1, event)">
+	  <div class="nav-icon">
+		<img src="author.png" alt="发现" onerror="this.style.display='none'; this.parentNode.innerHTML='🔍'; this.parentNode.style.fontSize='20px'; this.parentNode.style.display='flex'; this.parentNode.style.alignItems='center'; this.parentNode.style.justifyContent='center';">
+	  </div>
+	  <div class="nav-text">发现</div>
+	</a>
+	<a href="index3.html" class="nav-item" onclick="handleNavigation(2, event)">
+	  <div class="nav-icon">
+		<img src="my.png" alt="我的" onerror="this.style.display='none'; this.parentNode.innerHTML='👤'; this.parentNode.style.fontSize='20px'; this.parentNode.style.display='flex'; this.parentNode.style.alignItems='center'; this.parentNode.style.justifyContent='center';">
+	  </div>
+	  <div class="nav-text">我的</div>
+	</a>
+  </div>
+
   <script>
-    // ================== 配置区 ==================
-    const CACHE_EXPIRY_MS = 10 * 60 * 1000; // 缓存保存时间：10分钟
-    const CHECK_INTERVAL_MS = 5 * 60 * 1000; // 兜底检查：每5分钟
-    const STORAGE_KEY = 'lastUnloadTime';
-    // ===========================================
+	/*********************** 可配置的底部导航 *************************/
+	const NAV_CONFIG = [
+	  { 
+		icon: 'home.png', 
+		text: { zh: '主页', en: 'Home' }, 
+		link: 'indexhome.html', 
+		active: true 
+	  },
+	  { 
+		icon: 'author.png', 
+		text: { zh: '发现', en: 'Discover ' }, 
+		link: 'index2.html' 
+	  },
+	  { 
+		icon: 'my.png', 
+		text: { zh: '我的', en: 'Profile' }, 
+		link: 'index3.html' 
+	  }
+	];
+	// ===========================================
 
-    const NAV_CONFIG = [
-      {
-        icon: 'home.png',
-        text: { zh: '主页', en: 'Home' },
-        link: 'indexhome.html',
-        active: true,
-      },
-      {
-        icon: 'author.png',
-        text: { zh: '论坛', en: 'Author' },
-        link: 'index2.html',
-      },
-      {
-        icon: 'my.png',
-        text: { zh: '我的', en: 'Profile' },
-        link: 'index3.html',
-      },
-    ];
+	let isEnglishMode = false;
 
-    let isEnglishMode = false;
+	// ================== 配置区 ==================
+	const CACHE_EXPIRY_MS = 10 * 60 * 1000; // 缓存保存时间：10分钟
+	const CHECK_INTERVAL_MS = 5 * 60 * 1000; // 兜底检查：每5分钟
+	const STORAGE_KEY = 'lastUnloadTime';
+	// ===========================================
 
-    function getLanguageState() {
-      return localStorage.getItem('isEnglish') === 'true';
-    }
+	function getLanguageState() {
+	  return localStorage.getItem('isEnglish') === 'true';
+	}
 
-    function updateBottomNav() {
-      isEnglishMode = getLanguageState();
-      const navItems = document.querySelectorAll('.bottom-nav .nav-item');
-      NAV_CONFIG.forEach((item, index) => {
-        const navItem = navItems[index];
-        const text = isEnglishMode ? item.text.en : item.text.zh;
-        const iconContainer = navItem.querySelector('.nav-icon');
-        const textContainer = navItem.querySelector('.nav-text');
-        const img = iconContainer.querySelector('img');
+	function updateBottomNav() {
+	  isEnglishMode = getLanguageState();
+	  const navItems = document.querySelectorAll('.bottom-nav .nav-item');
+	  
+	  NAV_CONFIG.forEach((item, index) => {
+		const navItem = navItems[index];
+		if (!navItem) return;
+		
+		const text = isEnglishMode ? item.text.en : item.text.zh;
+		const iconContainer = navItem.querySelector('.nav-icon');
+		const textContainer = navItem.querySelector('.nav-text');
+		const img = iconContainer.querySelector('img');
 
-        navItem.href = item.link;
-        textContainer.textContent = text;
-        if (img) {
-          img.src = item.icon;
-          img.alt = text;
-        }
-        navItem.classList.toggle('active', item.active);
-      });
-    }
+		// 更新导航项属性
+		navItem.href = item.link;
+		textContainer.textContent = text;
+		if (img) {
+		  img.src = item.icon;
+		  img.alt = text;
+		  // 图片加载失败处理
+		  img.onerror = function() {
+			this.style.display = 'none';
+			iconContainer.innerHTML = '📁';
+			iconContainer.style.fontSize = '20px';
+			iconContainer.style.display = 'flex';
+			iconContainer.style.alignItems = 'center';
+			iconContainer.style.justifyContent = 'center';
+		  };
+		}
+		navItem.classList.toggle('active', item.active);
+	  });
+	}
 
-    function handleNavigation(index, event) {
-      event.preventDefault();
-      const navItems = document.querySelectorAll('.bottom-nav .nav-item');
-      navItems.forEach((item, i) => {
-        item.classList.toggle('active', i === index);
-      });
-      setTimeout(() => {
-        window.location.href = NAV_CONFIG[index].link;
-      }, 50);
-    }
+	function handleNavigation(index, event) {
+	  event.preventDefault();
+	  const navItems = document.querySelectorAll('.bottom-nav .nav-item');
+	  
+	  navItems.forEach((item, i) => {
+		item.classList.toggle('active', i === index);
+	  });
+	  setTimeout(() => {
+		window.location.href = NAV_CONFIG[index].link;
+	  }, 50);
+	}
 
-    // ========== 十分钟自动清缓存并刷新 ==========
-    function recordUnloadTime() {
-      try {
-        localStorage.setItem(STORAGE_KEY, Date.now().toString());
-      } catch (e) {
-        // 忽略隐私模式/存储异常
-      }
-    }
+	// ========== 十分钟自动清缓存并刷新 ==========
+	function recordUnloadTime() {
+	  try {
+		localStorage.setItem(STORAGE_KEY, Date.now().toString());
+	  } catch (e) {
+		// 忽略隐私模式/存储异常
+	  }
+	}
 
-    function getLastUnloadTime() {
-      try {
-        const t = localStorage.getItem(STORAGE_KEY);
-        return t ? Number(t) : 0;
-      } catch (e) {
-        return 0;
-      }
-    }
+	function getLastUnloadTime() {
+	  try {
+		const t = localStorage.getItem(STORAGE_KEY);
+		return t ? Number(t) : 0;
+	  } catch (e) {
+		return 0;
+	  }
+	}
 
-    function checkAndRefreshIfExpired() {
-      const now = Date.now();
-      const last = getLastUnloadTime();
-      if (now - last > CACHE_EXPIRY_MS) {
-        // 可选：清理站点缓存（谨慎使用，会清Cookie/本地存储）
-        // if ('caches' in window) caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
-        localStorage.clear();
-        sessionStorage.clear();
-        // 触发页面重新加载
-        window.location.reload();
-      }
-    }
+	function checkAndRefreshIfExpired() {
+	  const now = Date.now();
+	  const last = getLastUnloadTime();
+	  if (now - last > CACHE_EXPIRY_MS) {
+		// 清理存储
+		localStorage.clear();
+		sessionStorage.clear();
+		// 触发页面重新加载
+		window.location.reload();
+	  }
+	}
 
-    function onVisibilityChange() {
-      if (document.visibilityState === 'visible') {
-        checkAndRefreshIfExpired();
-      }
-    }
+	function onVisibilityChange() {
+	  if (document.visibilityState === 'visible') {
+		checkAndRefreshIfExpired();
+	  }
+	}
 
-    // 兜底：定时检查
-    let intervalId = setInterval(checkAndRefreshIfExpired, CHECK_INTERVAL_MS);
+	// 兜底：定时检查
+	let intervalId = setInterval(checkAndRefreshIfExpired, CHECK_INTERVAL_MS);
 
-    // 绑定事件
-    document.addEventListener('visibilitychange', onVisibilityChange);
-    window.addEventListener('pageshow', onVisibilityChange);
-    window.addEventListener('pagehide', recordUnloadTime);
-    window.addEventListener('beforeunload', recordUnloadTime);
+	// 绑定事件
+	document.addEventListener('visibilitychange', onVisibilityChange);
+	window.addEventListener('pageshow', onVisibilityChange);
+	window.addEventListener('pagehide', recordUnloadTime);
+	window.addEventListener('beforeunload', recordUnloadTime);
 
-    // 首次进入也检查一次
-    document.addEventListener('DOMContentLoaded', () => {
-      updateBottomNav();
-      setTimeout(checkAndRefreshIfExpired, 300);
-      console.log('导航栏已锁定，初始化完成');
-    });
+	// 初始化
+	document.addEventListener('DOMContentLoaded', () => {
+	  // 初始化内置导航栏
+	  updateBottomNav();
+	  
+	  // 设置定期检查导航栏更新
+	  setInterval(updateBottomNav, CHECK_INTERVAL_MS);
+	  
+	  // 首次检查缓存
+	  setTimeout(checkAndRefreshIfExpired, 300);
+	  console.log('🔧 内置导航系统初始化完成');
+	});
 
-    // 禁止iframe滚动冒泡
-    document
-      .querySelector('.afdian-container')
-      .addEventListener('scroll', function (e) {
-        e.stopPropagation();
-      });
+	// 禁止iframe滚动冒泡
+	document
+	  .querySelector('.afdian-container')
+	  .addEventListener('scroll', function (e) {
+		e.stopPropagation();
+	  });
   </script>
 </body>
 </html>

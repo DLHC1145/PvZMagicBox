@@ -2,86 +2,1036 @@
 <html lang="zh-CN">
 <head>
 	<meta charset="UTF-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-	<title>软件搜索下载</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>安卓二代中文版 - 更新日志</title>
 	<style>
-		*{margin:0;padding:0;box-sizing:border-box}
-		body{font-family:Arial,sans-serif;background:#f5f5f5;padding-bottom:60px}
-		html{touch-action:manipulation;-webkit-text-size-adjust:none}
-		.container{background:white;width:320px;height:280px;border-radius:15px;display:flex;flex-direction:column;justify-content:center;align-items:center;box-shadow:0 3px 8px rgba(0,0,0,0.15);padding:25px;margin:40px auto}
-		.title{font-size:26px;color:black;margin-bottom:15px;font-weight:bold}
-		.description{font-size:14px;color:#666;line-height:1.4;margin-bottom:25px}
-		.sponsor-button{background:#007BFF;color:white;border:none;padding:10px 20px;font-size:14px;cursor:pointer;border-radius:6px;text-decoration:none;display:inline-block}
-		.sponsor-button:hover{background:#0056b3}
-		.bottom-nav{position:fixed;bottom:0;left:0;width:100%;height:60px;background:#fff;border-top:1px solid #e5e5e5;display:flex;justify-content:space-around;align-items:center;z-index:200}
-		.nav-item{flex:1;height:100%;text-decoration:none;color:#999;transition:color 0.3s;display:flex;flex-direction:column;align-items:center;justify-content:center}
-		.nav-item.active{color:#4CAF50}
-		.nav-icon{width:24px;height:24px;margin-bottom:4px;font-size:20px}
-		.nav-icon img{width:100%;height:100%;object-fit:contain}
-		.nav-text{font-size:12px}
-		.wechat-notification,.copy-success-modal,.modal-overlay,.terms-overlay,.loading-overlay,.nav-safe-indicator{display:none!important}
+		* {
+			margin: 0;
+			padding: 0;
+			box-sizing: border-box;
+		}
+
+		body {
+			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+			background-color: #ffffff;
+			color: #333333;
+			line-height: 1.6;
+			min-height: 100vh;
+		}
+
+		/* 新增：内容包装器，整体上移避开导航栏 */
+		.content-wrapper {
+			padding-bottom: 60px; /* 为底部导航栏留出空间 */
+			min-height: 100vh;
+		}
+
+		.container {
+			max-width: 800px;
+			margin: 0 auto;
+			padding: 40px 20px;
+		}
+
+		.header {
+			text-align: center;
+			margin-bottom: 50px;
+			border-bottom: 2px solid #f5f5f5;
+			padding-bottom: 30px;
+		}
+
+		.header h1 {
+			font-size: 2.5rem;
+			font-weight: 300;
+			color: #2c3e50;
+			margin-bottom: 10px;
+		}
+
+		.header p {
+			font-size: 1rem;
+			color: #7f8c8d;
+			font-weight: 300;
+		}
+
+		.update-log {
+			background: #ffffff;
+			border-radius: 8px;
+			box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+			overflow: hidden;
+		}
+
+		.log-content {
+			padding: 40px;
+			white-space: pre-wrap;
+			font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+			font-size: 14px;
+			line-height: 1.8;
+			background: #fafafa;
+			border-left: 4px solid #3498db;
+			margin: 20px 0;
+		}
+
+		.loading {
+			text-align: center;
+			padding: 60px 20px;
+			color: #7f8c8d;
+			font-size: 1.1rem;
+		}
+
+		.error {
+			text-align: center;
+			padding: 60px 20px;
+			color: #e74c3c;
+			background: #fdf2f2;
+			border-radius: 8px;
+			margin: 20px 0;
+		}
+
+		.retry-btn {
+			background: #3498db;
+			color: white;
+			border: none;
+			padding: 12px 24px;
+			border-radius: 6px;
+			cursor: pointer;
+			font-size: 14px;
+			margin-top: 15px;
+			transition: background 0.3s ease;
+		}
+
+		.retry-btn:hover {
+			background: #2980b9;
+		}
+
+		.footer {
+			text-align: center;
+			margin-top: 50px;
+			padding-top: 30px;
+			padding-bottom: 20px;
+			border-top: 1px solid #f5f5f5;
+			color: #95a5a6;
+			font-size: 0.9rem;
+		}
+
+		/* 全屏遮罩 - 已修复：调整高度避开导航栏 */
+		.version-overlay {
+			position: fixed;
+			top: 0;
+			left: 0;
+			width: 100%;
+			/* 关键修复：减去导航栏高度，避免被遮挡 */
+			height: calc(100% - 60px);
+			background: rgba(255, 255, 255, 0.95);
+			z-index: 10000; /* 提高到比导航栏更高的层级 */
+			display: none;
+			overflow-y: auto;
+			opacity: 0;
+			transition: opacity 0.3s ease-in-out;
+			/* 添加底部内边距，确保内容不被导航栏截断 */
+			padding-bottom: 60px;
+			box-sizing: content-box;
+		}
+
+		.version-overlay.active {
+			display: block;
+			opacity: 1;
+		}
+
+		/* 遮罩头部 - 新增滚动隐藏功能 */
+		.overlay-header {
+			position: sticky;
+			/* 调整顶部位置，避免太靠近边缘 */
+			top: 10px;
+			background: rgba(255, 255, 255, 0.98);
+			padding: 20px;
+			border-bottom: 1px solid #eee;
+			text-align: center;
+			z-index: 10001;
+			transform: translateY(-20px);
+			transition: all 0.3s ease-in-out 0.1s;
+			/* 新增：滚动隐藏相关属性 */
+			overflow: hidden;
+		}
+
+		.version-overlay.active .overlay-header {
+			transform: translateY(0);
+		}
+
+		/* 新增：头部隐藏状态 */
+		.overlay-header.hidden {
+			max-height: 0;
+			padding-top: 0;
+			padding-bottom: 0;
+			opacity: 0;
+			transform: translateY(-100%);
+		}
+
+		.overlay-title {
+			font-size: 1.5rem;
+			color: #2c3e50;
+			margin-bottom: 10px;
+			transition: opacity 0.3s ease;
+		}
+
+		.overlay-header.hidden .overlay-title {
+			opacity: 0;
+		}
+
+		.close-btn {
+			background: #e74c3c;
+			color: white;
+			border: none;
+			padding: 8px 16px;
+			border-radius: 4px;
+			cursor: pointer;
+			font-size: 14px;
+			transition: all 0.3s ease;
+		}
+
+		.close-btn:hover {
+			background: #c0392b;
+		}
+
+		/* 版本号网格布局 - 已修复：增加底部间距 */
+		.version-grid {
+			display: grid;
+			grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+			gap: 15px;
+			padding: 30px;
+			/* 关键修复：增加底部内边距，为导航栏留出空间 */
+			padding-bottom: 80px;
+			max-width: 800px;
+			margin: 0 auto;
+			transform: translateY(20px);
+			transition: transform 0.3s ease-in-out 0.2s;
+		}
+
+		.version-overlay.active .version-grid {
+			transform: translateY(0);
+		}
+
+		.version-item {
+			background: #f8f9fa;
+			border: 2px solid #e9ecef;
+			border-radius: 8px;
+			padding: 15px;
+			text-align: center;
+			cursor: pointer;
+			transition: all 0.3s ease;
+			font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+			font-size: 16px;
+			font-weight: bold;
+			color: #495057;
+			transform: scale(0.9);
+			animation: fadeInScale 0.4s ease forwards;
+		}
+
+		/* 为每个版本项添加延迟动画 */
+		.version-item:nth-child(1) { animation-delay: 0.1s; }
+		.version-item:nth-child(2) { animation-delay: 0.15s; }
+		.version-item:nth-child(3) { animation-delay: 0.2s; }
+		.version-item:nth-child(4) { animation-delay: 0.25s; }
+		.version-item:nth-child(5) { animation-delay: 0.3s; }
+		.version-item:nth-child(6) { animation-delay: 0.35s; }
+		.version-item:nth-child(n+7) { animation-delay: 0.4s; }
+
+		@keyframes fadeInScale {
+			to {
+				transform: scale(1);
+				opacity: 1;
+			}
+		}
+
+		.version-item:hover {
+			background: #007bff;
+			color: white;
+			border-color: #007bff;
+			transform: translateY(-2px) scale(1.02);
+			box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
+		}
+
+		/* 版本号链接样式 */
+		.version-link {
+			color: #e74c3c;
+			font-weight: bold;
+			text-decoration: underline;
+			cursor: pointer;
+			padding: 2px 4px;
+			border-radius: 3px;
+			transition: background 0.3s ease;
+		}
+
+		.version-link:hover {
+			background: #e74c3c;
+			color: white;
+		}
+
+		/* 高亮当前查看的版本 */
+		.highlighted-version {
+			background: #fff3cd !important;
+			border-color: #ffeaa7 !important;
+			animation: pulse 1s infinite;
+		}
+
+		@keyframes pulse {
+			0% { transform: scale(1); }
+			50% { transform: scale(1.02); }
+			100% { transform: scale(1); }
+		}
+
+		/* 被过滤的版本号样式 */
+		.filtered-version {
+			color: #ccc !important;
+			text-decoration: line-through !important;
+			cursor: not-allowed !important;
+			background: transparent !important;
+		}
+
+		.filtered-version:hover {
+			background: transparent !important;
+			color: #ccc !important;
+		}
+
+		/* ===== 外部导航栏容器样式 ===== */
+		#external-nav {
+			position: fixed;
+			bottom: 0;
+			left: 0;
+			width: 100%;
+			height: 60px;
+			z-index: 9999;
+			border-top: 1px solid #e5e5e5;
+		}
+
+		/* 导航栏内部元素样式覆盖 */
+		#external-nav .bottom-nav {
+			width: 100%;
+			height: 100%;
+			background-color: #fff;
+			display: flex;
+			justify-content: space-around;
+			align-items: center;
+			border-top: 1px solid #e5e5e5;
+			margin: 0;
+			padding: 0;
+		}
+
+		#external-nav .nav-item {
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			flex: 1;
+			height: 100%;
+			text-decoration: none;
+			color: #999;
+			transition: color 0.3s;
+			pointer-events: auto;
+			white-space: nowrap;
+		}
+
+		#external-nav .nav-item.active {
+			color: #4CAF50;
+		}
+
+		#external-nav .nav-icon {
+			width: 24px;
+			height: 24px;
+			margin-bottom: 4px;
+			font-size: 20px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+		}
+
+		#external-nav .nav-icon img {
+			width: 100%;
+			height: 100%;
+			object-fit: contain;
+			transition: opacity 0.3s;
+		}
+
+		#external-nav .nav-text {
+			font-size: 12px;
+			-webkit-font-smoothing: antialiased;
+		}
+
+		.wechat-notification,
+		.copy-success-modal,
+		.modal-overlay,
+		.terms-overlay,
+		.loading-overlay,
+		.nav-safe-indicator {
+			display: none !important;
+		}
+		/* ===== 导航栏样式结束 ===== */
+
+		@media (max-width: 768px) {
+			.container {
+				padding: 20px 15px;
+			}
+			
+			.header h1 {
+				font-size: 2rem;
+			}
+			
+			.log-content {
+				padding: 20px;
+				font-size: 13px;
+			}
+			
+			.version-grid {
+				grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+				padding: 20px;
+				gap: 10px;
+				/* 移动端也保持足够的底部间距 */
+				padding-bottom: 90px;
+			}
+			
+			.version-item {
+				font-size: 14px;
+				padding: 12px;
+			}
+			
+			/* 移动端遮罩调整 */
+			.version-overlay {
+				height: calc(100% - 60px);
+				padding-bottom: 70px;
+			}
+			
+			.overlay-header {
+				top: 5px;
+				padding: 15px;
+			}
+			
+			.overlay-title {
+				font-size: 1.3rem;
+			}
+		}
 	</style>
 </head>
 <body>
-	<div class="container">
-		<h1 class="title">我们正在加工！</h1>
-		<p class="description">我们需要筹集资金以承担论坛的费用，<br/>希望您能支持我们！<br/>或者可以先试试其他功能~</p>
-		<a href="https://afdian.com/a/DLHC1145" target="_blank" class="sponsor-button">爱发电赞助</a>
+	<!-- 新增：内容包装器，将整个内容向上推 -->
+	<div class="content-wrapper">
+		<div class="container">
+			<div class="header">
+				<h1>安卓中文版更新日志</h1>
+				<p>点版本号可快速跳转 | 爱来自红茶</p>
+			</div>
+
+			<div id="content">
+				<div class="loading">
+					正在加载更新日志...
+				</div>
+			</div>
+
+			<div class="footer">
+				<p>&copy; 2025 安卓2代中文版 - 不会是简单的汉化</p>
+			</div>
+		</div>
+
+		<!-- 版本号选择遮罩 - 已修复显示问题 -->
+		<div class="version-overlay" id="versionOverlay">
+			<div class="overlay-header" id="overlayHeader">
+				<div class="overlay-title">跳转目录</div>
+				<button class="close-btn" onclick="closeVersionOverlay()">关闭</button>
+			</div>
+			<div class="version-grid" id="versionGrid"></div>
+		</div>
 	</div>
 
-	<div id="bottomNav" class="bottom-nav"></div>
+	<!-- 外部导航栏容器 -->
+	<div id="external-nav"></div>
 
 	<script>
-		const NAV_CONFIG = [
-		  { icon: 'home.png', text: { zh: '主页', en: 'Home' }, link: 'indexhome.html', active: true },
-		  { icon: 'author.png', text: { zh: '论坛', en: 'forum' }, link: 'index2.html' },
-		  { icon: 'my.png', text: { zh: '我的', en: 'Profile' }, link: 'index3.html' }
+		// ================== 配置区 ==================
+		const CACHE_EXPIRY_MS = 10 * 60 * 1000; // 缓存保存时间：10分钟
+		const CHECK_INTERVAL_MS = 5 * 60 * 1000; // 兜底检查：每5分钟
+		const STORAGE_KEY = 'lastUnloadTime';
+		// ===========================================
+
+		// 【导航栏配置和数据】
+		let NAV_CONFIG = [];
+		let navigationLoaded = false;
+
+		// 默认导航配置（作为后备方案）
+		const DEFAULT_NAV_CONFIG = [
+			{
+				icon: 'home.png',
+				text: { zh: '主页', en: 'Home' },
+				link: 'indexhome.html',
+				active: true,
+			},
+			{
+				icon: 'author.png',
+				text: { zh: '发现', en: 'Discover' },
+				link: 'index2.html',
+			},
+			{
+				icon: 'my.png',
+				text: { zh: '我的', en: 'Profile' },
+				link: 'index3.html',
+			},
 		];
 
-		let isEnglishMode = localStorage.getItem('isEnglish') === 'true';
+		let isEnglishMode = false;
 
-		function generateBottomNav() {
-			const bottomNav = document.getElementById('bottomNav');
-			let navHTML = '';
+		// 加载外部导航栏
+		async function loadNavigation() {
+			try {
+				const response = await fetch('./导航栏.html');
+				if (!response.ok) throw new Error('无法加载导航栏文件');
+				
+				const htmlContent = await response.text();
+				
+				// 使用DOMParser解析HTML
+				const parser = new DOMParser();
+				const doc = parser.parseFromString(htmlContent, 'text/html');
+				
+				// 找到导航栏元素
+				const navElement = doc.querySelector('.bottom-nav');
+				if (navElement) {
+					// 将导航栏插入到页面中
+					const navContainer = document.getElementById('external-nav');
+					navContainer.innerHTML = navElement.outerHTML;
+					
+					// 为导航项添加事件监听器
+					const navItems = navContainer.querySelectorAll('.nav-item');
+					navItems.forEach((item, index) => {
+						const originalOnclick = item.getAttribute('onclick');
+						if (originalOnclick) {
+							// 替换onclick事件，使用我们的处理函数
+							item.removeAttribute('onclick');
+							item.addEventListener('click', (e) => {
+								const versionMatch = originalOnclick.match(/handleNavigation\((\d+)/);
+								if (versionMatch) {
+									const navIndex = parseInt(versionMatch[1]);
+									handleNavigation(navIndex, e);
+								}
+							});
+						}
+					});
+				}
+				
+				// 提取NAV_CONFIG配置
+				extractNavConfig(htmlContent);
+				navigationLoaded = true;
+				updateBottomNav(); // 初始化导航栏
+				
+			} catch (error) {
+				console.error('加载导航栏失败:', error);
+				// 使用默认配置
+				NAV_CONFIG = DEFAULT_NAV_CONFIG;
+				navigationLoaded = true;
+				createFallbackNavigation();
+				updateBottomNav();
+			}
+		}
+
+		// 从HTML中提取NAV_CONFIG配置
+		function extractNavConfig(htmlContent) {
+			try {
+				// 更可靠的正则表达式匹配
+				const configMatch = htmlContent.match(/const\s+NAV_CONFIG\s*=\s*(\[[\s\S]*?\]);/);
+				if (configMatch && configMatch[1]) {
+					// 使用Function构造器安全地执行代码
+					const configFunc = new Function('return ' + configMatch[1]);
+					NAV_CONFIG = configFunc();
+					console.log('成功提取导航配置:', NAV_CONFIG);
+				} else {
+					throw new Error('未找到NAV_CONFIG配置');
+				}
+			} catch (e) {
+				console.warn('无法提取导航栏配置，使用默认配置:', e);
+				NAV_CONFIG = DEFAULT_NAV_CONFIG;
+			}
+		}
+
+		// 创建后备导航栏
+		function createFallbackNavigation() {
+			const navContainer = document.getElementById('external-nav');
+			navContainer.innerHTML = `
+				<div class="bottom-nav">
+					<a href="indexhome.html" class="nav-item active">
+						<div class="nav-icon">
+							<img src="home.png" alt="主页" />
+						</div>
+						<div class="nav-text">主页</div>
+					</a>
+					<a href="index2.html" class="nav-item">
+						<div class="nav-icon">
+							<img src="author.png" alt="发现" />
+						</div>
+						<div class="nav-text">发现</div>
+					</a>
+					<a href="index3.html" class="nav-item">
+						<div class="nav-icon">
+							<img src="my.png" alt="我的" />
+						</div>
+						<div class="nav-text">我的</div>
+					</a>
+				</div>
+			`;
+		}
+
+		function getLanguageState() {
+			return localStorage.getItem('isEnglish') === 'true';
+		}
+
+		function updateBottomNav() {
+			if (!navigationLoaded) return;
+			
+			isEnglishMode = getLanguageState();
+			const navItems = document.querySelectorAll('#external-nav .nav-item');
 			
 			NAV_CONFIG.forEach((item, index) => {
-				const isActive = item.active ? 'active' : '';
-				const text = isEnglishMode ? item.text.en : item.text.zh;
-				const link = item.link;
+				const navItem = navItems[index];
+				if (!navItem) return;
 				
-				navHTML += `<a href="${link}" class="nav-item ${isActive}" onclick="handleNavigation(${index}, event)">
-					<div class="nav-icon"><img src="${item.icon}" alt="${text}" onerror="this.style.display='none'; this.parentNode.innerHTML='📁'; this.parentNode.style.fontSize='20px'; this.parentNode.style.display='flex'; this.parentNode.style.alignItems='center'; this.parentNode.style.justifyContent='center';"></div>
-					<div class="nav-text">${text}</div>
-				</a>`;
+				const text = isEnglishMode ? item.text.en : item.text.zh;
+				const iconContainer = navItem.querySelector('.nav-icon');
+				const textContainer = navItem.querySelector('.nav-text');
+				const img = iconContainer?.querySelector('img');
+
+				if (navItem.href) navItem.href = item.link;
+				if (textContainer) textContainer.textContent = text;
+				if (img) {
+					img.src = item.icon;
+					img.alt = text;
+				}
+				navItem.classList.toggle('active', item.active || false);
 			});
-			
-			bottomNav.innerHTML = navHTML;
 		}
 
 		function handleNavigation(index, event) {
-			if(event) event.preventDefault();
-			window.location.href = NAV_CONFIG[index].link;
-			updateNavigationState(index);
+			if (!navigationLoaded) return;
+			
+			event.preventDefault();
+			const navItems = document.querySelectorAll('#external-nav .nav-item');
+			navItems.forEach((item, i) => {
+				item.classList.toggle('active', i === index);
+			});
+			setTimeout(() => {
+				if (NAV_CONFIG[index]) {
+					window.location.href = NAV_CONFIG[index].link;
+				}
+			}, 50);
 		}
 
-		function updateNavigationState(activeIndex) {
-			document.querySelectorAll('.nav-item').forEach((item, index) => {
-				item.classList.toggle('active', index === activeIndex);
+		// ========== 十分钟自动清缓存并刷新 ==========
+		function recordUnloadTime() {
+			try {
+				localStorage.setItem(STORAGE_KEY, Date.now().toString());
+			} catch (e) {
+				// 忽略隐私模式/存储异常
+			}
+		}
+
+		function getLastUnloadTime() {
+			try {
+				const t = localStorage.getItem(STORAGE_KEY);
+				return t ? Number(t) : 0;
+			} catch (e) {
+				return 0;
+			}
+		}
+
+		function checkAndRefreshIfExpired() {
+			const now = Date.now();
+			const last = getLastUnloadTime();
+			if (now - last > CACHE_EXPIRY_MS) {
+				localStorage.clear();
+				sessionStorage.clear();
+				window.location.reload();
+			}
+		}
+
+		function onVisibilityChange() {
+			if (document.visibilityState === 'visible') {
+				checkAndRefreshIfExpired();
+			}
+		}
+
+		// 兜底：定时检查
+		let intervalId = setInterval(checkAndRefreshIfExpired, CHECK_INTERVAL_MS);
+
+		// 绑定事件
+		document.addEventListener('visibilitychange', onVisibilityChange);
+		window.addEventListener('pageshow', onVisibilityChange);
+		window.addEventListener('pagehide', recordUnloadTime);
+		window.addEventListener('beforeunload', recordUnloadTime);
+
+		// ================== 原有功能修改为 XMLHttpRequest ==================
+		// 文件路径 - 请根据实际文件位置调整
+		const logFileUrl = './安卓二代中文版更新日志.txt';
+		
+		// 存储所有版本号和对应的DOM元素
+		let versionData = [];
+
+		// 白名单：这些版本号保持原样，不进行任何转换
+		const versionWhitelist = new Set([
+			'1.1.1', '1.1.2', '2.2.2', '1.1.4', '1.1.5',
+			'2.1.1', '1.2.0', '1.8.0',
+			'3.1.1', '3.1.2', '3.1.3'
+		]);
+
+		// 滚动隐藏功能的变量
+		let scrollHideEnabled = true;
+		let lastScrollTop = 0;
+		let scrollThreshold = 10; // 滚动阈值，超过这个距离才触发隐藏/显示
+		let headerHideTimer = null;
+
+		// 加载并显示更新日志（使用 XMLHttpRequest 兼容旧浏览器）
+		function loadUpdateLog() {
+			const contentDiv = document.getElementById('content');
+			
+			// 显示加载中
+			contentDiv.innerHTML = '<div class="loading">正在加载更新日志...</div>';
+			
+			// 使用 XMLHttpRequest 替代 fetch（兼容性更好）
+			const xhr = new XMLHttpRequest();
+			xhr.open('GET', logFileUrl, true);
+			xhr.onreadystatechange = function () {
+				if (xhr.readyState === 4) { // 请求完成
+					if (xhr.status >= 200 && xhr.status < 300) {
+						// 成功获取内容
+						const textContent = xhr.responseText;
+						
+						if (!textContent.trim()) {
+							showError('文件内容为空');
+							return;
+						}
+						
+						// 格式化文本内容并提取版本号
+						const { formattedContent, versions } = formatLogContentWithVersions(textContent);
+						
+						contentDiv.innerHTML = `
+							<div class="update-log">
+								<div class="log-content">${formattedContent}</div>
+							</div>
+						`;
+						
+						// 存储版本数据
+						versionData = versions;
+						
+						// 为版本号链接添加点击事件
+						addVersionClickEvents();
+						
+					} else {
+						// 请求失败
+						showError(`无法加载文件 (状态码: ${xhr.status})`);
+					}
+				}
+			};
+			xhr.onerror = function () {
+				showError('网络错误或浏览器阻止了文件访问');
+			};
+			xhr.send();
+		}
+
+		// 格式化日志内容并提取版本号（加入白名单）
+		function formatLogContentWithVersions(content) {
+			// 转义HTML字符
+			let formatted = content
+				.replace(/&/g, '&amp;')
+				.replace(/</g, '&lt;')
+				.replace(/>/g, '&gt;')
+				.replace(/"/g, '&quot;')
+				.replace(/'/g, '&#039;');
+			
+			// 提取版本号的正则表达式：匹配 x.x、x.x.x、x.x.x.x 等格式
+			const versionRegex = /\b(\d+(?:\.\d+)+)\b/g;
+			const versions = [];
+			const processedVersions = new Set(); // 用于去重
+			
+			let match;
+			const allMatches = [];
+			
+			// 先收集所有匹配的版本号
+			while ((match = versionRegex.exec(formatted)) !== null) {
+				allMatches.push({
+					version: match[1],
+					index: match.index,
+					fullMatch: match[0]
+				});
+			}
+			
+			// 过滤和处理版本号
+			for (let i = 0; i < allMatches.length; i++) {
+				const current = allMatches[i];
+				let finalVersion = current.version;
+				let shouldFilter = false;
+				
+				// 如果在白名单中，直接使用原版本号
+				if (versionWhitelist.has(current.version)) {
+					finalVersion = current.version;
+				} else {
+					// 解析版本号各部分
+					const parts = finalVersion.split('.');
+					const firstPart = parts[0];
+					
+					// 1. 严格相邻重复数字检测（仅针对不在白名单中的）
+					if (parts.length >= 3) {
+						const firstValue = parts[0];
+						const allIdentical = parts.every(part => part === firstValue);
+						
+						if (allIdentical) {
+							finalVersion = firstValue; // 只保留第一个数字
+						}
+					}
+					
+					// 2. 检查主版本号是否大于3
+					const majorVersion = parseInt(firstPart);
+					if (majorVersion > 3) {
+						shouldFilter = true;
+						formatted = formatted.replace(current.fullMatch, `<span class="filtered-version">${current.version}</span>`);
+						continue;
+					}
+					
+					// 3. 检查是否为仅两位数字（放宽限制）
+					if (parts.length === 2) {
+						const secondPart = parseInt(parts[1]);
+						// 只有当第二部分超过合理范围时才过滤
+						if (secondPart > 999) {
+							shouldFilter = true;
+							formatted = formatted.replace(current.fullMatch, `<span class="filtered-version">${current.version}</span>`);
+							continue;
+						}
+					}
+				}
+				
+				// 如果是经过处理的版本号，替换原文本中的版本号
+				if (finalVersion !== current.version) {
+					formatted = formatted.replace(current.fullMatch, finalVersion);
+					current.version = finalVersion;
+					current.fullMatch = finalVersion;
+				}
+				
+				// 避免重复添加相同的版本号
+				if (!processedVersions.has(finalVersion) && !shouldFilter) {
+					processedVersions.add(finalVersion);
+					versions.push({
+						version: finalVersion,
+						index: current.index,
+						elementId: `version-${finalVersion.replace(/\./g, '-')}`,
+						originalVersion: current.version !== finalVersion ? current.version : null
+					});
+				}
+			}
+			
+			// 为版本号添加链接和ID（只给通过过滤的版本号添加链接）
+			const finalVersionRegex = /\b(\d+(?:\.\d+)+)\b/g;
+			formatted = formatted.replace(finalVersionRegex, (match, version) => {
+				const versionInfo = versions.find(v => v.version === version);
+				if (versionInfo) {
+					return `<span class="version-link" id="${versionInfo.elementId}" data-version="${version}">${version}</span>`;
+				}
+				return match;
+			});
+			
+			// 为日期添加样式
+			formatted = formatted.replace(/(\d{4}年\d{1,2}月\d{1,2}日|\d{4}-\d{2}-\d{2})/g, 
+				'<span style="color: #27ae60;">$1</span>');
+			
+			return { formattedContent: formatted, versions: versions };
+		}
+
+		// 为版本号链接添加点击事件
+		function addVersionClickEvents() {
+			const versionLinks = document.querySelectorAll('.version-link');
+			versionLinks.forEach(link => {
+				link.addEventListener('click', function(e) {
+					e.preventDefault();
+					const version = this.getAttribute('data-version');
+					showVersionOverlay(version);
+				});
 			});
 		}
 
-		function toggleLanguage() {
-			isEnglishMode = !isEnglishMode;
-			localStorage.setItem('isEnglish', isEnglishMode.toString());
-			generateBottomNav();
+		// 显示版本号选择遮罩 - 已修复显示问题
+		function showVersionOverlay(highlightVersion = null) {
+			const overlay = document.getElementById('versionOverlay');
+			const grid = document.getElementById('versionGrid');
+			const header = document.getElementById('overlayHeader');
+			
+			// 重置滚动状态
+			resetScrollState();
+			
+			// 清空现有内容
+			grid.innerHTML = '';
+			
+			// 创建版本号网格
+			versionData.forEach((versionInfo, index) => {
+				const versionItem = document.createElement('div');
+				versionItem.className = 'version-item';
+				if (versionInfo.version === highlightVersion) {
+					versionItem.classList.add('highlighted-version');
+				}
+				versionItem.textContent = versionInfo.version;
+				versionItem.setAttribute('data-version', versionInfo.version);
+				
+				versionItem.addEventListener('click', function() {
+					jumpToVersion(versionInfo.version);
+				});
+				
+				grid.appendChild(versionItem);
+			});
+			
+			// 显示遮罩
+			overlay.classList.add('active');
+			document.body.style.overflow = 'hidden';
+			
+			// 启用滚动隐藏功能
+			enableScrollHide();
 		}
 
-		function checkLanguageState() {
-			isEnglishMode = localStorage.getItem('isEnglish') === 'true';
-			generateBottomNav();
+		// 重置滚动状态
+		function resetScrollState() {
+			const header = document.getElementById('overlayHeader');
+			header.classList.remove('hidden');
+			lastScrollTop = 0;
+			scrollHideEnabled = true;
+			if (headerHideTimer) {
+				clearTimeout(headerHideTimer);
+				headerHideTimer = null;
+			}
 		}
 
-		document.addEventListener('DOMContentLoaded', checkLanguageState);
+		// 启用滚动隐藏功能
+		function enableScrollHide() {
+			const overlay = document.getElementById('versionOverlay');
+			const header = document.getElementById('overlayHeader');
+			
+			// 移除之前的事件监听器
+			overlay.removeEventListener('scroll', handleOverlayScroll);
+			
+			// 添加新的事件监听器
+			overlay.addEventListener('scroll', handleOverlayScroll);
+		}
+
+		// 处理遮罩滚动事件
+		function handleOverlayScroll(e) {
+			if (!scrollHideEnabled) return;
+			
+			const header = document.getElementById('overlayHeader');
+			const currentScrollTop = e.target.scrollTop;
+			
+			// 清除之前的定时器
+			if (headerHideTimer) {
+				clearTimeout(headerHideTimer);
+				headerHideTimer = null;
+			}
+			
+			// 判断滚动方向和距离
+			const scrollDiff = Math.abs(currentScrollTop - lastScrollTop);
+			
+			if (scrollDiff < scrollThreshold) {
+				return; // 滚动距离太小，不触发
+			}
+			
+			if (currentScrollTop > lastScrollTop && currentScrollTop > 50) {
+				// 向下滚动且超过50px，隐藏头部
+				header.classList.add('hidden');
+			} else if (currentScrollTop < lastScrollTop || currentScrollTop <= 50) {
+				// 向上滚动或回到顶部附近，显示头部
+				header.classList.remove('hidden');
+			}
+			
+			// 记录当前滚动位置
+			lastScrollTop = currentScrollTop;
+			
+			// 设置定时器，停止滚动后短暂延迟再允许下次隐藏
+			headerHideTimer = setTimeout(() => {
+				headerHideTimer = null;
+			}, 150);
+		}
+
+		// 跳转到指定版本
+		function jumpToVersion(version) {
+			const elementId = `version-${version.replace(/\./g, '-')}`;
+			const targetElement = document.getElementById(elementId);
+			
+			if (targetElement) {
+				// 关闭遮罩
+				closeVersionOverlay();
+				
+				// 滚动到目标元素
+				setTimeout(() => {
+					targetElement.scrollIntoView({ 
+						behavior: 'smooth', 
+						block: 'center' 
+					});
+					
+					// 高亮目标元素
+					targetElement.style.background = '#fff3cd';
+					targetElement.style.transition = 'background 0.3s ease';
+					
+					setTimeout(() => {
+						targetElement.style.background = '';
+					}, 2000);
+				}, 300);
+			}
+		}
+
+		// 关闭版本号选择遮罩
+		function closeVersionOverlay() {
+			const overlay = document.getElementById('versionOverlay');
+			const header = document.getElementById('overlayHeader');
+			
+			// 禁用滚动隐藏功能
+			disableScrollHide();
+			
+			// 重置状态
+			resetScrollState();
+			
+			// 关闭遮罩
+			overlay.classList.remove('active');
+			document.body.style.overflow = '';
+		}
+
+		// 禁用滚动隐藏功能
+		function disableScrollHide() {
+			const overlay = document.getElementById('versionOverlay');
+			overlay.removeEventListener('scroll', handleOverlayScroll);
+		}
+
+		// 显示错误信息
+		function showError(message) {
+			const contentDiv = document.getElementById('content');
+			contentDiv.innerHTML = `
+				<div class="error">
+					<h3>😔 加载失败</h3>
+					<p>无法加载更新日志文件</p>
+					<p><small>错误信息: ${message}</small></p>
+					<button class="retry-btn" onclick="loadUpdateLog()">重新尝试</button>
+				</div>
+			`;
+		}
+
+		// 点击遮罩背景关闭
+		document.addEventListener('click', function(e) {
+			const overlay = document.getElementById('versionOverlay');
+			if (e.target === overlay) {
+				closeVersionOverlay();
+			}
+		});
+
+		// ESC键关闭遮罩
+		document.addEventListener('keydown', function(e) {
+			if (e.key === 'Escape') {
+				closeVersionOverlay();
+			}
+		});
+
+		// 页面加载完成后执行
+		document.addEventListener('DOMContentLoaded', function() {
+			// 首先加载导航栏
+			loadNavigation();
+			
+			// 然后加载更新日志
+			loadUpdateLog();
+			
+			// 延迟检查缓存过期
+			setTimeout(checkAndRefreshIfExpired, 300);
+		});
 	</script>
 </body>
 </html>

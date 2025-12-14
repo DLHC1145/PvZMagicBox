@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
+	<meta name="apple-mobile-web-app-capable" content="yes">
+	<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+	<title>应用详情</title>
+	<style>
+		:root {
+			--primary-color: #2196F3;
+			--secondary-color: #4CAF50;
+			--text-primary: #333;
+			--text-secondary: #666;
+			--text-tertiary: #999;
+			--bg-light: #f5f5f5;
+			--border-color: #e5e5e5;
+		}
+		* { margin: 0; padding: 0; box-sizing: border-box; }
+		body {
+			font-family: Arial, sans-serif;
+			background-color: var(--bg-light);
+			color: var(--text-primary);
+			overflow-x: hidden;
+			touch-action: pan-y;
+		}
+		html {
+			height: 100%;
+			touch-action: manipulation;
+			-webkit-text-size-adjust: none;
+			-ms-text-size-adjust: none;
+			text-size-adjust: none;
+		}
+
+		/* 顶部导航栏 */
+		.detail-header {
+			position: sticky;
+			top: 0;
+			background-color: white;
+			border-bottom: 1px solid var(--border-color);
+			padding: 12px 15px;
+			display: flex;
+			align-items: center;
+			z-index: 100;
+			box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+		}
+		.back-btn {
+			background: none;
+			border: none;
+			font-size: 20px;
+			color: var(--primary-color);
+			margin-right: 15px;
+			cursor: pointer;
+			width: 36px;
+			height: 36px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			border-radius: 50%;
+			transition: background-color 0.2s;
+		}
+		.back-btn:hover {
+			background-color: var(--bg-light);
+		}
+		.header-title {
+			font-size: 18px;
+			font-weight: bold;
+			flex: 1;
+			text-align: center;
+			margin-right: 45px;
+		}
+
+		/* 应用头部信息 */
+		.app-header {
+			background-color: white;
+			padding: 20px 15px;
+			display: flex;
+			align-items: center;
+			margin-bottom: 10px;
+		}
+		.app-icon {
+			width: 80px;
+			height: 80px;
+			border-radius: 16px;
+			object-fit: cover;
+			margin-right: 15px;
+			box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+		}
+		.app-basic-info {
+			flex: 1;
+		}
+		.app-name {
+			font-size: 20px;
+			font-weight: bold;
+			margin-bottom: 5px;
+			color: var(--text-primary);
+		}
+		.app-score {
+			font-size: 16px;
+			color: #ff6b35;
+			font-weight: bold;
+			margin-bottom: 8px;
+		}
+		.download-count {
+			font-size: 14px;
+			color: var(--text-tertiary);
+			margin-bottom: 10px;
+		}
+		.download-btn-detail {
+			padding: 10px 20px;
+			background-color: var(--primary-color);
+			color: white;
+			border: none;
+			border-radius: 20px;
+			font-size: 16px;
+			cursor: pointer;
+			transition: background-color 0.3s;
+			min-width: 120px;
+		}
+		.download-btn-detail:hover {
+			background-color: #1976D2;
+		}
+
+		/* 应用详情内容 */
+		.app-detail-content {
+			background-color: white;
+			margin-bottom: 10px;
+			padding: 15px;
+		}
+		.content-title {
+			font-size: 16px;
+			font-weight: bold;
+			margin-bottom: 10px;
+			color: var(--text-primary);
+			padding-bottom: 8px;
+			border-bottom: 1px solid var(--border-color);
+		}
+		.app-desc {
+			font-size: 14px;
+			line-height: 1.6;
+			color: var(--text-secondary);
+			margin-bottom: 15px;
+		}
+		.feature-list {
+			list-style: none;
+		}
+		.feature-item {
+			font-size: 14px;
+			color: var(--text-secondary);
+			margin-bottom: 8px;
+			padding-left: 20px;
+			position: relative;
+		}
+		.feature-item::before {
+			content: "•";
+			position: absolute;
+			left: 0;
+			color: var(--primary-color);
+			font-weight: bold;
+		}
+
+		/* 下载方式弹窗 */
+		.modal-overlay {
+			position: fixed;
+			top: 0;
+			left: 0;
+			width: 100%;
+			height: 100%;
+			background-color: rgba(0, 0, 0, 0.5);
+			z-index: 2000;
+			display: none;
+			align-items: center;
+			justify-content: center;
+		}
+		.modal-overlay.active {
+			display: flex;
+		}
+		.download-modal {
+			background-color: white;
+			border-radius: 16px;
+			width: 90%;
+			max-width: 350px;
+			padding: 25px 20px;
+			animation: modalSlideIn 0.3s ease-out;
+		}
+		@keyframes modalSlideIn {
+			from {
+				opacity: 0;
+				transform: translateY(20px);
+			}
+			to {
+				opacity: 1;
+				transform: translateY(0);
+			}
+		}
+		.modal-title {
+			font-size: 18px;
+			font-weight: bold;
+			text-align: center;
+			margin-bottom: 20px;
+			color: var(--text-primary);
+		}
+		.download-option {
+			display: block;
+			width: 100%;
+			padding: 12px 0;
+			text-align: center;
+			background-color: var(--bg-light);
+			border: none;
+			border-radius: 8px;
+			font-size: 16px;
+			color: var(--text-primary);
+			cursor: pointer;
+			margin-bottom: 10px;
+			transition: all 0.2s;
+			text-decoration: none;
+		}
+		.download-option:hover {
+			background-color: var(--primary-color);
+			color: white;
+		}
+		.modal-close {
+			background: none;
+			border: none;
+			font-size: 18px;
+			color: var(--text-tertiary);
+			cursor: pointer;
+			margin-top: 15px;
+			width: 100%;
+			padding: 8px 0;
+			border-top: 1px solid var(--border-color);
+		}
+		.modal-close:hover {
+			color: var(--text-primary);
+		}
+
+		/* 底部导航（与主页面保持一致） */
+		.bottom-nav {
+			position: fixed;
+			bottom: 0;
+			left: 0;
+			width: 100%;
+			height: 60px;
+			background-color: #fff;
+			border-top: 1px solid var(--border-color);
+			display: flex;
+			justify-content: space-around;
+			align-items: center;
+			z-index: 200;
+			box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+		}
+		.nav-item {
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			flex: 1;
+			height: 100%;
+			text-decoration: none;
+			color: var(--text-tertiary);
+			transition: color 0.3s;
+		}
+		.nav-item.active {
+			color: var(--secondary-color);
+		}
+		.nav-item:hover {
+			color: var(--secondary-color);
+		}
+		.nav-icon-img {
+			width: 24px;
+			height: 24px;
+			object-fit: contain;
+			margin-bottom: 4px;
+		}
+		.nav-text {
+			font-size: 12px;
+			line-height: 1;
+		}
+
+		/* 响应式适配 */
+		@media screen and (max-width: 375px) {
+			.app-name {
+				font-size: 18px;
+			}
+			.app-icon {
+				width: 70px;
+				height: 70px;
+			}
+			.download-btn-detail {
+				padding: 8px 16px;
+				font-size: 14px;
+			}
+		}
+		@media screen and (max-width: 320px) {
+			.app-header {
+				padding: 15px 10px;
+			}
+			.app-detail-content {
+				padding: 10px;
+			}
+			.download-modal {
+				width: 95%;
+				padding: 20px 15px;
+			}
+		}
+	</style>
+</head>
+<body>
+	<!-- 顶部导航 -->
+	<div class="detail-header">
+		<button id="backBtn" class="back-btn">←</button>
+		<div class="header-title">应用详情</div>
+	</div>
+
+	<!-- 应用头部信息 -->
+	<div class="app-header">
+		<img id="appIcon" class="app-icon" src="" alt="应用图标">
+		<div class="app-basic-info">
+			<div id="appName" class="app-name"></div>
+			<div id="appScore" class="app-score"></div>
+			<div id="downloadCount" class="download-count"></div>
+			<button id="downloadBtnDetail" class="download-btn-detail">立即下载</button>
+		</div>
+	</div>
+
+	<!-- 应用详情内容 -->
+	<div class="app-detail-content">
+		<div class="content-title">应用介绍</div>
+		<div id="appDesc" class="app-desc"></div>
+		<div class="content-title">核心特色</div>
+		<ul id="featureList" class="feature-list"></ul>
+	</div>
+
+	<!-- 下载方式弹窗 -->
+	<div id="downloadModal" class="modal-overlay">
+		<div class="download-modal">
+			<div class="modal-title">选择下载方式</div>
+			<div id="downloadOptions" class="download-options"></div>
+			<button id="modalClose" class="modal-close">取消</button>
+		</div>
+	</div>
+
+	<!-- 底部导航（与主页面一致） -->
+	<div class="bottom-nav" id="bottomNav"></div>
+
+	<script>
+		/*********************** 底部导航渲染（与主页面一致） *************************/
+		const NAV_CONFIG = [
+			{ icon: 'home.png', text: '主页', link: 'index.html', active: false },
+			{ icon: 'author.png', text: '论坛', link: 'index2.html', active: false },
+			{ icon: 'my.png', text: '我的', link: 'index3.html', active: false }
+		];
+
+		function renderBottomNav() {
+			const nav = document.getElementById('bottomNav');
+			if (!nav) return;
+			
+			nav.innerHTML = NAV_CONFIG.map(item => {
+				const activeClass = item.active ? 'active' : '';
+				return `
+					<a href="${item.link}" class="nav-item ${activeClass}" data-page="${item.text}">
+						<img src="${item.icon}" class="nav-icon-img" alt="${item.text}">
+						<div class="nav-text">${item.text}</div>
+					</a>`;
+			}).join('');
+
+			// 激活当前页面（详情页默认无激活项，点击后切换）
+			const current = location.pathname.split('/').pop() || 'app-detail.html';
+			nav.querySelectorAll('.nav-item').forEach(el => {
+				const targetText = el.dataset.page;
+				const pageMap = {
+					'主页': 'index.html',
+					'论坛': 'index2.html', 
+					'我的': 'index3.html'
+				};
+				el.classList.toggle('active', current === pageMap[targetText]);
+			});
+
+			// 导航点击事件
+			nav.querySelectorAll('.nav-item').forEach(el => {
+				el.addEventListener('click', function() {
+					nav.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+					this.classList.add('active');
+				});
+			});
+		}
+
+		/*********************** 从URL参数解析应用数据 *************************/
+		function parseAppDataFromUrl() {
+			const urlParams = new URLSearchParams(window.location.search);
+			const appDataStr = urlParams.get('appData');
+			
+			if (!appDataStr) {
+				alert('未找到应用信息');
+				window.location.href = 'index.html';
+				return null;
+			}
+
+			try {
+				const appData = JSON.parse(decodeURIComponent(appDataStr));
+				return appData;
+			} catch (error) {
+				console.error('解析应用数据失败:', error);
+				alert('应用信息解析失败');
+				window.location.href = 'index.html';
+				return null;
+			}
+		}
+
+		/*********************** 渲染应用详情 *************************/
+		function renderAppDetail() {
+			// 从URL参数获取应用数据
+			const appData = parseAppDataFromUrl();
+			if (!appData) return;
+
+			console.log('接收到的应用数据:', appData);
+
+			// 渲染应用基本信息
+			document.getElementById('appIcon').src = appData.image;
+			document.getElementById('appName').textContent = appData.name;
+			document.getElementById('appScore').textContent = appData.score;
+			document.getElementById('downloadCount').textContent = `下载量：${appData.downloadCount}`;
+
+			// 渲染应用介绍
+			document.getElementById('appDesc').textContent = appData.description;
+
+			// 渲染核心特色列表
+			const featureListEl = document.getElementById('featureList');
+			featureListEl.innerHTML = appData.features.map(feature => {
+				return `<li class="feature-item">${feature}</li>`;
+			}).join('');
+
+			// 绑定下载按钮事件
+			const downloadBtn = document.getElementById('downloadBtnDetail');
+			const downloadModal = document.getElementById('downloadModal');
+			const downloadOptions = document.getElementById('downloadOptions');
+			const modalClose = document.getElementById('modalClose');
+
+			downloadBtn.addEventListener('click', function() {
+				// 使用从主页面传递的下载选项
+				if (appData.popup && appData.popup.downloads && appData.popup.downloads.length) {
+					downloadOptions.innerHTML = appData.popup.downloads.map(download => {
+						return `<a href="${download.url}" target="_blank" class="download-option">${download.text}</a>`;
+					}).join('');
+					
+					document.querySelector('.modal-title').textContent = appData.popup.text || '选择下载方式';
+				} else if (appData.downloadUrl) {
+					// 如果没有popup配置，直接使用downloadUrl
+					downloadOptions.innerHTML = `<a href="${appData.downloadUrl}" target="_blank" class="download-option">直接下载</a>`;
+					document.querySelector('.modal-title').textContent = '下载应用';
+				}
+				
+				downloadModal.classList.add('active');
+			});
+
+			// 关闭弹窗
+			modalClose.addEventListener('click', function() {
+				downloadModal.classList.remove('active');
+			});
+
+			// 点击遮罩关闭弹窗
+			downloadModal.addEventListener('click', function(e) {
+				if (e.target === this) {
+					this.classList.remove('active');
+				}
+			});
+		}
+
+		/*********************** 返回按钮事件 *************************/
+		document.getElementById('backBtn').addEventListener('click', function() {
+			// 返回上一页（主页面）
+			window.history.back();
+		});
+
+		/*********************** 初始化 *************************/
+		window.onload = function() {
+			renderBottomNav();
+			renderAppDetail();
+		};
+	</script>
+</body>
+</html>

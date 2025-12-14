@@ -2,43 +2,14 @@
 <html lang="zh-CN">
 <head>
 	<meta charset="UTF-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>软件搜索下载</title>
-	<style>
-		body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
-	</style>
-</head>
-<body>
-	<script>
-		// 页面加载时自动执行
-		window.onload = function() {
-			// 检查是否启用了在线数据功能
-			const isOnlineEnabled = localStorage.getItem('isOnlineDataEnabled') === 'true';
-			
-			if (isOnlineEnabled) {
-				// 如果在线功能开启，跳转到 index.online.html
-				window.location.href = 'indexonline.html';
-			}
-			// 如果在线功能未开启，继续正常加载当前页面
-		};
-	</script>
-</body>
-</html>
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 	<title>软件搜索下载</title>
-
-
-	<!-- 主页面样式 -->
 	<style>
 		:root {
-			--nav-icon-size: 24px; /* 图标容器宽高改为24px */
-			--nav-text-size: 12px; /* 文字字号改为12px */
-			--nav-height: 60px;    /* 导航栏总高度改为60px */
-			--nav-icon-text-gap: 4px; /* 图标与文字间距 */
+			--nav-icon-size: 24px;
+			--nav-text-size: 12px;
+			--nav-height: 60px;
+			--nav-icon-text-gap: 4px;
 			--primary-color: #4CAF50;
 			--text-secondary: #999;
 		}
@@ -49,7 +20,7 @@
 			padding: 0;
 			touch-action: pan-x pan-y;
 			overflow-x: hidden;
-			padding-bottom: var(--nav-height); /* iframe底部兼容高度改为60px */
+			padding-bottom: var(--nav-height);
 		}
 		html {
 			touch-action: manipulation;
@@ -255,12 +226,17 @@
 			flex: 1;
 			display: flex;
 			flex-direction: column;
+			min-width: 0;
 		}
 		.software-name {
 			font-size: 16px;
 			font-weight: bold;
 			color: #333;
 			margin-bottom: 5px;
+			white-space: nowrap;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			max-width: 100%;
 		}
 		.software-score {
 			color: #ff6b35;
@@ -416,6 +392,7 @@
 		.history-result-score {
 			font-size: 12px;
 			color: #ff6b35;
+			font-weight: bold;
 		}
 		.empty-history {
 			text-align: center;
@@ -424,99 +401,281 @@
 			font-size: 14px;
 		}
 
-		.modal-overlay {
+		/* 应用详情页背景改为浅蓝白色 */
+		#fullscreenModal {
+			background-color: #f0f7ff;
+		}
+		#fullscreenModal .fullscreen-modal-content {
+			background-color: #f0f7ff;
+		}
+		#fullscreenModal .fullscreen-modal-header {
+			background-color: #e6f2ff;
+			border-bottom: 1px solid #cce0ff;
+		}
+		#fullscreenModal .fullscreen-modal-title {
+			color: #1a365d;
+		}
+		#fullscreenModal .fullscreen-score {
+			color: #2c5282;
+		}
+		#fullscreenModal .fullscreen-desc {
+			color: #4a5568;
+		}
+		#fullscreenModal .fullscreen-download-title {
+			color: #2d3748;
+		}
+
+		/* 游戏展示区域背景改为淡蓝色 */
+		#imageShowcase {
+			background-color: #e6f3ff;
+			border: 1px solid #cce7ff;
+		}
+		#imageShowcase .image-showcase-title {
+			color: #1a365d;
+		}
+
+		/* 下载按钮改为胶囊形 */
+		#fullscreenDownloadOptions .fullscreen-download-option {
+			border-radius: 25px;
+		}
+		/* 下载按钮高亮蓝色 */
+		#fullscreenDownloadOptions .fullscreen-download-option {
+			background: #4285F4;
+		}
+		#fullscreenDownloadOptions .fullscreen-download-option:hover {
+			background: #5A9FFF;
+		}
+
+		/* popup正文圆框容器 */
+		.fullscreen-desc-container {
+			background-color: white;
+			border: 2px solid #cce0ff;
+			border-radius: 12px;
+			padding: 20px;
+			margin: 15px 0 25px 0;
+			box-shadow: 0 4px 12px rgba(33, 150, 243, 0.1);
+			position: relative;
+		}
+		.fullscreen-desc-container::before {
+			content: '';
+			position: absolute;
+			top: -2px; left: -2px; right: -2px; bottom: -2px;
+			background: linear-gradient(135deg, #2196F3, #64B5F6);
+			border-radius: 12px;
+			z-index: -1;
+			opacity: 0.3;
+		}
+		.fullscreen-desc-container .fullscreen-desc {
+			margin: 0; padding: 0;
+			background-color: transparent;
+			color: #2d3748;
+			line-height: 1.7;
+			font-size: 15px;
+		}
+
+		/* 下载按钮尺寸调整 */
+		#fullscreenDownloadOptions .fullscreen-download-option {
+			min-width: 102%;
+			width: 102%;
+			padding: 17px 21px;
+			margin: 0 auto;
+			display: block;
+			font-size: 15px;
+			padding-top: 18px;
+			padding-bottom: 18px;
+		}
+		#fullscreenDownloadOptions {
+			padding: 0 5%;
+		}
+		#fullscreenDownloadTitle {
+			margin: 25px 15px 25px 15px;
+		}
+		.fullscreen-modal-content {
+			padding-bottom: 30px;
+		}
+
+		/* 模态框基础样式 */
+		.fullscreen-modal-overlay {
 			position: fixed;
 			top: 0; left: 0;
 			width: 100%; height: 100%;
-			background-color: rgba(0, 0, 0, 0.5);
-			z-index: 2000;
+			z-index: 3000;
 			display: none;
-			align-items: center;
-			justify-content: center;
-		}
-		.modal-overlay.active {
-			display: flex;
-		}
-
-		.rectangle-modal {
-			background-color: white;
-			border-radius: 16px;
-			width: 90%;
-			max-width: 320px;
-			min-height: 250px;
-			position: relative;
-			animation: rectangleModalSlideIn 0.3s ease-out;
-			display: flex;
 			flex-direction: column;
-			align-items: center;
-			padding: 30px 20px 20px;
-			max-height: 80vh;
-			overflow-y: auto;
+			overflow: hidden;
 		}
-		@keyframes rectangleModalSlideIn {
-			from {
-				opacity: 0;
-				transform: scale(0.8) translateY(-20px);
-			}
-			to {
-				opacity: 1;
-				transform: scale(1) translateY(0);
-			}
-		}
-
-		.rectangle-modal-title {
-			font-size: 18px;
-			font-weight: bold;
-			color: #333;
-			margin-bottom: 20px;
-			text-align: center;
-		}
-		.rectangle-modal-options {
+		.fullscreen-modal-overlay.active {
 			display: flex;
-			flex-direction: column;
-			gap: 12px;
-			width: 100%;
 		}
-		.rectangle-modal-option {
-			padding: 12px 20px;
-			background-color: #f5f5f5;
-			border: none;
-			border-radius: 8px;
-			font-size: 14px;
-			color: #333;
-			cursor: pointer;
-			transition: all 0.2s;
-			text-align: center;
+		.fullscreen-modal-header {
+			padding: 15px;
+			border-bottom: 1px solid #e5e5e5;
+			display: flex;
+			align-items: center;
+			position: sticky;
+			top: 0;
+			z-index: 3001;
+			box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 		}
-		.rectangle-modal-option:hover {
-			background-color: #2196F3;
-			color: white;
-			transform: translateY(-1px);
+		/* 标题栏左侧图标 */
+		.fullscreen-modal-icon {
+			width: 32px;
+			height: 32px;
+			border-radius: 6px;
+			object-fit: cover;
+			margin-right: 12px;
+			vertical-align: middle;
+			background-color: #eee;
 		}
-		.rectangle-modal-close {
-			position: absolute;
-			top: 15px; right: 15px;
-			background: none; border: none;
+		.fullscreen-modal-title {
 			font-size: 20px;
+			font-weight: 900;
+			flex: 1;
+			line-height: 1.4;
+			display: flex;
+			align-items: center;
+		}
+		.fullscreen-modal-close {
+			background: none;
+			border: none;
+			font-size: 24px;
 			color: #999;
 			cursor: pointer;
-			width: 25px; height: 25px;
+			width: 40px;
+			height: 40px;
 			display: flex;
 			align-items: center;
 			justify-content: center;
 			border-radius: 50%;
 			transition: all 0.2s;
+			margin-right: 15px;
+			flex-shrink: 0;
 		}
-		.rectangle-modal-close:hover {
+		.fullscreen-modal-close:hover {
 			background-color: #f5f5f5;
 			color: #333;
+		}
+		.fullscreen-modal-content {
+			flex: 1;
+			overflow-y: auto;
+			padding: 20px;
+		}
+		.fullscreen-score {
+			font-size: 14px;
+			font-weight: 900;
+			margin: 0 15px 10px 15px;
+			text-align: center;
+		}
+		.image-showcase {
+			margin: 10px 0 15px 0;
+			border-radius: 12px;
+			padding: 0;
+			box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+			overflow: hidden;
+		}
+		.image-showcase-title {
+			font-size: 16px;
+			font-weight: bold;
+			margin: 15px 0 10px 15px;
+			text-align: center;
+		}
+		.image-slider-container {
+			position: relative;
+			width: 100%;
+			overflow: hidden;
+			background-color: #000;
+		}
+		.image-slider {
+			display: flex;
+			transition: transform 0.3s ease;
+			gap: 0;
+		}
+		.slider-image {
+			flex-shrink: 0;
+			width: 100%;
+			height: auto;
+			max-height: 70vh;
+			object-fit: contain;
+			border-radius: 0;
+			background-color: #000;
+			display: block
+		}
+		.slider-nav {
+			display: flex;
+			justify-content: flex-end;
+			align-items: center;
+			margin: 15px 148px 6px 0;
+			gap: 8px;
+		}
+		.slider-dot {
+			width: 8px;
+			height: 8px;
+			border-radius: 50%;
+			background-color: #ddd;
+			cursor: pointer;
+			transition: all 0.2s;
+		}
+		.slider-dot.active {
+			background-color: #2196F3;
+			transform: scale(1.2);
+		}
+		.fullscreen-desc {
+			font-size: 14px;
+			line-height: 1.6;
+			margin: 15px 0 25px 0;
+			padding: 0 5px;
+			text-align: justify;
+		}
+		.fullscreen-divider {
+			margin: 10px 0;
+		}
+		.fullscreen-download-title {
+			font-size: 16px;
+			font-weight: bold;
+			margin: 20px 15px 20px 15px;
+			text-align: center;
+		}
+		.fullscreen-download-options {
+			display: flex;
+			flex-direction: column;
+			gap: 12px;
+			padding: 0 15px;
+		}
+		.fullscreen-download-option {
+			padding: 15px 20px;
+			background: linear-gradient(135deg, #2196F3, #1976D2);
+			color: white;
+			border: none;
+			font-size: 15px;
+			cursor: pointer;
+			transition: all 0.2s;
+			text-align: center;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			box-shadow: 0 4px 12px rgba(33, 150, 243, 0.3);
+			position: relative;
+			overflow: hidden;
+		}
+		.fullscreen-download-option::before {
+			content: '';
+			position: absolute;
+			top: 0;
+			left: -100%;
+			width: 100%;
+			height: 100%;
+			background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+			transition: left 0.5s;
+		}
+		.fullscreen-download-option:hover::before {
+			left: 100%;
 		}
 
 		.bottom-nav {
 			position: fixed;
 			bottom: 0; left: 0;
 			width: 100%;
-			height: var(--nav-height); /* 导航栏总高度60px */
+			height: var(--nav-height);
 			background-color: #fff;
 			border-top: 1px solid #e5e5e5;
 			display: flex;
@@ -544,16 +703,16 @@
 			color: var(--primary-color);
 		}
 		.nav-icon-img {
-			width: var(--nav-icon-size); /* 图标容器24px */
-			height: var(--nav-icon-size); /* 图标容器24px */
+			width: var(--nav-icon-size);
+			height: var(--nav-icon-size);
 			object-fit: contain;
-			margin-bottom: var(--nav-icon-text-gap); /* 图标与文字间距4px */
+			margin-bottom: var(--nav-icon-text-gap);
 		}
 		.nav-text {
-			font-size: var(--nav-text-size); /* 文字字号12px */
+			font-size: var(--nav-text-size);
 			font-weight: normal;
 			line-height: 1;
-			height: auto; /* 文字容器高度自适应 */
+			height: auto;
 		}
 	</style>
 </head>
@@ -594,46 +753,53 @@
 		<div id="historyContent" class="history-content"></div>
 	</div>
 
-	<div id="rectangleModal" class="modal-overlay">
-		<div class="rectangle-modal">
-			<button id="rectangleModalClose" class="rectangle-modal-close">×</button>
-			<h3 id="rectangleModalTitle" class="rectangle-modal-title"></h3>
-			<div id="rectangleModalOptions" class="rectangle-modal-options"></div>
+	<!-- 应用详情弹窗 -->
+	<div id="fullscreenModal" class="fullscreen-modal-overlay">
+		<div class="fullscreen-modal-header">
+			<button id="fullscreenModalClose" class="fullscreen-modal-close">×</button>
+			<div id="fullscreenModalTitle" class="fullscreen-modal-title">
+				<img id="fullscreenModalIcon" class="fullscreen-modal-icon" src="" alt="icon">
+				<span id="fullscreenModalTitleText"></span>
+			</div>
+		</div>
+		<div class="fullscreen-modal-content">
+			<div id="fullscreenScore" class="fullscreen-score"></div>
+			<div id="imageShowcase" class="image-showcase" style="display: none;">
+				<div class="image-showcase-title">游戏展示</div>
+				<div class="image-slider-container">
+					<div id="imageSlider" class="image-slider"></div>
+				</div>
+				<div id="sliderNav" class="slider-nav"></div>
+			</div>
+			<div id="fullscreenDescWrapper" class="fullscreen-desc-container">
+				<div id="fullscreenDesc" class="fullscreen-desc"></div>
+			</div>
+			<div class="fullscreen-divider"></div>
+			<div id="fullscreenDownloadTitle" class="fullscreen-download-title">请选择下载方式：</div>
+			<div id="fullscreenDownloadOptions" class="fullscreen-download-options"></div>
 		</div>
 	</div>
 
-	<!-- 底部导航 -->
 	<div class="bottom-nav" id="bottomNav"></div>
 
 	<script>
-		/*********************** 多语言核心功能（隐藏切换按钮） *************************/
+		// ========== 多语言核心功能 ==========
 		let isEnglishMode = false;
-		
-		// 保存语言设置状态
 		function saveLanguageState(isEnglish) {
 			localStorage.setItem('isEnglish', isEnglish.toString());
 		}
-
 		function getLanguageState() {
 			return localStorage.getItem('isEnglish') === 'true';
 		}
-
-		// 检测浏览器语言
 		function detectBrowserLanguage() {
 			const lang = navigator.language || navigator.userLanguage;
 			return lang.startsWith('en') || lang.startsWith('EN');
 		}
-
-		// 翻译文本（中英对照翻译）
 		function translateText(text, targetLang = 'en') {
-			// 如果已经是英文且目标语言是英文，直接返回
 			if (targetLang === 'en' && /^[a-zA-Z\s]+$/.test(text.trim())) {
 				return text;
 			}
-			
-			// 中英翻译对照
 			const translations = {
-				// 界面文本
 				"搜索软件名称": "Search software name",
 				"搜索": "Search",
 				"取消": "Cancel",
@@ -715,92 +881,55 @@
 				"9.1分  作者：Daybs PVZ2: DLC系列致力于带来再续国际版主线的独特体验。 如“泳池派对”“罗马帝国”！版本25.1.0":"9.1/10 — Author: Daybs — PVZ2 DLC:mods —A series of original custom levels continuing the mainline, featuring Pool Party and Roman Empire. Version 25.1.0.",
 				"PVZ2: DLC原版自制关卡系列由Daybs独立制作，致力于带给玩家再续国际版主线的独特体验。拥有经过精心设计的如“泳池派对”“罗马帝国”的主线世界！":"An  DLC level series by Daybs,  picking up after the international main story,  with main worlds like Pool Party and Roman Empire."
 			};
-			
-			// 如果有对应的翻译则返回翻译，否则使用原文本
 			return translations[text] || text;
 		}
-
-		// 检测语言状态（但不提供切换按钮）
 		function checkLanguageState() {
-			const savedIsEnglish = getLanguageState();
-			
-			// 如果没有保存的状态，使用浏览器语言检测
-			if (savedIsEnglish === null) {
-				isEnglishMode = detectBrowserLanguage();
-			} else {
-				isEnglishMode = savedIsEnglish;
-			}
+			const saved = getLanguageState();
+			isEnglishMode = saved === null ? detectBrowserLanguage() : saved;
 		}
-
-		// 创建翻译后的软件数据
 		function getTranslatedSoftwareData() {
 			if (!isEnglishMode) return originalSoftwareData;
-			
-			// 深度复制并翻译文本字段
-			const translatedData = JSON.parse(JSON.stringify(originalSoftwareData));
-			
-			translatedData.forEach(item => {
-				// 翻译名称和评分
+			const translated = JSON.parse(JSON.stringify(originalSoftwareData));
+			translated.forEach(item => {
 				item.name = translateText(item.name);
 				item.score = translateText(item.score);
-				
-				// 翻译下载文本
-				if (item.downloadText) {
-					item.downloadText = translateText(item.downloadText);
-				}
-				
-				// 翻译弹窗内容
+				if (item.downloadText) item.downloadText = translateText(item.downloadText);
 				if (item.popup) {
 					item.popup.text = translateText(item.popup.text);
 					if (item.popup.downloads) {
-						item.popup.downloads.forEach(download => {
-							// 不翻译url字段
-							if (download.text) {
-								download.text = translateText(download.text);
-							}
+						item.popup.downloads.forEach(d => {
+							if (d.text) d.text = translateText(d.text);
 						});
 					}
 				}
-				
-				// downloadUrl、image字段保持不变（不翻译）
 			});
-			
-			return translatedData;
+			return translated;
 		}
 
-		/*********************** 可配置的底部导航 *************************/
+		// ========== 底部导航渲染 ==========
 		const NAV_CONFIG = [
 			{ icon: 'home.png', text: { zh: '主页', en: 'Home' }, link: 'index.html', active: true },
-			{ icon: 'author.png', text: { zh: '论坛', en: 'forum' }, link: 'index2.html' },
+			{ icon: 'author.png', text: { zh: '发现', en: 'Discover' }, link: 'index2.html' },
 			{ icon: 'my.png', text: { zh: '我的', en: 'Profile' }, link: 'index3.html' }
 		];
 
 		function renderBottomNav() {
 			const nav = document.getElementById('bottomNav');
 			if (!nav) return;
-			
 			nav.innerHTML = NAV_CONFIG.map(item => {
-				// 根据当前语言模式显示对应文本
 				const text = isEnglishMode ? item.text.en : item.text.zh;
 				const activeClass = item.active ? 'active' : '';
-				return `
-					<a href="${item.link}" class="nav-item ${activeClass}" data-page="${text}">
-						<img src="${item.icon}" class="nav-icon-img" alt="${text}">
-						<div class="nav-text">${text}</div>
-					</a>`;
+				return `<a href="${item.link}" class="nav-item ${activeClass}" data-page="${text}"><img src="${item.icon}" class="nav-icon-img" alt="${text}"><div class="nav-text">${text}</div></a>`;
 			}).join('');
-
 			nav.querySelectorAll('.nav-item').forEach(el => {
 				el.addEventListener('click', function(e) {
 					const curr = location.pathname.split('/').pop() || 'index.html';
 					const targetText = this.dataset.page;
 					const pageMap = {};
 					NAV_CONFIG.forEach(n => {
-						// 根据当前语言模式映射页面
 						const textKey = isEnglishMode ? 'en' : 'zh';
 						pageMap[n.text[textKey]] = n.link.split('/').pop();
 					});
-					
 					if (curr === pageMap[targetText]) {
 						e.preventDefault();
 						return false;
@@ -809,7 +938,6 @@
 					this.classList.add('active');
 				});
 			});
-
 			const current = location.pathname.split('/').pop() || 'index.html';
 			nav.querySelectorAll('.nav-item').forEach(el => {
 				const targetText = el.dataset.page;
@@ -822,8 +950,7 @@
 			});
 		}
 
-		/*********************** 软件数据与翻译处理 *************************/
-		const originalSoftwareData = [
+const originalSoftwareData = [
 			{
 				rank: 1,
 				name: "植物大战僵尸2官方版",
@@ -915,6 +1042,7 @@
 				score: "9.1分  作者：Daybs PVZ2: DLC系列致力于带来再续国际版主线的独特体验。 如“泳池派对”“罗马帝国”！版本25.1.0",
 				downloadUrl: "http://www.123865.com/s/Xpv9-ndDxh",
 				image: "植物大战僵尸2DLC.jpg",
+				textpng: ["应用快照：dlc1.jpg"],
 				popup: {
 					text: "PVZ2: DLC原版自制关卡系列由Daybs独立制作，致力于带给玩家再续国际版主线的独特体验。拥有经过精心设计的如“泳池派对”“罗马帝国”的主线世界！",
 					downloads: [
@@ -1104,13 +1232,10 @@
 				}
 			}
 		];
-
-		// 获取翻译后的软件数据
-		let translatedSoftwareData = [];
 		
-		// 排序后的软件数据
+		
+		let translatedSoftwareData = [];
 		let sortedSoftware = [];
-
 		const searchInput = document.getElementById('searchInput');
 		const searchResultInput = document.getElementById('searchResultInput');
 		const softwareListEl = document.getElementById('softwareList');
@@ -1124,12 +1249,19 @@
 		const historyPage = document.getElementById('historyPage');
 		const backBtn = document.getElementById('backBtn');
 		const historyContent = document.getElementById('historyContent');
-		const rectangleModal = document.getElementById('rectangleModal');
-		const rectangleModalTitle = document.getElementById('rectangleModalTitle');
-		const rectangleModalOptions = document.getElementById('rectangleModalOptions');
-		const rectangleModalClose = document.getElementById('rectangleModalClose');
+		const fullscreenModal = document.getElementById('fullscreenModal');
+		const fullscreenModalTitle = document.getElementById('fullscreenModalTitle');
+		const fullscreenModalClose = document.getElementById('fullscreenModalClose');
+		const fullscreenDesc = document.getElementById('fullscreenDesc');
+		const fullscreenScore = document.getElementById('fullscreenScore');
+		const imageShowcase = document.getElementById('imageShowcase');
+		const imageSlider = document.getElementById('imageSlider');
+		const sliderNav = document.getElementById('sliderNav');
+		const fullscreenDownloadTitle = document.getElementById('fullscreenDownloadTitle');
+		const fullscreenDownloadOptions = document.getElementById('fullscreenDownloadOptions');
 
 		let searchHistory = JSON.parse(localStorage.getItem('searchHistory') || '[]');
+		let currentImageIndex = 0;
 
 		function renderSoftwareList(softwareToShow, container = softwareListEl) {
 			if (!softwareToShow.length) {
@@ -1137,19 +1269,14 @@
 				container.innerHTML = `<div class="no-results">${noResultsText}</div>`;
 				return;
 			}
-			
 			const listHTML = softwareToShow.map(item => {
 				const btnText = item.downloadText || (isEnglishMode ? 'Download' : '下载');
 				let btnHtml = '';
 				if (item.popup) {
-					btnHtml = `<button class="download-btn-main" onclick="showPopup('${item.name}')">${btnText}</button>`;
+					btnHtml = `<button class="download-btn-main" onclick="showFullscreenPopup('${item.name}')">${btnText}</button>`;
 				} else if (item.downloadUrl && item.downloadUrl.trim() !== '' && item.downloadUrl !== '无') {
 					const isHtml = item.downloadUrl.endsWith('.html');
-					if (isHtml) {
-						btnHtml = `<a href="${item.downloadUrl}" class="download-btn-main" target="_blank">${btnText}</a>`;
-					} else {
-						btnHtml = `<a href="${item.downloadUrl}" class="download-btn-main" target="_blank">${btnText}</a>`;
-					}
+					btnHtml = `<a href="${item.downloadUrl}" class="download-btn-main" target="_blank">${btnText}</a>`;
 				} else {
 					const noDownloadText = isEnglishMode ? 'No download' : '暂无下载';
 					btnHtml = `<span class="download-btn-main" disabled>${noDownloadText}</span>`;
@@ -1167,55 +1294,91 @@
 			container.innerHTML = listHTML;
 		}
 
-		function showPopup(name) {
-			// 查找原始名称或翻译名称
-			const item = translatedSoftwareData.find(s => s.name === name) || 
-						originalSoftwareData.find(s => translateText(s.name) === name);
-			
+		function showFullscreenPopup(name) {
+			const item = translatedSoftwareData.find(s => s.name === name) || originalSoftwareData.find(s => translateText(s.name) === name);
 			if (!item || !item.popup) return;
+			fullscreenModalTitle.textContent = item.name;
+			fullscreenScore.textContent = item.score;
+			if (item.textpng && item.textpng.length > 0) {
+				imageShowcase.style.display = 'block';
+				renderImageSlider(item.textpng);
+			} else {
+				imageShowcase.style.display = 'none';
+			}
 			
-			rectangleModalTitle.textContent = item.name;
-			rectangleModalOptions.innerHTML = '';
+			// 设置描述文字内容
+			fullscreenDesc.textContent = item.popup.text;
 			
-			const desc = document.createElement('div');
-			desc.style.cssText = 'font-size:14px;color:#666;line-height:1.5;margin-bottom:20px;text-align:center;padding:0 10px;';
-			desc.textContent = item.popup.text;
-			rectangleModalOptions.appendChild(desc);
-			
-			const divider = document.createElement('div');
-			divider.style.cssText = 'width:100%;height:1px;background:#e5e5e5;margin-bottom:15px;';
-			rectangleModalOptions.appendChild(divider);
-			
-			const titleOpt = document.createElement('div');
-			titleOpt.style.cssText = 'font-size:14px;font-weight:bold;color:#333;margin-bottom:12px;text-align:center;';
-			titleOpt.textContent = isEnglishMode ? 'Please choose download method:' : '请选择下载方式：';
-			rectangleModalOptions.appendChild(titleOpt);
-			
-			item.popup.downloads.forEach(opt => {
-				const btn = document.createElement('button');
-				btn.className = 'rectangle-modal-option';
-				btn.textContent = opt.text;
-				btn.onclick = () => { 
-					if (opt.url && opt.url !== '链接1' && opt.url !== '链接2' && opt.url !== '链接3' && opt.url !== '链接4') {
-						window.open(opt.url, '_blank'); 
-					}
-					hideRectangleModal(); 
-				};
-				rectangleModalOptions.appendChild(btn);
-			});
-			
-			rectangleModal.classList.add('active');
+			fullscreenDownloadOptions.innerHTML = '';
+			if (item.popup.downloads) {
+				const titleText = isEnglishMode ? 'Please choose download method:' : '请选择下载方式：';
+				fullscreenDownloadTitle.textContent = titleText;
+				item.popup.downloads.forEach(opt => {
+					const btn = document.createElement('button');
+					btn.className = 'fullscreen-download-option';
+					btn.textContent = opt.text;
+					btn.onclick = () => { opt.url && window.open(opt.url, '_blank'); hideFullscreenModal(); };
+					fullscreenDownloadOptions.appendChild(btn);
+				});
+			} else {
+				fullscreenDownloadTitle.textContent = '';
+			}
+			fullscreenModal.classList.add('active');
 		}
 
-		function hideRectangleModal() {
-			rectangleModal.classList.remove('active');
+		function renderImageSlider(images) {
+			imageSlider.innerHTML = '';
+			sliderNav.innerHTML = '';
+			images.forEach((src, index) => {
+				const img = document.createElement('img');
+				img.src = src;
+				img.className = 'slider-image';
+				img.alt = `展示 ${index + 1}`;
+				imageSlider.appendChild(img);
+				const dot = document.createElement('div');
+				dot.className = 'slider-dot';
+				if (index === 0) dot.classList.add('active');
+				dot.addEventListener('click', () => goToSlide(index));
+				sliderNav.appendChild(dot);
+			});
+			currentImageIndex = 0;
+			updateSliderPosition();
+		}
+
+		function updateSliderPosition() {
+			const slideWidth = imageSlider.children[0]?.offsetWidth || 0;
+			imageSlider.style.transform = `translateX(-${currentImageIndex * slideWidth}px)`;
+			document.querySelectorAll('.slider-dot').forEach((dot, index) => {
+				dot.classList.toggle('active', index === currentImageIndex);
+			});
+		}
+
+		function goToSlide(index) {
+			if (index >= 0 && index < imageSlider.children.length) {
+				currentImageIndex = index;
+				updateSliderPosition();
+			}
+		}
+
+		function nextSlide() {
+			currentImageIndex < imageSlider.children.length - 1 && currentImageIndex++;
+			updateSliderPosition();
+		}
+
+		function prevSlide() {
+			currentImageIndex > 0 && currentImageIndex--;
+			updateSliderPosition();
+		}
+
+		function hideFullscreenModal() {
+			fullscreenModal.classList.remove('active');
 		}
 
 		function saveSearchHistory(kw) {
 			if (!kw.trim()) return;
 			searchHistory = searchHistory.filter(h => h.keyword !== kw);
 			searchHistory.unshift({ keyword: kw, timestamp: Date.now() });
-			if (searchHistory.length > 10) searchHistory = searchHistory.slice(0, 10);
+			searchHistory.length > 10 && (searchHistory = searchHistory.slice(0, 10));
 			localStorage.setItem('searchHistory', JSON.stringify(searchHistory));
 		}
 
@@ -1224,15 +1387,11 @@
 				renderSoftwareList(sortedSoftware, container);
 				return;
 			}
-			
 			saveSearchHistory(kw);
-			
-			// 同时搜索中英文
 			const filtered = translatedSoftwareData.filter(s => 
 				s.name.toLowerCase().includes(kw.toLowerCase()) || 
 				originalSoftwareData.find(orig => orig.name.toLowerCase().includes(kw.toLowerCase()) && translateText(orig.name) === s.name)
 			);
-			
 			renderSoftwareList(filtered, container);
 		}
 
@@ -1254,25 +1413,18 @@
 				historyContent.innerHTML = `<div class="empty-history">${emptyText}</div>`;
 				return;
 			}
-			
 			const shown = new Set();
 			let html = '';
-			
 			searchHistory.forEach(hist => {
 				const results = translatedSoftwareData.filter(s => 
-					s.name.toLowerCase().includes(hist.keyword.toLowerCase()) && 
-					!shown.has(s.name)
+					s.name.toLowerCase().includes(hist.keyword.toLowerCase()) && !shown.has(s.name)
 				).slice(0, 2);
-				
 				if (!results.length) return;
-				
 				results.forEach(r => shown.add(r.name));
-				
 				const resHtml = results.map(r => {
-					const link = r.downloadUrl && r.downloadUrl.trim() && r.downloadUrl !== '无' ? (r.downloadUrl.endsWith('.html') ? r.downloadUrl : r.downloadUrl) : '#';
+					const link = r.downloadUrl && r.downloadUrl.trim() && r.downloadUrl !== '无' ? r.downloadUrl : '#';
 					const disabled = (!link || link === '#') ? 'disabled' : '';
 					const downloadText = isEnglishMode ? 'Download' : '下载';
-					
 					return `
 					<div class="history-result-item">
 						<img src="${r.image}" class="history-result-img" alt="${r.name}">
@@ -1283,7 +1435,6 @@
 						<a href="${link}" class="download-btn-main" target="_blank" ${disabled} style="padding:6px 12px;font-size:12px;">${downloadText}</a>
 					</div>`;
 				}).join('');
-				
 				const searchLabel = isEnglishMode ? 'Search:' : '搜索：';
 				html += `
 				<div class="history-search-item">
@@ -1294,13 +1445,7 @@
 					<div class="history-search-results">${resHtml}</div>
 				</div>`;
 			});
-			
-			if (!html) {
-				const allShownText = isEnglishMode ? 'All software displayed above' : '所有软件已在上方显示完毕';
-				html = `<div class="empty-history">${allShownText}</div>`;
-			}
-			
-			historyContent.innerHTML = html;
+			historyContent.innerHTML = html || `<div class="empty-history">${isEnglishMode ? 'All software displayed above' : '所有软件已在上方显示完毕'}</div>`;
 		}
 
 		function quickSearch(kw) {
@@ -1312,83 +1457,49 @@
 			searchResultInput.focus();
 		}
 
-		// 初始化语言状态（自动检测但不显示切换按钮）
 		function initLanguageState() {
 			checkLanguageState();
 			translatedSoftwareData = getTranslatedSoftwareData();
-			// 修复排序逻辑：提取评分中的数字进行排序
 			sortedSoftware = [...translatedSoftwareData].sort((a, b) => {
-				// 提取评分数字（如从 "8.7分 xxx" 中提取 8.7）
 				const scoreA = parseFloat(a.score.match(/\d+\.?\d*/)[0]) || 0;
 				const scoreB = parseFloat(b.score.match(/\d+\.?\d*/)[0]) || 0;
-				return scoreB - scoreA; // 降序排列
+				return scoreB - scoreA;
 			});
 			updatePageText();
 			renderBottomNav();
 		}
 
-		// 更新页面文本（根据当前语言模式）
 		function updatePageText() {
-			// 更新占位符
 			document.getElementById('searchInput').placeholder = isEnglishMode ? 'Search software name' : '搜索软件名称';
 			document.getElementById('searchResultInput').placeholder = isEnglishMode ? 'Search software name' : '搜索软件名称';
-			
-			// 更新按钮文本
 			document.getElementById('searchText').textContent = isEnglishMode ? 'Search' : '搜索';
 			document.querySelector('.search-result-actions .search-text').textContent = isEnglishMode ? 'Search' : '搜索';
 			document.getElementById('cancelBtn').textContent = isEnglishMode ? 'Cancel' : '取消';
 			document.getElementById('resultCancelBtn').textContent = isEnglishMode ? 'Cancel' : '取消';
 			document.querySelector('.history-title').textContent = isEnglishMode ? 'History' : '历史记录';
-			
-			// 更新页面标题
 			document.title = isEnglishMode ? 'Software Search & Download' : '软件搜索下载';
 		}
 
-		// 初始化
 		function init() {
 			initLanguageState();
 			renderSoftwareList(sortedSoftware);
 		}
 
-		// 初始化
 		init();
 
-		// 搜索框事件
-		searchInput.addEventListener('focus', () => {
-			showSearchResultPage();
-			cancelBtn.style.display = 'block';
-			historyBtn.style.display = 'none';
-		});
-		searchText.addEventListener('click', () => {
-			const kw = searchInput.value.trim();
-			if (kw) performSearch(kw, softwareListEl);
-		});
-		resultSearchText.addEventListener('click', () => {
-			const kw = searchResultInput.value.trim();
-			if (kw) performSearch(kw, resultSoftwareListEl);
-		});
-		cancelBtn.addEventListener('click', () => {
-			hideSearchResultPage();
-			cancelBtn.style.display = 'none';
-			historyBtn.style.display = 'block';
-		});
-		resultCancelBtn.addEventListener('click', () => {
-			hideSearchResultPage();
-			cancelBtn.style.display = 'none';
-			historyBtn.style.display = 'block';
-		});
-		historyBtn.addEventListener('click', () => {
-			renderHistoryPage();
-			historyPage.classList.add('active');
-		});
+		searchInput.addEventListener('focus', showSearchResultPage);
+		searchText.addEventListener('click', () => { const kw = searchInput.value.trim(); kw && performSearch(kw, softwareListEl); });
+		resultSearchText.addEventListener('click', () => { const kw = searchResultInput.value.trim(); kw && performSearch(kw, resultSoftwareListEl); });
+		cancelBtn.addEventListener('click', hideSearchResultPage);
+		resultCancelBtn.addEventListener('click', hideSearchResultPage);
+		historyBtn.addEventListener('click', () => { renderHistoryPage(); historyPage.classList.add('active'); });
 		backBtn.addEventListener('click', () => historyPage.classList.remove('active'));
-
 		[searchResultInput, searchInput].forEach(inp => {
 			inp.addEventListener('keypress', e => {
 				if (e.key === 'Enter') {
 					const kw = inp.value.trim();
-					if (inp.id === 'searchResultInput') performSearch(kw, resultSoftwareListEl);
-					else if (kw) performSearch(kw, softwareListEl);
+					const targetContainer = inp.id === 'searchResultInput' ? resultSoftwareListEl : softwareListEl;
+					kw && performSearch(kw, targetContainer);
 				}
 			});
 			inp.addEventListener('input', () => {
@@ -1396,15 +1507,33 @@
 				other.value = inp.value;
 			});
 		});
-
-		rectangleModalClose.addEventListener('click', hideRectangleModal);
-		rectangleModal.addEventListener('click', e => {
-			if (e.target === rectangleModal) hideRectangleModal();
+		fullscreenModalClose.addEventListener('click', hideFullscreenModal);
+		fullscreenModal.addEventListener('click', e => e.target === fullscreenModal && hideFullscreenModal());
+		let startX = 0;
+		imageSlider.addEventListener('touchstart', e => startX = e.touches[0].clientX);
+		imageSlider.addEventListener('touchend', e => {
+			const endX = e.changedTouches[0].clientX;
+			const diffX = startX - endX;
+			Math.abs(diffX) > 50 && (diffX > 0 ? nextSlide() : prevSlide());
 		});
-		
-		// 全局函数暴露给window
-		window.showPopup = showPopup;
+
+		window.showFullscreenPopup = showFullscreenPopup;
 		window.quickSearch = quickSearch;
+	</script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+	<script>
+		if(localStorage.getItem('isOnlineDataEnabled')==='true'){
+			localStorage.setItem('isOnlineDataEnabled','false');
+			location.href='./indexonline.html';
+		}
 	</script>
 </body>
 </html>
