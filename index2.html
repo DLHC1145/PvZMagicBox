@@ -10,6 +10,7 @@
 		box-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
 		margin-bottom: 30px;
 		z-index: 1000;
+		transition: all 0.3s ease;
 	}
 	
 	.feature-container {
@@ -144,6 +145,7 @@
 		align-items: center;
 		justify-content: center;
 		transition: all 0.3s ease;
+		z-index: 1001;
 	}
 	
 	.close-feature-bar:hover {
@@ -187,37 +189,70 @@
 </div>
 
 <script>
+	// 使用会话存储代替本地存储，这样每次浏览器会话都会重新显示
+	const SESSION_STORAGE_KEY = 'featureBarSessionClosed';
+	
 	// 关闭功能栏
 	function closeFeatureBar() {
 		const bar = document.getElementById('topFeatureBar');
 		bar.style.opacity = '0';
 		bar.style.transform = 'translateY(-20px)';
 		bar.style.marginBottom = '0';
+		bar.style.padding = '0';
+		bar.style.overflow = 'hidden';
 		
 		setTimeout(() => {
 			bar.style.display = 'none';
-			// 保存关闭状态到本地存储
-			localStorage.setItem('featureBarClosed', 'true');
+			// 使用sessionStorage，只在当前浏览器会话中记住关闭状态
+			sessionStorage.setItem(SESSION_STORAGE_KEY, 'true');
 		}, 300);
 	}
 	
-	// 页面加载时检查是否已关闭
+	// 页面加载时检查
 	window.addEventListener('load', function() {
-		if (localStorage.getItem('featureBarClosed') === 'true') {
+		// 使用sessionStorage，每次新会话都会重新显示
+		// 只在当前标签页关闭前有效
+		if (sessionStorage.getItem(SESSION_STORAGE_KEY) === 'true') {
+			// 如果之前在当前会话中关闭过，则不显示
 			document.getElementById('topFeatureBar').style.display = 'none';
+		} else {
+			// 新会话，确保显示
+			document.getElementById('topFeatureBar').style.display = 'block';
+			document.getElementById('topFeatureBar').style.opacity = '1';
 		}
+		
+		// 高亮当前页面
+		highlightCurrentPage();
 	});
 	
-	// 自动检查当前页面并高亮
-	document.addEventListener('DOMContentLoaded', function() {
+	// 高亮当前页面
+	function highlightCurrentPage() {
 		const currentPage = window.location.pathname.split('/').pop();
 		
 		if (currentPage === '存档修改.html') {
-			document.querySelector('.feature-card-left').style.background = 'rgba(76, 209, 55, 0.3)';
-			document.querySelector('.feature-card-left').style.borderColor = '#4cd137';
+			const leftCard = document.querySelector('.feature-card-left');
+			if (leftCard) {
+				leftCard.style.background = 'rgba(76, 209, 55, 0.3)';
+				leftCard.style.borderColor = '#4cd137';
+			}
 		} else if (currentPage === 'json&rton.html') {
-			document.querySelector('.feature-card-right').style.background = 'rgba(0, 168, 255, 0.3)';
-			document.querySelector('.feature-card-right').style.borderColor = '#00a8ff';
+			const rightCard = document.querySelector('.feature-card-right');
+			if (rightCard) {
+				rightCard.style.background = 'rgba(0, 168, 255, 0.3)';
+				rightCard.style.borderColor = '#00a8ff';
+			}
+		}
+	}
+	
+	// 当用户离开页面时，不清除sessionStorage，保持关闭状态直到浏览器关闭
+	window.addEventListener('beforeunload', function() {
+		// 保持sessionStorage不变
+	});
+	
+	// 如果页面是通过前进/后退按钮导航的，重新检查高亮
+	window.addEventListener('pageshow', function(event) {
+		if (event.persisted) {
+			highlightCurrentPage();
 		}
 	});
 </script>
