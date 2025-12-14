@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>RTON ⇄ JSON 在线转换器</title>
+	<style>
+		* {
+			margin: 0;
+			padding: 0;
+			box-sizing: border-box;
+			font-family: 'Segoe UI', system-ui, sans-serif;
+		}
+		
+		body {
+			background: #f8f9fa;
+			color: #333;
+			min-height: 100vh;
+			padding: 20px;
+			line-height: 1.6;
+		}
+		
+		.container {
+			max-width: 1200px;
+			margin: 0 auto;
+			background: white;
+			border-radius: 8px;
+			box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+			overflow: hidden;
+			border: 1px solid #eaeaea;
+		}
+		
+		header {
+			background: white;
+			color: #2c3e50;
+			padding: 30px;
+			text-align: center;
+			border-bottom: 1px solid #eaeaea;
+		}
+		
+		h1 {
+			font-size: 2.2rem;
+			margin-bottom: 8px;
+			font-weight: 600;
+		}
+		
+		.subtitle {
+			color: #666;
+			font-size: 1rem;
+		}
+		
+		.content {
+			padding: 30px;
+			display: grid;
+			grid-template-columns: 1fr 1fr;
+			gap: 30px;
+		}
+		
+		@media (max-width: 768px) {
+			.content {
+				grid-template-columns: 1fr;
+				padding: 20px;
+			}
+		}
+		
+		.converter-section {
+			background: white;
+			border-radius: 8px;
+			padding: 25px;
+			border: 1px solid #e0e0e0;
+		}
+		
+		h2 {
+			color: #2c3e50;
+			margin-bottom: 20px;
+			padding-bottom: 15px;
+			border-bottom: 1px solid #eaeaea;
+			font-size: 1.4rem;
+			font-weight: 600;
+		}
+		
+		.input-group {
+			margin-bottom: 20px;
+		}
+		
+		label {
+			display: block;
+			margin-bottom: 8px;
+			font-weight: 600;
+			color: #444;
+		}
+		
+		input[type="file"] {
+			width: 100%;
+			padding: 12px;
+			border: 1px solid #ddd;
+			border-radius: 6px;
+			background: white;
+			cursor: pointer;
+			transition: border 0.2s;
+		}
+		
+		input[type="file"]:hover {
+			border-color: #4a6491;
+		}
+		
+		textarea {
+			width: 100%;
+			height: 180px;
+			padding: 12px;
+			border: 1px solid #ddd;
+			border-radius: 6px;
+			font-family: 'Courier New', monospace;
+			font-size: 14px;
+			resize: vertical;
+			transition: border 0.2s;
+		}
+		
+		textarea:focus {
+			outline: none;
+			border-color: #4a6491;
+		}
+		
+		.btn-group {
+			display: flex;
+			gap: 10px;
+			margin: 20px 0;
+		}
+		
+		button {
+			padding: 12px 16px;
+			border: 1px solid #ddd;
+			border-radius: 6px;
+			font-weight: 600;
+			cursor: pointer;
+			transition: all 0.2s;
+			flex: 1;
+			background: white;
+			color: #444;
+		}
+		
+		.btn-primary {
+			background: #4a6491;
+			color: white;
+			border-color: #4a6491;
+		}
+		
+		.btn-primary:hover {
+			background: #3a5481;
+			border-color: #3a5481;
+		}
+		
+		.btn-secondary {
+			background: #f8f9fa;
+			color: #666;
+		}
+		
+		.btn-secondary:hover {
+			background: #e9ecef;
+		}
+		
+		.error {
+			background: #ffeaea;
+			color: #c0392b;
+			padding: 12px;
+			border-radius: 6px;
+			margin-top: 15px;
+			display: none;
+			border-left: 4px solid #c0392b;
+		}
+		
+		footer {
+			text-align: center;
+			padding: 20px;
+			background: #f8f9fa;
+			color: #666;
+			border-top: 1px solid #eaeaea;
+			font-size: 0.9rem;
+		}
+		
+		.file-info {
+			font-size: 0.9rem;
+			color: #666;
+			margin-top: 5px;
+		}
+		
+		.info-section {
+			grid-column: 1 / -1;
+			background: #f8f9fa;
+			border-radius: 8px;
+			padding: 25px;
+			margin-top: 20px;
+			border: 1px solid #eaeaea;
+		}
+		
+		.info-section h2 {
+			color: #2c3e50;
+			border-bottom: none;
+			margin-bottom: 15px;
+		}
+		
+		.info-content {
+			line-height: 1.6;
+			color: #555;
+		}
+		
+		.info-content p {
+			margin-bottom: 15px;
+		}
+		
+		.loading {
+			display: none;
+			text-align: center;
+			padding: 10px;
+			color: #4a6491;
+			background: #f0f7ff;
+			border-radius: 6px;
+			margin: 10px 0;
+		}
+		
+		.divider {
+			height: 1px;
+			background: #eaeaea;
+			margin: 20px 0;
+		}
+		
+		.instructions {
+			background: #f0f7ff;
+			padding: 15px;
+			border-radius: 6px;
+			margin-bottom: 20px;
+			font-size: 0.9rem;
+			color: #4a6491;
+		}
+		
+		.instructions h3 {
+			margin-bottom: 8px;
+			font-size: 1rem;
+		}
+		
+		.instructions ul {
+			padding-left: 20px;
+		}
+		
+		.instructions li {
+			margin-bottom: 5px;
+		}
+		
+		.success {
+			background: #e8f5e8;
+			color: #27ae60;
+			padding: 12px;
+			border-radius: 6px;
+			margin-top: 15px;
+			display: none;
+			border-left: 4px solid #27ae60;
+		}
+	</style>
+</head>
+<body>
+	<div class="container">
+		<header>
+			<h1>RTON ⇄ JSON 转换器</h1>
+			<p class="subtitle">专为《植物大战僵尸2》游戏文件设计</p>
+		</header>
+		
+		<div class="content">
+			<!-- RTON 转 JSON -->
+			<section class="converter-section">
+				<h2>RTON → JSON</h2>
+				
+				<div class="instructions">
+					<h3>使用说明：</h3>
+					<ul>
+						<li>选择RTON文件或粘贴RTON十六进制代码</li>
+						<li>点击"查看JSON"预览转换结果</li>
+						<li>点击"下载JSON"保存转换后的文件</li>
+					</ul>
+				</div>
+				
+				<div class="input-group">
+					<label for="rtonFile">选择 RTON 文件</label>
+					<input type="file" id="rtonFile" accept=".rton,.dat">
+					<div class="file-info" id="rtonFileInfo"></div>
+				</div>
+				
+				<div class="divider"></div>
+				
+				<div class="input-group">
+					<label for="rtonHex">或粘贴 RTON 十六进制代码</label>
+					<textarea id="rtonHex" placeholder="在此粘贴RTON的十六进制代码..."></textarea>
+				</div>
+				
+				<div class="btn-group">
+					<button class="btn-primary" onclick="convertRtonToJson('view')">查看JSON</button>
+					<button class="btn-primary" onclick="convertRtonToJson('download')">下载JSON</button>
+					<button class="btn-secondary" onclick="clearRtonSection()">清空</button>
+				</div>
+				
+				<div class="loading" id="rtonLoading">转换中，请稍候...</div>
+				
+				<div class="input-group">
+					<label for="jsonOutput">转换结果 (JSON)</label>
+					<textarea id="jsonOutput" readonly placeholder="转换后的JSON将显示在这里..."></textarea>
+				</div>
+				
+				<div id="rtonError" class="error"></div>
+				<div id="rtonSuccess" class="success"></div>
+			</section>
+			
+			<!-- JSON 转 RTON -->
+			<section class="converter-section">
+				<h2>JSON → RTON</h2>
+				
+				<div class="instructions">
+					<h3>使用说明：</h3>
+					<ul>
+						<li>选择JSON文件或粘贴JSON代码</li>
+						<li>点击"查看RTON"预览转换结果</li>
+						<li>点击"下载RTON"保存转换后的文件</li>
+					</ul>
+				</div>
+				
+				<div class="input-group">
+					<label for="jsonFile">选择 JSON 文件</label>
+					<input type="file" id="jsonFile" accept=".json">
+					<div class="file-info" id="jsonFileInfo"></div>
+				</div>
+				
+				<div class="divider"></div>
+				
+				<div class="input-group">
+					<label for="jsonInput">或粘贴 JSON 代码</label>
+					<textarea id="jsonInput" placeholder='在此粘贴JSON代码，例如：{"key": "value"}...'></textarea>
+				</div>
+				
+				<div class="btn-group">
+					<button class="btn-primary" onclick="convertJsonToRton('view')">查看RTON</button>
+					<button class="btn-primary" onclick="convertJsonToRton('download')">下载RTON</button>
+					<button class="btn-secondary" onclick="clearJsonSection()">清空</button>
+				</div>
+				
+				<div class="loading" id="jsonLoading">转换中，请稍候...</div>
+				
+				<div class="input-group">
+					<label for="rtonOutput">转换结果 (RTON十六进制)</label>
+					<textarea id="rtonOutput" readonly placeholder="转换后的RTON十六进制将显示在这里..."></textarea>
+				</div>
+				
+				<div id="jsonError" class="error"></div>
+				<div id="jsonSuccess" class="success"></div>
+			</section>
+			
+			<!-- 信息部分 -->
+			<section class="info-section">
+				<h2>关于此转换器</h2>
+				<div class="info-content">
+					<p>此工具使用完整的RTON解析库，支持《植物大战僵尸2》游戏文件的RTON和JSON格式之间的双向转换。</p>
+					<p><strong>RTON</strong> 是PopCap Games使用的一种二进制序列化格式，用于存储游戏数据。而 <strong>JSON</strong> 是一种轻量级的数据交换格式，易于人类阅读和编写。</p>
+					<p>使用此转换器，您可以：</p>
+					<ul>
+						<li>将游戏RTON文件转换为JSON进行查看和编辑</li>
+						<li>将修改后的JSON转换回RTON格式用于游戏</li>
+						<li>处理游戏进度文件(pp.dat)和资源文件(.rton)</li>
+					</ul>
+					<p>转换完全在浏览器中进行，您的文件不会上传到任何服务器，确保数据安全。</p>
+				</div>
+			</section>
+		</div>
+		
+		<footer>
+			<p>RTON ⇄ JSON 在线转换器 &copy; 2023 | 数据在浏览器本地处理，不会上传到服务器</p>
+		</footer>
+	</div>
+
+	<!-- 引入外部JS文件 -->
+	<script src="json2rton.js"></script>
+	<script src="rton2json.js"></script>
+	
+	<script>
+		// 文件选择事件处理
+		document.getElementById('rtonFile').addEventListener('change', function(e) {
+			const fileName = e.target.files[0] ? e.target.files[0].name : '未选择文件';
+			document.getElementById('rtonFileInfo').textContent = fileName;
+		});
+		
+		document.getElementById('jsonFile').addEventListener('change', function(e) {
+			const fileName = e.target.files[0] ? e.target.files[0].name : '未选择文件';
+			document.getElementById('jsonFileInfo').textContent = fileName;
+		});
+		
+		// RTON 转 JSON 功能
+		async function convertRtonToJson(action) {
+			const rtonFile = document.getElementById('rtonFile').files[0];
+			const rtonHex = document.getElementById('rtonHex').value;
+			const errorDiv = document.getElementById('rtonError');
+			const successDiv = document.getElementById('rtonSuccess');
+			const output = document.getElementById('jsonOutput');
+			const loading = document.getElementById('rtonLoading');
+			
+			// 隐藏错误和成功信息，显示加载中
+			errorDiv.style.display = 'none';
+			successDiv.style.display = 'none';
+			output.value = '';
+			loading.style.display = 'block';
+			
+			// 验证输入
+			if (!rtonFile && !rtonHex.trim()) {
+				hideLoading(loading);
+				showError(errorDiv, '请选择RTON文件或粘贴RTON十六进制代码');
+				return;
+			}
+			
+			try {
+				let rtonData;
+				
+				if (rtonFile) {
+					// 从文件读取
+					rtonData = await readFileAsArrayBuffer(rtonFile);
+				} else {
+					// 从十六进制字符串读取
+					rtonData = hexStringToArrayBuffer(rtonHex);
+				}
+				
+				// 使用RTON2JSON类进行转换
+				if (typeof RTON2JSON === 'undefined') {
+					throw new Error('RTON2JSON库未正确加载，请检查rton2json.js文件');
+				}
+				
+				const rton2json = new RTON2JSON();
+				rton2json.set(new Uint8Array(rtonData));
+				const jsonResult = rton2json.get();
+				
+				hideLoading(loading);
+				
+				if (action === 'view') {
+					output.value = jsonResult;
+					showSuccess(successDiv, '转换成功！');
+				} else if (action === 'download') {
+					downloadFile(jsonResult, 'converted.json', 'application/json');
+					showSuccess(successDiv, '文件下载成功！');
+				}
+				
+			} catch (error) {
+				hideLoading(loading);
+				showError(errorDiv, '转换失败: ' + error.message);
+			}
+		}
+		
+		// JSON 转 RTON 功能
+		async function convertJsonToRton(action) {
+			const jsonFile = document.getElementById('jsonFile').files[0];
+			const jsonInput = document.getElementById('jsonInput').value;
+			const errorDiv = document.getElementById('jsonError');
+			const successDiv = document.getElementById('jsonSuccess');
+			const output = document.getElementById('rtonOutput');
+			const loading = document.getElementById('jsonLoading');
+			
+			// 隐藏错误和成功信息，显示加载中
+			errorDiv.style.display = 'none';
+			successDiv.style.display = 'none';
+			output.value = '';
+			loading.style.display = 'block';
+			
+			// 验证输入
+			if (!jsonFile && !jsonInput.trim()) {
+				hideLoading(loading);
+				showError(errorDiv, '请选择JSON文件或粘贴JSON代码');
+				return;
+			}
+			
+			try {
+				let jsonData;
+				
+				if (jsonFile) {
+					// 从文件读取
+					jsonData = await readFileAsText(jsonFile);
+				} else {
+					// 直接使用输入
+					jsonData = jsonInput;
+				}
+				
+				// 验证JSON格式
+				JSON.parse(jsonData);
+				
+				// 使用JSON2RTON类进行转换
+				if (typeof JSON2RTON === 'undefined') {
+					throw new Error('JSON2RTON库未正确加载，请检查json2rton.js文件');
+				}
+				
+				const json2rton = new JSON2RTON();
+				json2rton.set(jsonData);
+				const rtonResult = json2rton.get("hex");
+				
+				hideLoading(loading);
+				
+				if (action === 'view') {
+					output.value = rtonResult;
+					showSuccess(successDiv, '转换成功！');
+				} else if (action === 'download') {
+					// 将十六进制转换为二进制进行下载
+					const binaryData = hexStringToArrayBuffer(rtonResult.replace(/\s/g, ''));
+					downloadFile(binaryData, 'converted.rton', 'application/octet-stream');
+					showSuccess(successDiv, '文件下载成功！');
+				}
+				
+			} catch (error) {
+				hideLoading(loading);
+				showError(errorDiv, '转换失败: ' + error.message);
+			}
+		}
+		
+		// 清空RTON部分
+		function clearRtonSection() {
+			document.getElementById('rtonFile').value = '';
+			document.getElementById('rtonFileInfo').textContent = '';
+			document.getElementById('rtonHex').value = '';
+			document.getElementById('jsonOutput').value = '';
+			document.getElementById('rtonError').style.display = 'none';
+			document.getElementById('rtonSuccess').style.display = 'none';
+			document.getElementById('rtonLoading').style.display = 'none';
+		}
+		
+		// 清空JSON部分
+		function clearJsonSection() {
+			document.getElementById('jsonFile').value = '';
+			document.getElementById('jsonFileInfo').textContent = '';
+			document.getElementById('jsonInput').value = '';
+			document.getElementById('rtonOutput').value = '';
+			document.getElementById('jsonError').style.display = 'none';
+			document.getElementById('jsonSuccess').style.display = 'none';
+			document.getElementById('jsonLoading').style.display = 'none';
+		}
+		
+		// 工具函数
+		function readFileAsArrayBuffer(file) {
+			return new Promise((resolve, reject) => {
+				const reader = new FileReader();
+				reader.onload = () => resolve(reader.result);
+				reader.onerror = reject;
+				reader.readAsArrayBuffer(file);
+			});
+		}
+		
+		function readFileAsText(file) {
+			return new Promise((resolve, reject) => {
+				const reader = new FileReader();
+				reader.onload = () => resolve(reader.result);
+				reader.onerror = reject;
+				reader.readAsText(file);
+			});
+		}
+		
+		function hexStringToArrayBuffer(hexString) {
+			// 移除空格和换行
+			hexString = hexString.replace(/\s/g, '');
+			
+			// 验证十六进制字符串
+			if (hexString.length % 2 !== 0) {
+				throw new Error('无效的十六进制字符串');
+			}
+			
+			const buffer = new Uint8Array(hexString.length / 2);
+			
+			for (let i = 0; i < hexString.length; i += 2) {
+				buffer[i/2] = parseInt(hexString.substr(i, 2), 16);
+			}
+			
+			return buffer;
+		}
+		
+		function showError(errorDiv, message) {
+			errorDiv.textContent = message;
+			errorDiv.style.display = 'block';
+		}
+		
+		function showSuccess(successDiv, message) {
+			successDiv.textContent = message;
+			successDiv.style.display = 'block';
+		}
+		
+		function hideLoading(loadingElement) {
+			loadingElement.style.display = 'none';
+		}
+		
+		function downloadFile(data, filename, mimeType) {
+			const blob = new Blob([data], {type: mimeType});
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = filename;
+			document.body.appendChild(a);
+			a.click();
+			document.body.removeChild(a);
+			URL.revokeObjectURL(url);
+		}
+	</script>
+</body>
+</html>
