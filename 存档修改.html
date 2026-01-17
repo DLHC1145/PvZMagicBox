@@ -40,6 +40,11 @@
 			margin-bottom: 5px;
 		}
 		
+		.subtitle {
+			font-size: 0.85rem;
+			opacity: 0.9;
+		}
+		
 		.content {
 			padding: 20px;
 		}
@@ -90,21 +95,40 @@
 		.icon {
 			width: 25px;
 			height: 25px;
-			background: linear-gradient(135deg, #f1c40f, #f39c12);
 			border-radius: 50%;
 			text-align: center;
 			line-height: 25px;
 			color: white;
 		}
 		
-		.diamond-icon {
+		.name-icon {
+			background: linear-gradient(135deg, #9b59b6, #8e44ad);
+		}
+		
+		.coins-icon {
+			background: linear-gradient(135deg, #f1c40f, #f39c12);
+		}
+		
+		.gems-icon {
 			background: linear-gradient(135deg, #3498db, #2980b9);
+		}
+		
+		.candy-icon {
+			background: linear-gradient(135deg, #e74c3c, #c0392b);
 		}
 		
 		.current-value {
 			font-size: 1.2rem;
 			font-weight: bold;
 			color: #2ecc71;
+			text-align: center;
+			margin: 5px 0;
+		}
+		
+		.name-value {
+			font-size: 1.1rem;
+			font-weight: bold;
+			color: #9b59b6;
 			text-align: center;
 			margin: 5px 0;
 		}
@@ -124,14 +148,26 @@
 			font-weight: bold;
 		}
 		
+		.buttons {
+			display: flex;
+			gap: 10px;
+			margin-top: 10px;
+		}
+		
+		.buttons button {
+			flex: 1;
+		}
+		
 		button {
-			width: 100%;
 			padding: 12px;
 			border: none;
 			border-radius: 6px;
 			font-weight: 600;
 			cursor: pointer;
-			margin-top: 10px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 5px;
 		}
 		
 		.btn-primary {
@@ -175,13 +211,20 @@
 			color: #666;
 			font-size: 0.8rem;
 		}
+		
+		.tips {
+			font-size: 0.8rem;
+			color: #666;
+			margin-top: 10px;
+			text-align: center;
+		}
 	</style>
 </head>
 <body>
 	<div class="container">
 		<header>
 			<h1>🌱 PVZ2 存档编辑器</h1>
-			<p>修改金币(c)和钻石(g)数量</p>
+			<p class="subtitle">修改玩家名称、金币、钻石、糖果数量</p>
 		</header>
 		
 		<div class="content">
@@ -199,29 +242,49 @@
 			
 			<div class="editor-section" id="editorSection">
 				<div class="editor-item">
-					<h3><span class="icon">💰</span>金币 (c)</h3>
+					<h3><span class="icon name-icon">👤</span>玩家名称 (n)</h3>
+					<div class="original-value" id="originalName">原始: 无</div>
+					<div class="name-value" id="currentName">无</div>
+					<input type="text" class="value-input" id="nameInput" value="" placeholder="输入新名称" maxlength="20">
+				</div>
+				
+				<div class="editor-item">
+					<h3><span class="icon coins-icon">💰</span>金币 (c)</h3>
 					<div class="original-value" id="originalCoins">原始: 0</div>
 					<div class="current-value" id="currentCoins">0</div>
 					<input type="number" class="value-input" id="coinsInput" value="0" min="0" max="999999999">
 				</div>
 				
 				<div class="editor-item">
-					<h3><span class="icon diamond-icon">💎</span>钻石 (g)</h3>
+					<h3><span class="icon gems-icon">💎</span>钻石 (g)</h3>
 					<div class="original-value" id="originalGems">原始: 0</div>
 					<div class="current-value" id="currentGems">0</div>
 					<input type="number" class="value-input" id="gemsInput" value="0" min="0" max="999999">
 				</div>
 				
-				<button class="btn-primary" onclick="saveChanges()">💾 保存为 PP.dat</button>
-				<button class="btn-secondary" onclick="resetEditor()">🔄 重置</button>
+				<div class="editor-item">
+					<h3><span class="icon candy-icon">🍬</span>联赛糖果 (m)</h3>
+					<div class="original-value" id="originalCandy">原始: 0</div>
+					<div class="current-value" id="currentCandy">0</div>
+					<input type="number" class="value-input" id="candyInput" value="0" min="0" max="999999">
+				</div>
+				
+				<div class="buttons">
+					<button class="btn-primary" onclick="saveChanges()">💾 保存修改</button>
+					<button class="btn-secondary" onclick="resetEditor()">🔄 重置</button>
+				</div>
 				
 				<div id="editorError" class="error"></div>
 				<div id="editorSuccess" class="success"></div>
+				
+				<div class="tips">
+					注意：请务必备份原文件！修改后需重启游戏生效。
+				</div>
 			</div>
 		</div>
 		
 		<footer>
-			数据在浏览器本地处理
+			数据在浏览器本地处理，不会上传到服务器
 		</footer>
 	</div>
 
@@ -240,6 +303,7 @@
 			
 			document.getElementById('fileName').textContent = file.name;
 			showLoading();
+			hideMessages();
 			
 			try {
 				const buffer = await readFileAsArrayBuffer(file);
@@ -251,31 +315,62 @@
 				originalJson = rton2json.get();
 				originalJsonData = JSON.parse(originalJson);
 				
-				// 查找c和g的值
+				// 查找各个键的值
+				const playerName = findNameValue(originalJson);
 				const coins = findValue(originalJson, '"c"');
 				const gems = findValue(originalJson, '"g"');
+				const candy = findValue(originalJson, '"m"');
 				
 				// 显示值
-				document.getElementById('originalCoins').textContent = '原始: ' + coins;
-				document.getElementById('currentCoins').textContent = coins;
-				document.getElementById('coinsInput').value = coins;
-				
-				document.getElementById('originalGems').textContent = '原始: ' + gems;
-				document.getElementById('currentGems').textContent = gems;
-				document.getElementById('gemsInput').value = gems;
+				updateDisplay('Name', playerName);
+				updateDisplay('Coins', coins);
+				updateDisplay('Gems', gems);
+				updateDisplay('Candy', candy);
 				
 				// 显示编辑器
 				document.getElementById('editorSection').style.display = 'block';
-				showSuccess('fileSuccess', '文件加载成功');
+				showSuccess('fileSuccess', '✅ 文件加载成功！可以开始修改');
 				
 			} catch (error) {
-				showError('fileError', '加载失败: ' + error.message);
+				console.error('加载失败:', error);
+				showError('fileError', '❌ 加载失败: ' + error.message);
 			} finally {
 				hideLoading();
 			}
 		});
 		
-		// 查找JSON字符串中的值
+		// 查找玩家名称 (n)
+		function findNameValue(jsonStr) {
+			// 查找 "n" 键
+			const nameIndex = jsonStr.indexOf('"n"');
+			if (nameIndex === -1) {
+				return '未找到名称';
+			}
+			
+			// 查找冒号后的字符串
+			let start = nameIndex + 3; // "n" 的长度
+			while (start < jsonStr.length && jsonStr[start] !== ':') start++;
+			start++; // 跳过冒号
+			
+			// 跳过空格
+			while (start < jsonStr.length && (jsonStr[start] <= ' ' || jsonStr[start] === ':')) start++;
+			
+			// 检查是否是字符串
+			if (jsonStr[start] !== '"') {
+				return '无名称';
+			}
+			
+			start++; // 跳过开头的引号
+			
+			// 查找字符串结束位置
+			let end = start;
+			while (end < jsonStr.length && jsonStr[end] !== '"') end++;
+			
+			const nameStr = jsonStr.substring(start, end);
+			return nameStr || '无名称';
+		}
+		
+		// 查找JSON字符串中的数字值
 		function findValue(jsonStr, key) {
 			const index = jsonStr.indexOf(key);
 			if (index === -1) return 0;
@@ -286,7 +381,7 @@
 			start++; // 跳过冒号
 			
 			// 跳过空格
-			while (start < jsonStr.length && jsonStr[start] <= ' ') start++;
+			while (start < jsonStr.length && (jsonStr[start] <= ' ' || jsonStr[start] === ':')) start++;
 			
 			// 提取数字
 			let end = start;
@@ -297,103 +392,260 @@
 		}
 		
 		// 替换JSON字符串中的值
-		function replaceValue(jsonStr, key, newValue) {
-			const index = jsonStr.indexOf(key);
-			if (index === -1) return jsonStr;
+		function replaceValue(jsonStr, key, newValue, isString = false) {
+			let jsonCopy = jsonStr;
+			let index = jsonCopy.indexOf(key);
 			
-			// 查找冒号位置
-			let colonIndex = index + key.length;
-			while (colonIndex < jsonStr.length && jsonStr[colonIndex] !== ':') colonIndex++;
+			while (index !== -1) {
+				// 查找冒号位置
+				let colonIndex = index + key.length;
+				while (colonIndex < jsonCopy.length && jsonCopy[colonIndex] !== ':') colonIndex++;
+				
+				// 查找值开始位置
+				let valStart = colonIndex + 1;
+				while (valStart < jsonCopy.length && (jsonCopy[valStart] <= ' ' || jsonCopy[valStart] === ':')) valStart++;
+				
+				if (isString) {
+					// 处理字符串值
+					if (jsonCopy[valStart] === '"') {
+						// 查找字符串结束位置
+						let valEnd = valStart + 1;
+						while (valEnd < jsonCopy.length && !(jsonCopy[valEnd] === '"' && jsonCopy[valEnd-1] !== '\\')) {
+							valEnd++;
+						}
+						valEnd++; // 包含结束引号
+						
+						// 替换字符串
+						const before = jsonCopy.substring(0, valStart);
+						const after = jsonCopy.substring(valEnd);
+						jsonCopy = before + '"' + newValue + '"' + after;
+					} else {
+						// 如果不是字符串，查找下一个逗号或大括号
+						let valEnd = valStart;
+						while (valEnd < jsonCopy.length && jsonCopy[valEnd] !== ',' && jsonCopy[valEnd] !== '}') {
+							valEnd++;
+						}
+						
+						// 替换值
+						const before = jsonCopy.substring(0, valStart);
+						const after = jsonCopy.substring(valEnd);
+						jsonCopy = before + '"' + newValue + '"' + after;
+					}
+				} else {
+					// 处理数字值
+					let valEnd = valStart;
+					while (valEnd < jsonCopy.length && jsonCopy[valEnd] >= '0' && jsonCopy[valEnd] <= '9') valEnd++;
+					
+					// 替换数字
+					const before = jsonCopy.substring(0, valStart);
+					const after = jsonCopy.substring(valEnd);
+					jsonCopy = before + newValue + after;
+				}
+				
+				// 查找下一个
+				index = jsonCopy.indexOf(key, index + 1);
+			}
 			
-			// 查找数字开始位置
-			let numStart = colonIndex + 1;
-			while (numStart < jsonStr.length && jsonStr[numStart] <= ' ') numStart++;
-			
-			// 查找数字结束位置
-			let numEnd = numStart;
-			while (numEnd < jsonStr.length && jsonStr[numEnd] >= '0' && jsonStr[numEnd] <= '9') numEnd++;
-			
-			// 替换数字
-			const before = jsonStr.substring(0, numStart);
-			const after = jsonStr.substring(numEnd);
-			return before + newValue + after;
+			return jsonCopy;
 		}
 		
 		// 保存修改
-		function saveChanges() {
+		async function saveChanges() {
 			if (!originalJson) {
 				showError('editorError', '请先选择文件');
 				return;
 			}
 			
 			showLoading();
+			hideMessages();
 			
 			try {
+				const newName = document.getElementById('nameInput').value;
 				const newCoins = document.getElementById('coinsInput').value;
 				const newGems = document.getElementById('gemsInput').value;
+				const newCandy = document.getElementById('candyInput').value;
 				
 				// 创建修改后的JSON
 				let modifiedJson = originalJson;
 				
-				// 只替换c和g的数字
-				modifiedJson = replaceValue(modifiedJson, '"c"', newCoins);
-				modifiedJson = replaceValue(modifiedJson, '"g"', newGems);
+				// 替换所有值
+				if (newName.trim() !== '') {
+					modifiedJson = replaceValue(modifiedJson, '"n"', newName, true);
+				}
+				modifiedJson = replaceValue(modifiedJson, '"c"', newCoins, false);
+				modifiedJson = replaceValue(modifiedJson, '"g"', newGems, false);
+				modifiedJson = replaceValue(modifiedJson, '"m"', newCandy, false);
 				
 				// 验证JSON
 				try {
 					JSON.parse(modifiedJson);
 				} catch (e) {
-					throw new Error('修改后的JSON格式错误');
+					throw new Error('修改后的JSON格式错误: ' + e.message);
 				}
 				
 				// 转换回RTON
 				const json2rton = new JSON2RTON();
 				json2rton.set(modifiedJson);
 				
-				// 尝试获取二进制数据
 				let rtonData;
 				try {
-					rtonData = json2rton.get("binary");
+					// 首先尝试获取ArrayBuffer
+					const data = json2rton.get();
+					if (data instanceof ArrayBuffer || data.buffer instanceof ArrayBuffer) {
+						rtonData = new Uint8Array(data);
+					} else if (typeof data === 'string') {
+						// 如果是十六进制字符串
+						const hexData = data.replace(/\s/g, '');
+						rtonData = hexToArrayBuffer(hexData);
+					} else {
+						throw new Error('无法识别的数据格式');
+					}
 				} catch (e) {
-					// 如果binary失败，尝试hex
-					const hexData = json2rton.get("hex").replace(/\s/g, '');
-					rtonData = hexToArrayBuffer(hexData);
+					// 尝试其他方法
+					try {
+						const hexData = json2rton.get("hex").replace(/\s/g, '');
+						rtonData = hexToArrayBuffer(hexData);
+					} catch (e2) {
+						throw new Error('RTON转换失败: ' + e2.message);
+					}
 				}
 				
-				// 下载文件
-				downloadFile(rtonData, 'PP.dat', 'application/octet-stream');
+				// 使用修复的下载函数
+				const success = await downloadFileFixed(rtonData, 'PP.dat');
 				
-				// 更新显示
-				document.getElementById('currentCoins').textContent = newCoins;
-				document.getElementById('currentGems').textContent = newGems;
-				document.getElementById('originalCoins').textContent = '原始: ' + newCoins;
-				document.getElementById('originalGems').textContent = '原始: ' + newGems;
-				
-				// 更新原始数据
-				originalJson = modifiedJson;
-				originalJsonData = JSON.parse(modifiedJson);
-				
-				showSuccess('editorSuccess', '保存成功！已下载PP.dat');
+				if (success) {
+					// 更新显示
+					updateDisplay('Name', newName, true);
+					updateDisplay('Coins', newCoins, true);
+					updateDisplay('Gems', newGems, true);
+					updateDisplay('Candy', newCandy, true);
+					
+					// 更新原始数据
+					originalJson = modifiedJson;
+					originalJsonData = JSON.parse(modifiedJson);
+					
+					showSuccess('editorSuccess', '✅ 保存成功！文件已开始下载');
+				} else {
+					throw new Error('下载失败，请检查浏览器设置或手动保存');
+				}
 				
 			} catch (error) {
-				showError('editorError', '保存失败: ' + error.message);
+				console.error('保存失败:', error);
+				showError('editorError', '❌ 保存失败: ' + error.message);
 			} finally {
 				hideLoading();
 			}
 		}
 		
+		// 修复的下载函数 - 解决模拟URL问题
+		async function downloadFileFixed(data, filename) {
+			return new Promise((resolve) => {
+				try {
+					// 确保数据是Uint8Array
+					let uint8Data;
+					if (data instanceof Uint8Array) {
+						uint8Data = data;
+					} else if (data instanceof ArrayBuffer) {
+						uint8Data = new Uint8Array(data);
+					} else {
+						uint8Data = new Uint8Array(data);
+					}
+					
+					// 创建Blob - 使用正确的MIME类型
+					const blob = new Blob([uint8Data], { 
+						type: 'application/octet-stream' 
+					});
+					
+					// 创建对象URL
+					const url = URL.createObjectURL(blob);
+					
+					// 创建下载链接
+					const a = document.createElement('a');
+					a.href = url;
+					a.download = filename || 'PP.dat';
+					
+					// 添加必要的属性
+					a.style.display = 'none';
+					a.setAttribute('download', filename);
+					
+					// 添加到DOM（某些浏览器需要）
+					document.body.appendChild(a);
+					
+					// 触发点击
+					a.click();
+					
+					// 延迟清理
+					setTimeout(() => {
+						document.body.removeChild(a);
+						URL.revokeObjectURL(url);
+						resolve(true);
+					}, 1000);
+					
+				} catch (error) {
+					console.error('下载错误:', error);
+					
+					// 备用方案：通过iframe下载
+					try {
+						const blob = new Blob([data], { 
+							type: 'application/octet-stream' 
+						});
+						const url = URL.createObjectURL(blob);
+						
+						const iframe = document.createElement('iframe');
+						iframe.style.display = 'none';
+						iframe.src = url;
+						document.body.appendChild(iframe);
+						
+						setTimeout(() => {
+							document.body.removeChild(iframe);
+							URL.revokeObjectURL(url);
+							resolve(true);
+						}, 1000);
+					} catch (iframeError) {
+						console.error('iframe下载失败:', iframeError);
+						resolve(false);
+					}
+				}
+			});
+		}
+		
 		// 重置修改
 		function resetEditor() {
 			if (originalJsonData) {
+				const playerName = findNameValue(originalJson);
 				const coins = findValue(originalJson, '"c"');
 				const gems = findValue(originalJson, '"g"');
+				const candy = findValue(originalJson, '"m"');
 				
+				document.getElementById('nameInput').value = playerName;
 				document.getElementById('coinsInput').value = coins;
 				document.getElementById('gemsInput').value = gems;
+				document.getElementById('candyInput').value = candy;
+				
+				document.getElementById('currentName').textContent = playerName;
 				document.getElementById('currentCoins').textContent = coins;
 				document.getElementById('currentGems').textContent = gems;
+				document.getElementById('currentCandy').textContent = candy;
 				
-				showSuccess('editorSuccess', '已重置');
+				showSuccess('editorSuccess', '🔄 已重置为原始值');
+			}
+		}
+		
+		// 更新显示
+		function updateDisplay(type, value, updateOriginal = false) {
+			const typeLower = type.toLowerCase();
+			const currentEl = document.getElementById(`current${type}`);
+			const inputEl = document.getElementById(`${typeLower}Input`);
+			
+			if (currentEl) currentEl.textContent = value;
+			if (inputEl) inputEl.value = value;
+			
+			if (updateOriginal) {
+				const originalEl = document.getElementById(`original${type}`);
+				if (originalEl) originalEl.textContent = '原始: ' + value;
+			} else {
+				const originalEl = document.getElementById(`original${type}`);
+				if (originalEl) originalEl.textContent = '原始: ' + value;
 			}
 		}
 		
@@ -402,7 +654,7 @@
 			return new Promise((resolve, reject) => {
 				const reader = new FileReader();
 				reader.onload = () => resolve(reader.result);
-				reader.onerror = reject;
+				reader.onerror = (e) => reject(new Error('文件读取失败: ' + e.target.error));
 				reader.readAsArrayBuffer(file);
 			});
 		}
@@ -419,6 +671,9 @@
 		
 		function hexToArrayBuffer(hex) {
 			hex = hex.replace(/\s/g, '');
+			if (hex.length % 2 !== 0) {
+				hex = '0' + hex;
+			}
 			const bytes = new Uint8Array(hex.length / 2);
 			for (let i = 0; i < hex.length; i += 2) {
 				bytes[i/2] = parseInt(hex.substr(i, 2), 16);
@@ -426,30 +681,29 @@
 			return bytes;
 		}
 		
-		function downloadFile(data, filename, type) {
-			const blob = new Blob([data], {type});
-			const url = URL.createObjectURL(blob);
-			const a = document.createElement('a');
-			a.href = url;
-			a.download = filename;
-			document.body.appendChild(a);
-			a.click();
-			document.body.removeChild(a);
-			URL.revokeObjectURL(url);
-		}
-		
 		function showError(id, msg) {
 			const el = document.getElementById(id);
-			el.textContent = msg;
-			el.style.display = 'block';
-			setTimeout(() => el.style.display = 'none', 3000);
+			if (el) {
+				el.textContent = msg;
+				el.style.display = 'block';
+				setTimeout(() => el.style.display = 'none', 5000);
+			}
 		}
 		
 		function showSuccess(id, msg) {
 			const el = document.getElementById(id);
-			el.textContent = msg;
-			el.style.display = 'block';
-			setTimeout(() => el.style.display = 'none', 3000);
+			if (el) {
+				el.textContent = msg;
+				el.style.display = 'block';
+				setTimeout(() => el.style.display = 'none', 5000);
+			}
+		}
+		
+		function hideMessages() {
+			['fileError', 'fileSuccess', 'editorError', 'editorSuccess'].forEach(id => {
+				const el = document.getElementById(id);
+				if (el) el.style.display = 'none';
+			});
 		}
 		
 		function showLoading() {

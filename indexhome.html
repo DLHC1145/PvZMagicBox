@@ -5,6 +5,77 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 	<title>软件搜索下载</title>
 	<style>
+.software-item-special {
+	position: relative;
+	border-radius: 12px;
+	overflow: hidden;
+	box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+	margin: 10px 0;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 20px;
+	background-size: cover;
+	background-position: center;
+	width: 100%;
+}
+
+.special-content {
+	display: flex;
+	align-items: center;
+	width: 100%;
+}
+
+.software-item-special .software-img {
+	width: 120px;
+	height: 120px;
+	object-fit: cover;
+	border-radius: 8px;
+	margin-right: 20px;
+	margin-top: -110px;
+}
+
+.software-item-special .software-info {
+	flex-grow: 1;
+	text-align: left;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 10px;
+}.software-item-special .software-name {
+  font-size: 1.5em;
+  font-weight: bold;
+  color: #fff;
+  text-shadow: 1px 1px 3px rgba(0,0,0,0.7);
+  
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  word-break: break-word;
+
+  /* 高度可调 */
+  height: var(--name-height, 130px); /* 默认 130px，可自定义 */
+
+  /* 新增：宽度可调 */
+  width: var(--name-width, 100%);   /* 默认 100%，可自定义 */
+  max-width: 100%;                  /* 防止溢出 */
+  min-width: 0;                     /* 支持 flex 收缩 */
+}
+
+.software-item-special .software-score {
+	position: absolute;
+	top: 200px;
+	left: 40px;
+	bottom: 2px;
+	font-size: 1.2em;
+	color: #ffeb3b;
+	text-shadow: 1px 1px 2px rgba(0,0,0,0.7);
+	white-space: normal;
+	overflow: visible;
+	text-overflow: clip;
+	word-break: break-word;
+	overflow-wrap: break-word;
+}
 		:root {
 			--nav-icon-size: 24px;
 			--nav-text-size: 12px;
@@ -27,8 +98,44 @@
 			-webkit-text-size-adjust: none;
 			-ms-text-size-adjust: none;
 			text-size-adjust: none;
-		}
+		}.white-overlay {
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	background-color: white;
+	z-index: 4000;
+	animation: fadeOut 0.3s ease-in-out forwards;
+	pointer-events: none;
+}/* 弹性边缘效果 */
+.elastic-edge {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 0;
+  background: rgba(0, 150, 255, 0.1);
+  z-index: 1;
+  pointer-events: none;
+  transition: height 0.3s ease;
+  overflow: hidden;
+  opacity: 0;
+}
 
+.top-elastic {
+  top: 0;
+  border-bottom: 2px dashed rgba(0, 150, 255, 0.3);
+}
+
+.bottom-elastic {
+  bottom: 0;
+  border-top: 2px dashed rgba(0, 150, 255, 0.3);
+}
+@keyframes fadeOut {
+	0% { opacity: 1; }
+	50% { opacity: 1; }
+	100% { opacity: 0; }
+}
 		.search-section {
 			background-color: white;
 			padding: 8px 15px;
@@ -403,14 +510,14 @@
 
 		/* 应用详情页背景改为浅蓝白色 */
 		#fullscreenModal {
-			background-color: #f0f7ff;
+			background-color: #ffffff;
 		}
 		#fullscreenModal .fullscreen-modal-content {
-			background-color: #f0f7ff;
+			background-color: #ffffff;
 		}
 		#fullscreenModal .fullscreen-modal-header {
-			background-color: #e6f2ff;
-			border-bottom: 1px solid #cce0ff;
+			background-color: #ffffff;
+			border-bottom: 1px solid #ffffff;
 		}
 		#fullscreenModal .fullscreen-modal-title {
 			color: #1a365d;
@@ -474,16 +581,22 @@
 		}
 
 		/* 下载按钮尺寸调整 */
-		#fullscreenDownloadOptions .fullscreen-download-option {
-			min-width: 102%;
-			width: 102%;
-			padding: 17px 21px;
-			margin: 0 auto;
-			display: block;
-			font-size: 15px;
-			padding-top: 18px;
-			padding-bottom: 18px;
-		}
+/* 下载按钮尺寸调整 */
+#fullscreenDownloadOptions .fullscreen-download-option {
+	/* 修复宽度问题 */
+	min-width: 100%;  /* 改为100% */
+	width: 100%;      /* 改为100% */
+	
+	/* 统一padding */
+	padding: 18px 21px; /* 合并成一个 */
+	
+	/* 增加上下间距 */
+	margin: 10px 0;  /* 上下15px，左右0 */
+	
+	display: block;
+	font-size: 15px;
+	/* 删除重复的padding-top和padding-bottom */
+}
 		#fullscreenDownloadOptions {
 			padding: 0 5%;
 		}
@@ -517,6 +630,7 @@
 			z-index: 3001;
 			box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 		}
+		
 		/* 标题栏左侧图标 */
 		.fullscreen-modal-icon {
 			width: 32px;
@@ -753,158 +867,54 @@
 		<div id="historyContent" class="history-content"></div>
 	</div>
 
-	<!-- 应用详情弹窗 -->
-	<div id="fullscreenModal" class="fullscreen-modal-overlay">
-		<div class="fullscreen-modal-header">
-			<button id="fullscreenModalClose" class="fullscreen-modal-close">×</button>
-			<div id="fullscreenModalTitle" class="fullscreen-modal-title">
-				<img id="fullscreenModalIcon" class="fullscreen-modal-icon" src="" alt="icon">
-				<span id="fullscreenModalTitleText"></span>
-			</div>
-		</div>
-		<div class="fullscreen-modal-content">
-			<div id="fullscreenScore" class="fullscreen-score"></div>
-			<div id="imageShowcase" class="image-showcase" style="display: none;">
-				<div class="image-showcase-title">游戏展示</div>
-				<div class="image-slider-container">
-					<div id="imageSlider" class="image-slider"></div>
-				</div>
-				<div id="sliderNav" class="slider-nav"></div>
-			</div>
-			<div id="fullscreenDescWrapper" class="fullscreen-desc-container">
-				<div id="fullscreenDesc" class="fullscreen-desc"></div>
-			</div>
-			<div class="fullscreen-divider"></div>
-			<div id="fullscreenDownloadTitle" class="fullscreen-download-title">请选择下载方式：</div>
-			<div id="fullscreenDownloadOptions" class="fullscreen-download-options"></div>
+<!-- 应用详情弹窗 -->
+<div id="fullscreenModal" class="fullscreen-modal-overlay">
+	<div class="fullscreen-modal-header">
+		<button id="fullscreenModalClose" class="fullscreen-modal-close">×</button>
+		<div id="fullscreenModalTitle" class="fullscreen-modal-title">
+			<span id="fullscreenModalTitleText"></span>
 		</div>
 	</div>
+	<div class="fullscreen-modal-content">
+		<div id="fullscreenScore" class="fullscreen-score"></div>
+		
+		<!-- 简化后的图片展示区域 -->
+		<div id="imageShowcase" style="display: none;">
+			<div class="image-slider-container round-bottom-corners">
+				<div id="imageSlider" class="image-slider"></div>
+			</div>
+			<div id="sliderNav" class="slider-nav round-bottom-corners"></div>
+		</div>
+		
+		<div id="fullscreenDescWrapper" class="fullscreen-desc-container">
+			<div id="fullscreenDesc" class="fullscreen-desc"></div>
+		</div>
+		<div class="fullscreen-divider"></div>
+		<div id="fullscreenDownloadTitle" class="fullscreen-download-title">请选择下载方式：</div>
+		<div id="fullscreenDownloadOptions" class="fullscreen-download-options"></div>
+	</div>
+</div>
 
 	<div class="bottom-nav" id="bottomNav"></div>
 
 	<script>
-		// ========== 多语言核心功能 ==========
-		let isEnglishMode = false;
-		function saveLanguageState(isEnglish) {
-			localStorage.setItem('isEnglish', isEnglish.toString());
-		}
-		function getLanguageState() {
-			return localStorage.getItem('isEnglish') === 'true';
-		}
-		function detectBrowserLanguage() {
-			const lang = navigator.language || navigator.userLanguage;
-			return lang.startsWith('en') || lang.startsWith('EN');
-		}
-		function translateText(text, targetLang = 'en') {
-			if (targetLang === 'en' && /^[a-zA-Z\s]+$/.test(text.trim())) {
-				return text;
-			}
-			const translations = {
-				"搜索软件名称": "Search software name",
-				"搜索": "Search",
-				"取消": "Cancel",
-				"历史记录": "History",
-				"没有找到相关软件": "No software found",
-				"下载": "Download",
-				"暂无下载": "No download",
-				"请选择下载方式：": "Please choose download method:",
-				"暂无搜索历史": "No search history",
-				"所有软件已在上方显示完毕": "All software displayed above",
-				"搜索：": "Search:",
-				"主页": "Home",
-				"论坛": "forum",
-				"我的": "Profile",
-				"植物大战僵尸2官方版": "Plants vs. Zombies 2 Official Version",
-				"植物大战僵尸2时空再旅1.0.4": "Plants vs. Zombies 2 Time Travel 1.0.4",
-				"植物大战僵尸2Ark版": "Plants vs. Zombies 2 Ark Version",
-				"植物大战僵尸2衍生版": "Plants vs. Zombies 2 Derivative Version",
-				"植物大战僵尸2国际版（汉化+恢复拓展+恢复音乐）": "Plants vs. Zombies 2 International Version (Chinese + Expansion + Music)",
-				"植物大战僵尸2返茂版（PvZ 2: Reflourished）": "Plants vs. Zombies 2 Reflourished",
-				"Team Sparks Il PvZ2 Modders（需要魔法）": "Team Sparks Il PvZ2 Modders (Need VPN)",
-				"植物大战僵尸2：迷宫回响": "Plants vs. Zombies 2: Maze Echo",
-				"植物大战僵尸2：迷宫拓展版": "Plants vs. Zombies 2: Maze Expansion",
-				"小马宝莉大战僵尸5": "My Little Pony vs Zombies 5",
-				"植物大战僵尸2天空之城内购破解": "Plants vs. Zombies 2 Sky City Cracked",
-				"植物大战僵尸无尽版内购破解": "Plants vs. Zombies Endless Edition Cracked",
-				"植物大战僵尸全明星qwq版": "Plants vs. Zombies All Stars qwq Version",
-				"Plants vs Zombies：Brave New World": "Plants vs Zombies：Brave New World",
-				"植物大战僵尸：乐Pad版": "Plants vs. Zombies: LePad Version",
-				"8.7分  原汁原味的中文官方版本": "8.7/10 - Authentic Chinese official version",
-				"8.8分  作者：想不出名字、Mz工作室": "8.8/10 - Author: Can't think of a name, Mz Studio",
-				"8.7分  作者：今霄是飘逸的利己主义者": "8.7/10 - Author: Tonight is an elegant egoist",
-				"7.8分  作者：小米食堂厨师长": "7.8/10 - Author: Fan of Northeast Yujie",
-				"9.0分  作者：特别的伊将军 版本12.7.1": "9.0/10 - Author: Special General Yi, Version 12.7.1",
-				"8.9分  总作者：PvZABFan＆PeaMix": "8.9/10 - Authors: PvZABFan & PeaMix",
-				"8分 一个由画师和模组作者组成的团队，致力于创建、动画和编写素材，供模组社区免费使用!": "8/10 - A team of artists and modders creating animations and materials for free use!",
-				"7.9分  一款不错的迷宫改版，内含丰富的游戏内容！": "7.9/10 - A good maze modification with rich content!",
-				"8.1分  完成度很的迷宫改版，拥有妙趣横生的游戏体验！": "8.1/10 - High-quality maze modification with fun gameplay!",
-				"8.6分  小马宝莉大战僵尸的第五部，小马大战僵尸收官之作！": "8.6/10 - My Little Pony vs Zombies 5, the final installment!",
-				"7.9分  经典迷宫版v1.6.1内购破解版！无须花钱即可获取资源 此版本纯琨曲！": "7.9/10 - Classic maze v1.6.1 cracked version! Get resources for free!",
-				"7.7分  经典一代官方版本内购破解，包含西游、龙宫、长城三大内容！": "7.7/10 - Classic version 1 cracked with Journey to the West content!",
-				"8.5分  经典全明星版本的改版！内涵丰富内容和无与伦比的新奇体验": "8.5/10 - Classic All Stars modification with rich content!",
-				"8.8分  目前仅支持电脑端游玩，加入群聊在群文件中下载游戏包": "8.8/10 - PC only, join group to download game package",
-				"6.8分 在一众一代版本中，此版本十分高清！对高版本系统的适配也是一流的。": "6.8/10 - High definition version with excellent system compatibility!",
-				"加入官方代理社区！": "Join official community!",
-				"加入QQ5群": "Join QQ Group 5",
-				"加入QQ3群": "Join QQ Group 3",
-				"加入QQ2群": "Join QQ Group 2",
-				"加入QQ4群": "Join QQ Group 4",
-				"加入Discord！（需要您会魔法）": "Join Discord! (Need VPN)",
-				"加入官方Discord社区！": "Join official Discord community!",
-				"加入Discord": "Join Discord",
-				"加入官方群！在群内获取游戏资源": "Join official group! Get game resources in group",
-				"加入QQ交流群获取": "Join QQ group to get",
-				"加入官方QQ群！下载最新游戏资源": "Join official QQ group! Download latest game resources",
-				"查看群简介，加入拓展QQ官方群": "Check group intro, join expansion QQ group",
-				"使用onedrive在线下载（需要魔法）": "Download via onedrive (Need VPN)",
-				"经多年守卫控住僵尸，但小马谷已成废墟。星光熠熠决定穿越到第一天剿灭僵尸，重启时空扭转残局！": "After years of defending, Ponyville is in ruins. Starlight Glimmer travels back to day one to save the day!",
-				"加入QQ官方群获取": "Join QQ official group to get",
-				"在线123云盘下载": "Download via 123 cloud drive",
-				"123云盘下载": "Download via 123 cloud drive",
-				"该版本较为远古，内购破解会闪退，但可正常到账。高系统手机启动时小概率闪退，但第三次必定进入。": "Older version, cracked features may crash but work. High system phones may crash but work on third try.",
-				"云盘下载": "Cloud drive download",
-				"版本相对于原版没有花园、解谜元素，但是在关卡中会出现灌木丛。而对比移动端的其他版本，这个版本的特点在于支持1280x800分辨率画面。且对于PAD的适配更好！": "No garden/puzzle elements, but has bushes. Supports 1280x800 resolution, better for PAD!",
-				"《植物大战僵尸：美丽新世界》重拾系列经典玩法。开放更多的自定义插件项目，带来无与伦比的体验。玩家将再度开启跨时空冒险，收集并运用植物，全力抵御僵尸浪潮的入侵，重温原味塔防体验。": "\"Plants vs. Zombies: Brave New World\" revives classic gameplay with more customization. Players adventure through time to defend against zombies!",
-				"点击加群获取": "Click to join group to get",
-				"获取": "Get",
-				"在线使用云盘下载（直装包）": "Online cloud disk download (direct package)",
-				"西部的某座鬼镇，海湾边的海盗们，埃及的法老王... 传奇的迷宫却不知为何消逝的无影无踪。 总在回忆着，某座小镇、某支钥匙、某个机器所说的大脑的断裂。 低画质与阉割的小曲却包含着老玩家的回忆，这是回不去的..吗? 改版《植物大战僵尸2:迷宫·混沌》欢迎您来体验！": "A ghost town in the West, pirates by the bay, Egyptian pharaohs... The legendary maze vanished without a trace for unknown reasons. Always recalling: a small town, a key, a machine's mention of the brain's fracture. Low-res graphics and cut-down tunes hold old players' memories—gone forever... or not? Modified Plants vs. Zombies 2: Maze·Chaos welcomes you to experience!",
-				"下载必要文件（针对部分设备）": "Download necessary files (for some devices)",
-				"前往QQ群获取最新版本，第一时间获取最新版本更新！使用123云盘下载，直接在线下载！":"Join the QQ group to get the latest versionand receive updates as soon as they're released!Download via 123 Cloud Disk for direct online downloading!",
-				"前往": "Go",
-				"8.4分  作者：玉米 在《植物大战僵尸：迷宫·混沌》中，过往的传奇不再是想象与回忆。": "8.4/10-Corn In Plants vs. Zombies: Maze and Chaos, the legend of the past is no longer imagination and memory.",
-				"植物大战僵尸2迷宫混沌版": "Plants vs. Zombies 2 Maze: Chaos",
-				"8.2分  内含内购破解、画质高清修复！作者：玉米，7000i，屑fell":"8.2/10Classic Maze Version 1.7.5 - The Final Maze Edition! Authors: Corn, 7000i, Sai fell",
-				"1.7.5经典迷宫版本！内含内购破解、画质高清修复！是最后一个迷宫版本！":"Version 1.7.5 - Classic Maze Edition! Includes in-app purchase crack and high-definition graphics restoration! This is the final maze version!",
-				"植物大战僵尸2失落之城1.7.5":"Plants vs. Zombies 2: Lost City 1.7.5",
-				"植物大战僵尸2国际版：DLC":"Plants vs. Zombies 2:DLC.mods",
-				"9.1分  作者：Daybs PVZ2: DLC系列致力于带来再续国际版主线的独特体验。 如“泳池派对”“罗马帝国”！版本25.1.0":"9.1/10 — Author: Daybs — PVZ2 DLC:mods —A series of original custom levels continuing the mainline, featuring Pool Party and Roman Empire. Version 25.1.0.",
-				"PVZ2: DLC原版自制关卡系列由Daybs独立制作，致力于带给玩家再续国际版主线的独特体验。拥有经过精心设计的如“泳池派对”“罗马帝国”的主线世界！":"An  DLC level series by Daybs,  picking up after the international main story,  with main worlds like Pool Party and Roman Empire."
-			};
-			return translations[text] || text;
-		}
-		function checkLanguageState() {
-			const saved = getLanguageState();
-			isEnglishMode = saved === null ? detectBrowserLanguage() : saved;
-		}
-		function getTranslatedSoftwareData() {
-			if (!isEnglishMode) return originalSoftwareData;
-			const translated = JSON.parse(JSON.stringify(originalSoftwareData));
-			translated.forEach(item => {
-				item.name = translateText(item.name);
-				item.score = translateText(item.score);
-				if (item.downloadText) item.downloadText = translateText(item.downloadText);
-				if (item.popup) {
-					item.popup.text = translateText(item.popup.text);
-					if (item.popup.downloads) {
-						item.popup.downloads.forEach(d => {
-							if (d.text) d.text = translateText(d.text);
-						});
-					}
-				}
-			});
-			return translated;
-		}
+
+let isEnglishMode = false;
+function saveLanguageState(isEnglish) {
+}
+function getLanguageState() {	return false;
+}
+function detectBrowserLanguage() {return false; 
+}
+function translateText(text, targetLang = 'en') {
+	return text;
+}
+function checkLanguageState() {
+	isEnglishMode = false;
+}
+function getTranslatedSoftwareData() {
+	return originalSoftwareData;
+}
 
 		// ========== 底部导航渲染 ==========
 		const NAV_CONFIG = [
@@ -954,14 +964,14 @@ const originalSoftwareData = [
 			{
 				rank: 1,
 				name: "植物大战僵尸2官方版",
-				score: "8.7分  原汁原味的中文官方版本",
-				downloadUrl: "https://pvz2apk-cdn.ditwan.cn/1730/baokai_3.9.0_1730_381_dj2.0-3.0.0.apk",
+				score: "6.9分  原汁原味的中文官方版本",
+				downloadUrl: "http://game.talkweb.com.cn/",
 				image: "植物大战僵尸2.jpg"
 			},
 			{
 				rank: 1,
 				name: "植物大战僵尸2时空再旅1.0.4",
-				score: "8.8分  作者：想不出名字、Mz工作室",
+				score: "7.4分  作者：想不出名字、Mz工作室",
 				downloadUrl: "时空再旅.html",
 				image: "植物大战僵尸2时空再旅.jpg",
 				popup: {
@@ -981,7 +991,7 @@ const originalSoftwareData = [
 			{
 				rank: 1,
 				name: "植物大战僵尸2Ark版",
-				score: "8.7分  作者：今霄是飘逸的利己主义者",
+				score: "8.3分  作者：今霄是飘逸的利己主义者",
 				downloadUrl: "https://www.123684.com/s/zWgIjv-XcA8",
 				image: "植物大战僵尸2ark.jpg",
 					popup: {
@@ -1000,8 +1010,58 @@ const originalSoftwareData = [
 			},
 			{
 				rank: 1,
+				name: "植物大战僵尸2复兴：半周年",
+				score: "9.0分  作者：电力红茶 一款国人自制的民间改版",
+				downloadUrl: "https://www.123684.com/s/zWgIjv-XcA8",
+				image: "植物大战僵尸2复兴.png",
+					popup: {
+					text: "游戏定位是剧情与难度挑战相结合！流程体验独特！",
+					downloads: [
+						{
+							url: "https://qun.qq.com/universal-share/share?ac=1&authKey=IjuB0HbXYhYZrafBgnqCQu5Wu5rZR%2FBhmr9C6UmMs89M4fBnHXLyTSciyk7mMN4V&busi_data=eyJncm91cENvZGUiOiIxMDUxNDIzMDQ3IiwidG9rZW4iOiJxaUsvTk5KVWJNaWxwTjdJTi9kUDhlZk1vbDJvajhjd3ZWUS95emZDNk8vTjB3c1ZrRVRIajJ6TEJMSEI5dzd4IiwidWluIjoiMjAxOTk0NzA4NSJ9&data=IYioZooAsurk3wlh5FsUIKysczSr0hnkvNGvLR2_VxeNVRZ905Qt4htlZodhG9NleKMPMwM3VxVGYjUIHPJuYA&svctype=4&tempid=h5_group_info",
+							text: "加入QQ群下载"
+						}
+					]
+				}
+			},
+			{
+				rank: 1,
+				name: "植物大战僵尸2:Edgest",
+				isSpecial: true,
+				score: "8.6分  Plants vs. Zombies 2: Edgest X shuttle X Reflourished “月虹市场”联动进行中",
+				forceFirst: true,
+				downloadUrl: "https://www.123684.com/s/zWgIjv-XcA8",
+				image: "植物大战僵尸2：Edgest.png",
+					popup: {
+					text: "《植物大战僵尸2EDGEST》是经典塔防游戏《植物大战僵尸2》的改版作品，在该作品中，玩家不仅能乘坐潘妮时光机穿梭到不同的时空寻找玉米卷，还能随着戴夫前往东方幻想乡的世界去领略异域风情。游玩《植物大战僵尸2EDGEST》，你可以上到蛮荒西部与牛仔斗智斗勇，下到巨浪沙滩与鲨鱼一起冲浪，或者前往圣人的道场去探究永生的奥秘，亦或者前往市场之神举办的集市欣赏光怪陆离的星空.....更多的植物，更多的僵尸，更多的世界，更多的挑战，更多的可能！！当然，不要忘记准备几根香蕉来应对僵尸猴哦。",
+					downloads: [
+						{
+							url: "https://qun.qq.com/universal-share/share?ac=1&authKey=vy2pgzVLpRf%2FdoEIe%2B8ZKcxEzAGt3GUAYkfywX3RLVI2vG98XUT%2F6J2Y%2FtG93oAJ&busi_data=eyJncm91cENvZGUiOiI2MjczNTk5MDkiLCJ0b2tlbiI6Ijk1dm53L2lCTk5xQ3U4UGNleDZNOFp0QTNTSTVtRnZ3NXNCeGsrb085cmdONG5WVGpJNUk3K1dlbU5URU54L2siLCJ1aW4iOiIyMDE5OTQ3MDg1In0%3D&data=2L4NHORf5GqY8ONEn4SGnjL3GNY1rfRNlLxCpp858LadlCmqP2Xgyrq2U69e2_At7sVpq1TuiUIW2HXXSZj-Uw&svctype=4&tempid=h5_group_info",
+							text: "加入QQ群下载"
+						}
+					]
+				}
+			},
+			{
+				rank: 1,
+				name: "植物大战僵尸小程序移植版",
+				score: "6.7分  来自 PVZ1 小程序移植的版本。",
+				downloadUrl: "https://www.123684.com/s/zWgIjv-XcA8",
+				image: "PVZ1小程序.png",
+					popup: {
+					text: "来自 PVZ1 小程序移植的版本。🥰",
+					downloads: [
+						{
+							url: "https://qun.qq.com/universal-share/share?ac=1&authKey=1HTTKrrWSwGhTsItXCUkM9vi91TScsqvvZCCWEmi6POWuXQkfjrqMmhWCokdhKnY&busi_data=eyJncm91cENvZGUiOiI4NTczMTMyNDIiLCJ0b2tlbiI6InpDaUw3YjFId1BDamhvZ2wreXczREpkU2YwUTJMMWVoLzJGeUdRZ2M5d0FmM0JvUm9Bc1lPVnl6bGZBY2xZSWMiLCJ1aW4iOiIyMDE5OTQ3MDg1In0%3D&data=gTUV2TNeLmlkpRZ_4shNBtmv-SE5WnsGXLtaOXi85XtvDJlAgloAj8oBuXzSjVFr4S2pO06IsJm85-qha_khjQ&svctype=4&tempid=h5_group_info",
+							text: "加入QQ群下载"
+						}
+					]
+				}
+			},
+			{
+				rank: 1,
 				name: "植物大战僵尸2迷宫混沌版",
-				score: "8.4分  作者：玉米 在《植物大战僵尸：迷宫·混沌》中，过往的传奇不再是想象与回忆。",
+				score: "8.5分  作者：玉米 在《植物大战僵尸：迷宫·混沌》中，过往的传奇不再是想象与回忆。",
 				downloadUrl: "https://www.123684.com/s/zWgIjv-XcA8",
 				image: "植物大战僵尸2混沌.jpg",
 					popup: {
@@ -1025,8 +1085,8 @@ const originalSoftwareData = [
 			{
 				rank: 1,
 				name: "植物大战僵尸2衍生版",
-				score: "7.8分  作者：小米食堂厨师长",
-				downloadUrl: "https://www.123684.com/s/zWgIjv-ncA8",
+				score: "6.8分  作者：小米食堂厨师长",
+				downloadUrl: "https://www.123684.com/s/zWgIjv-SA98",
 				image: "植物大战僵尸2衍生.jpg"
 			},
 			{
@@ -1034,7 +1094,14 @@ const originalSoftwareData = [
 				name: "植物大战僵尸2国际版（汉化+恢复拓展+恢复音乐）",
 				score: "9.0分  作者：特别的伊将军 版本12.7.1",
 				downloadUrl: "http://www.123865.com/s/Xpv9-ndDxh",
-				image: "植物大战僵尸2国际版汉化.jpg"
+				image: "植物大战僵尸2国际版汉化.jpg",
+					textpng: ["国际版1.WEBP","国际版2.WEBP"],
+			popup: {
+					text: "适合大多数玩家",
+					downloads: [
+						{ url: "http://www.123865.com/s/Xpv9-ndDxh", text: "获取" }
+					]
+				}
 			},
 			{
 				rank: 1,
@@ -1053,7 +1120,7 @@ const originalSoftwareData = [
 			{
 				rank: 1,
 				name: "植物大战僵尸2返茂版（PvZ 2: Reflourished）",
-				score: "8.9分  总作者：PvZABFan＆PeaMix",
+				score: "8.8分  总作者：PvZABFan＆PeaMix",
 				downloadUrl: "",
 				image: "植物大战僵尸2返茂.jpg",
 				downloadText: "获取",
@@ -1071,7 +1138,7 @@ const originalSoftwareData = [
 			{
 				rank: 1,
 				name: "Team Sparks Il PvZ2 Modders（需要魔法）",
-				score: "8分 一个由画师和模组作者组成的团队，致力于创建、动画和编写素材，供模组社区免费使用!",
+				score: "7分 一个由画师和模组作者组成的团队，致力于创建、动画和编写素材，供模组社区免费使用!",
 				downloadUrl: "https://discord.gg/fAuHJNRM2y",
 				image: "TeamSpark.jpg",
 				downloadText: "前往",
@@ -1085,7 +1152,7 @@ const originalSoftwareData = [
 			{
 				rank: 1,
 				name: "植物大战僵尸2：迷宫回响",
-				score: "7.9分  一款不错的迷宫改版，内含丰富的游戏内容！",
+				score: "7.5分  一款不错的迷宫改版，内含丰富的游戏内容！",
 				downloadUrl: "",
 				image: "植物大战僵尸2迷宫回响.jpg",
 				downloadText: "前往",
@@ -1099,10 +1166,27 @@ const originalSoftwareData = [
 					]
 				}
 			},
+				{
+				rank: 1,
+				name: "植物大战僵尸2：惊变-融合",
+				score: "9.2分 将Mc经典Mod惊变100天携手植物融合玩法，重磅加入Pvz2！",
+				downloadUrl: "",
+				image: "PVZ惊变.jpg",
+				downloadText: "前往",
+				popup: {
+					text: "作者：电力红茶、笨蛋豌豆。",
+					downloads: [
+						{
+							url: "https://qun.qq.com/universal-share/share?ac=1&authKey=jYzDrVvZgdVsdKiuWjc%2BP5dFK8U6hy88ApbO3RPLTE14YxINaMKNpOWcKheDusax&busi_data=eyJncm91cENvZGUiOiIxMDc2Nzg2NjMxIiwidG9rZW4iOiIyVmtpd1krR0RsYWYrcjVPa3ZsV0s3am90UW1ST2tLWHF6RW5hRktmSmFvKzZ2VlFPbjdwaHZrbFNUZzN2eHl5IiwidWluIjoiMjAxOTk0NzA4NSJ9&data=mhn6EJIZaGcCAitv64jesjSiNDUYZWdYstp2tE8RyJrwokfdhbW7g2X_5-fbulYLTlKzFaVjeHP8TqPHZDWonw&svctype=4&tempid=h5_group_info",
+							text: "加入QQ交流群获取"
+						}
+					]
+				}
+			},
 			{
 				rank: 1,
 				name: "植物大战僵尸2：迷宫拓展版",
-				score: "8.1分  完成度很的迷宫改版，拥有妙趣横生的游戏体验！",
+				score: "7.5分  一款不错的迷宫改版，内含丰富的游戏内容！",
 				downloadUrl: "",
 				image: "植物大战僵尸2迷宫拓展.jpg",
 				downloadText: "前往",
@@ -1123,7 +1207,7 @@ const originalSoftwareData = [
 			{
 				rank: 1,
 				name: "小马宝莉大战僵尸5",
-				score: "8.6分  小马宝莉大战僵尸的第五部，小马大战僵尸收官之作！",
+				score: "8.4分  小马宝莉大战僵尸的第五部，小马大战僵尸收官之作！",
 				downloadUrl: "",
 				image: "植物大战僵尸2小马.jpg",
 				downloadText: "前往",
@@ -1183,7 +1267,7 @@ const originalSoftwareData = [
 			{
 				rank: 1,
 				name: "植物大战僵尸全明星qwq版",
-				score: "8.5分  经典全明星版本的改版！内涵丰富内容和无与伦比的新奇体验",
+				score: "7.4分  经典全明星版本的改版！内涵丰富内容和无与伦比的新奇体验",
 				downloadUrl: "",
 				image: "植物大战僵尸全明星qwq.jpg",
 				downloadText: "前往",
@@ -1200,7 +1284,7 @@ const originalSoftwareData = [
 			{
 				rank: 1,
 				name: "Plants vs Zombies：Brave New World",
-				score: "8.8分  目前仅支持电脑端游玩，加入群聊在群文件中下载游戏包",
+				score: "7.7分  目前仅支持电脑端游玩，加入群聊在群文件中下载游戏包",
 				downloadUrl: "",
 				image: "PlantsvsZombies：BraveNewWorld.jpg",
 				downloadText: "前往",
@@ -1217,7 +1301,7 @@ const originalSoftwareData = [
 			{
 				rank: 1,
 				name: "植物大战僵尸：乐Pad版",
-				score: "6.8分 在一众一代版本中，此版本十分高清！对高版本系统的适配也是一流的。",
+				score: "6.5分 在一众一代版本中，此版本十分高清！对高版本系统的适配也是一流的。",
 				downloadUrl: "",
 				image: "植物大战僵尸乐pad版.jpg",
 				downloadText: "前往",
@@ -1262,37 +1346,57 @@ const originalSoftwareData = [
 
 		let searchHistory = JSON.parse(localStorage.getItem('searchHistory') || '[]');
 		let currentImageIndex = 0;
+function renderSoftwareList(softwareToShow, container = softwareListEl) {
+	if (!softwareToShow.length) {
+		const noResultsText = isEnglishMode ? 'No software found' : '没有找到相关软件';
+		container.innerHTML = `<div class="no-results">${noResultsText}</div>`;
+		return;
+	}
 
-		function renderSoftwareList(softwareToShow, container = softwareListEl) {
-			if (!softwareToShow.length) {
-				const noResultsText = isEnglishMode ? 'No software found' : '没有找到相关软件';
-				container.innerHTML = `<div class="no-results">${noResultsText}</div>`;
-				return;
-			}
-			const listHTML = softwareToShow.map(item => {
-				const btnText = item.downloadText || (isEnglishMode ? 'Download' : '下载');
-				let btnHtml = '';
-				if (item.popup) {
-					btnHtml = `<button class="download-btn-main" onclick="showFullscreenPopup('${item.name}')">${btnText}</button>`;
-				} else if (item.downloadUrl && item.downloadUrl.trim() !== '' && item.downloadUrl !== '无') {
-					const isHtml = item.downloadUrl.endsWith('.html');
-					btnHtml = `<a href="${item.downloadUrl}" class="download-btn-main" target="_blank">${btnText}</a>`;
-				} else {
-					const noDownloadText = isEnglishMode ? 'No download' : '暂无下载';
-					btnHtml = `<span class="download-btn-main" disabled>${noDownloadText}</span>`;
-				}
-				return `
-				<div class="software-item">
+	const listHTML = softwareToShow.map(item => {
+		if (item.isSpecial) {
+			// 特殊应用：三倍高度 + 自定义背景
+			return `
+			<div class="software-item software-item-special" style="background: ${item.specialBackground || '#f0f8ff'}; height: 300px;">
+				<div class="special-content">
 					<img src="${item.image}" class="software-img" alt="${item.name}">
 					<div class="software-info">
 						<div class="software-name">${item.name}</div>
 						<div class="software-score">${item.score}</div>
 					</div>
-					${btnHtml}
-				</div>`;
-			}).join('');
-			container.innerHTML = listHTML;
+					${getDownloadButton(item)}
+				</div>
+			</div>`;
+		} else {
+			// 普通应用
+			return `
+			<div class="software-item">
+				<img src="${item.image}" class="software-img" alt="${item.name}">
+				<div class="software-info">
+					<div class="software-name">${item.name}</div>
+					<div class="software-score">${item.score}</div>
+				</div>
+				${getDownloadButton(item)}
+			</div>`;
 		}
+	}).join('');
+
+	container.innerHTML = listHTML;
+}
+
+// 提取下载按钮生成逻辑，避免重复
+function getDownloadButton(item) {
+	const btnText = item.downloadText || (isEnglishMode ? 'Download' : '下载');
+	if (item.popup) {
+		return `<button class="download-btn-main" onclick="showFullscreenPopup('${item.name}')">${btnText}</button>`;
+	} else if (item.downloadUrl && item.downloadUrl.trim() !== '' && item.downloadUrl !== '无') {
+		const isHtml = item.downloadUrl.endsWith('.html');
+		return `<a href="${item.downloadUrl}" class="download-btn-main" target="_blank">${btnText}</a>`;
+	} else {
+		const noDownloadText = isEnglishMode ? 'No download' : '暂无下载';
+		return `<span class="download-btn-main" disabled>${noDownloadText}</span>`;
+	}
+}
 
 		function showFullscreenPopup(name) {
 			const item = translatedSoftwareData.find(s => s.name === name) || originalSoftwareData.find(s => translateText(s.name) === name);
@@ -1305,7 +1409,11 @@ const originalSoftwareData = [
 			} else {
 				imageShowcase.style.display = 'none';
 			}
-			
+		// 白色遮罩效果
+const overlay = document.createElement('div');
+overlay.className = 'white-overlay';
+document.body.appendChild(overlay);
+setTimeout(() => overlay.remove(), 1000);
 			// 设置描述文字内容
 			fullscreenDesc.textContent = item.popup.text;
 			
@@ -1479,11 +1587,25 @@ const originalSoftwareData = [
 			document.querySelector('.history-title').textContent = isEnglishMode ? 'History' : '历史记录';
 			document.title = isEnglishMode ? 'Software Search & Download' : '软件搜索下载';
 		}
-
-		function init() {
-			initLanguageState();
-			renderSoftwareList(sortedSoftware);
-		}
+function init() {
+	initLanguageState();
+	
+	// 先找出 forceFirst 的项
+	const forcedItems = translatedSoftwareData.filter(s => s.forceFirst);
+	// 剩下的按评分排序
+	const normalItems = translatedSoftwareData
+		.filter(s => !s.forceFirst)
+		.sort((a, b) => {
+			const scoreA = parseFloat(a.score.match(/\d+\.?\d*/)[0]) || 0;
+			const scoreB = parseFloat(b.score.match(/\d+\.?\d*/)[0]) || 0;
+			return scoreB - scoreA;
+		});
+	
+	// 合并：强制置顶的放前面
+	sortedSoftware = [...forcedItems, ...normalItems];
+	
+	renderSoftwareList(sortedSoftware);
+}
 
 		init();
 
@@ -1519,21 +1641,6 @@ const originalSoftwareData = [
 
 		window.showFullscreenPopup = showFullscreenPopup;
 		window.quickSearch = quickSearch;
-	</script>
-</body>
-</html>
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-	<meta charset="UTF-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
-<body>
-	<script>
-		if(localStorage.getItem('isOnlineDataEnabled')==='true'){
-			localStorage.setItem('isOnlineDataEnabled','false');
-			location.href='./indexonline.html';
-		}
 	</script>
 </body>
 </html>

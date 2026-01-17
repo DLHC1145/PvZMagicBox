@@ -5,785 +5,255 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 	<title>软件搜索下载</title>
 	<style>
-		* {
-			margin: 0;
-			padding: 0;
-			box-sizing: border-box;
-		}
+		*{margin:0;padding:0;box-sizing:border-box}
+		body{font-family:Arial,sans-serif;background:#f5f5f5;padding:0;touch-action:pan-x pan-y;overflow-x:hidden;padding-bottom:60px}
+		html{touch-action:manipulation;-webkit-text-size-adjust:none;-ms-text-size-adjust:none;text-size-adjust:none}
+		.user-info-bar{background:#45a049;height:40px;display:flex;align-items:center;justify-content:space-between;padding:0 15px;color:#fff;font-size:14px}
+		.welcome-text{font-weight:bold}
+		.login-btn,.logout-btn{background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:15px;padding:5px 12px;cursor:pointer;font-size:12px}
+		.login-btn:hover,.logout-btn:hover{background:rgba(255,255,255,.3)}
+		.modal-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);z-index:1000;display:none;justify-content:center;align-items:center}
+		.modal-overlay.show{display:flex}
+		.login-modal{background:#fff;border-radius:10px;padding:30px;width:90%;max-width:400px;box-shadow:0 10px 30px rgba(0,0,0,.3)}
+		.modal-header h2{color:#333;font-size:20px;margin-bottom:15px;text-align:center}
+		.form-group{margin-bottom:20px}
+		.form-group label{display:block;margin-bottom:8px;color:#333;font-weight:bold}
+		.form-input{width:100%;padding:12px;border:2px solid #ddd;border-radius:8px;font-size:16px}
+		.form-input:focus{outline:none;border-color:#4CAF50}
+		.error-message{color:#f44336;font-size:12px;margin-top:5px;display:none}
+		.modal-buttons{display:flex;gap:10px;justify-content:end}
+		.btn{padding:10px 20px;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:bold}
+		.btn-primary{background:#4CAF50;color:#fff}
+		.btn-secondary{background:#f5f5f5;color:#666}
+		.bottom-nav{position:fixed;bottom:0;left:0;width:100%;height:60px;background:#fff;border-top:1px solid #e5e5e5;display:flex;justify-content:space-around;align-items:center;z-index:200}
+		.nav-item{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;height:100%;text-decoration:none;color:#999;transition:color .3s}
+		.nav-item.active{color:#4CAF50}
+		.nav-icon{width:24px;height:24px;margin-bottom:4px;font-size:20px}
+		.nav-icon img{width:100%;height:100%;object-fit:contain}
+		.nav-text{font-size:12px}
+		.function-list{background:#fff;margin:20px;border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.1);overflow:hidden;transition:all .3s}
+		.list-item{display:flex;align-items:center;justify-content:space-between;padding:15px 20px;border-bottom:1px solid #f0f0f0;cursor:pointer;transition:background .3s}
+		.list-item:last-child{border-bottom:none}
+		.list-item:hover{background:#f9f9f9}
+		.list-item-left{display:flex;align-items:center}
+		.list-icon{width:20px;height:20px;margin-right:12px;font-size:16px}
+		.list-text{font-size:16px;color:#333}
+		.view-btn{background:#2196F3;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer;transition:background .3s}
+		.view-btn:hover{background:#1976D2}
+		.contact-modal{background:#fff;border-radius:10px;padding:30px;width:90%;max-width:350px;box-shadow:0 10px 30px rgba(0,0,0,.3);text-align:center}
+		.contact-title{color:#333;font-size:18px;margin-bottom:20px}
+		.qq-info{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:20px;padding:15px;background:#f5f5f5;border-radius:8px}
+		.qq-number{font-size:18px;font-weight:bold;color:#333}
+		.contact-buttons{display:flex;gap:10px;justify-content:center}
+		.about-page{background:#f5f5f5;min-height:100vh;position:fixed;top:0;left:0;width:100%;padding:80px 20px 20px;z-index:500;display:none}
+		.about-header{position:fixed;top:0;left:0;width:100%;background:#fff;border-bottom:1px solid #e5e5e5;padding:15px 20px;display:flex;align-items:center;justify-content:space-between;z-index:600}
+		.back-btn{background:none;border:none;font-size:18px;cursor:pointer;padding:5px 10px;border-radius:5px}
+		.back-btn:hover{background:#f0f0f0}
+		.header-title{font-size:16px;font-weight:bold;color:#333}
+		.app-info{text-align:center;margin-top:20px}
+		.app-icon{width:80px;height:80px;background:#4CAF50;border-radius:15px;margin:0 auto 10px;display:flex;align-items:center;justify-content:center;font-size:36px;color:#fff}
+		.app-icon img{width:100%;height:100%;object-fit:cover;border-radius:15px}
+		.app-name{font-size:18px;font-weight:bold;color:#333;margin-bottom:5px}
+		.version-display{font-size:14px;color:#666}
+		.settings-page{background:#f5f5f5;min-height:100vh;position:fixed;top:0;left:0;width:100%;padding:80px 20px 20px;z-index:500;display:none}
+		.settings-header{position:fixed;top:0;left:0;width:100%;background:#fff;border-bottom:1px solid #e5e5e5;padding:15px 20px;display:flex;align-items:center;justify-content:space-between;z-index:600}
+		.settings-icon-container{margin:20px auto;width:80px;height:80px;border-radius:18px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,.1);background:#fff}
+		.settings-icon{width:100%;height:100%;object-fit:cover}
+		.settings-content{background:#fff;border-radius:10px;padding:20px;margin-top:20px;box-shadow:0 2px 10px rgba(0,0,0,.1)}
+		.setting-item{padding:15px 0;border-bottom:1px solid #f0f0f0;display:flex;justify-content:space-between;align-items:center}
+		.setting-item:last-child{border-bottom:none}
+		.setting-label{font-size:16px;color:#333}
+		.setting-value{font-size:14px;color:#666;display:flex;align-items:center;gap:8px}
+		.wechat-notification{position:fixed;top:-200px;left:50%;transform:translateX(-50%);width:90%;max-width:320px;background:linear-gradient(135deg,#07bb07,#00d100);border-radius:8px;padding:15px;box-shadow:0 4px 20px rgba(0,0,0,.3);z-index:2000;transition:top .5s cubic-bezier(.25,.46,.45,.94);color:#fff;cursor:pointer}
+		.wechat-notification.show{top:20px}
+		.wechat-notification:active{top:-200px!important}
+		.notification-header{display:flex;align-items:center;margin-bottom:8px}
+		.studio-name{font-size:16px;font-weight:bold;margin-left:8px}
+		.notification-content{font-size:13px;opacity:.9;line-height:2.1}
+		.notification-icon{width:20px;height:20px;background:rgba(255,255,255,.2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px}
+		.copy-success-modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.8);color:#fff;padding:15px 25px;border-radius:8px;z-index:1500;display:none;font-size:16px}
+		.copy-success-modal.show{display:block;animation:fadeInOut 2s}
+		@keyframes fadeInOut{0%{opacity:0}20%{opacity:1}80%{opacity:1}100%{opacity:0}}
+		.terms-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);z-index:3000;display:none;justify-content:center;align-items:center;backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px)}
+		.terms-overlay.show{display:flex}
+		.terms-modal{background:#fff;border-radius:15px;width:90%;max-width:600px;max-height:80vh;position:relative;box-shadow:0 20px 60px rgba(0,0,0,.4);display:flex;flex-direction:column}
+		.terms-header{padding:20px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center;background:#f8f9fa;border-radius:15px 15px 0 0}
+		.terms-title{font-size:18px;font-weight:bold;color:#333;margin:0}
+		.terms-close{background:none;border:none;font-size:24px;color:#999;cursor:pointer;width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:50%;transition:all .3s}
+		.terms-close:hover{background:#f0f0f0;color:#333}
+		.terms-content{padding:20px;overflow-y:auto;flex:1;line-height:1.6;color:#555;font-size:14px}
+		.loading-text{text-align:center;color:#999;font-style:italic;padding:40px}
+		.error-text{text-align:center;color:#f44336;font-style:italic;padding:40px}
+		.link-modal{background:#fff;border-radius:10px;padding:20px;width:90%;max-width:400px;box-shadow:0 10px 30px rgba(0,0,0,.3)}
+		.link-modal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;padding-bottom:10px;border-bottom:1px solid #eee}
+		.link-modal-title{font-size:18px;font-weight:bold;color:#333}
+		.link-modal-close{background:none;border:none;font-size:20px;color:#999;cursor:pointer}
+		.link-content{margin:15px 0}
+		.link-url{width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:14px;word-break:break-all;margin-bottom:10px}
 
-		body {
-			font-family: Arial, sans-serif;
-			background-color: #f5f5f5;
-			padding: 0;
-			touch-action: pan-x pan-y;
-			overflow-x: hidden;
-			padding-bottom: 60px;
-		}
-
-		/* 防止页面缩放 */
-		html {
-			touch-action: manipulation;
-			-webkit-text-size-adjust: none;
-			-ms-text-size-adjust: none;
-			text-size-adjust: none;
-		}
-
-		/* 用户信息栏 */
-		.user-info-bar {
-			background-color: #45a049;
-			height: 40px;
-			display: flex;
-			align-items: center;
-			justify-content: space-between;
-			padding: 0 15px;
-			color: white;
-			font-size: 14px;
-		}
-
-		.welcome-text {
-			font-weight: bold;
-		}
-
-		.login-btn, .logout-btn {
-			background-color: rgba(255,255,255,0.2);
-			color: white;
-			border: 1px solid rgba(255,255,255,0.3);
-			border-radius: 15px;
-			padding: 5px 12px;
-			cursor: pointer;
-			font-size: 12px;
-		}
-
-		.login-btn:hover, .logout-btn:hover {
-			background-color: rgba(255,255,255,0.3);
-		}
-
-		/* 登录弹窗 */
-		.modal-overlay {
-			position: fixed;
-			top: 0;
-			left: 0;
-			width: 100%;
-			height: 100%;
-			background-color: rgba(0, 0, 0, 0.5);
-			z-index: 1000;
-			display: none;
-			justify-content: center;
-			align-items: center;
-		}
-
-		.modal-overlay.show {
-			display: flex;
-		}
-
-		.login-modal {
-			background-color: white;
-			border-radius: 10px;
-			padding: 30px;
-			width: 90%;
-			max-width: 400px;
-			box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-		}
-
-		.modal-header h2 {
-			color: #333;
-			font-size: 20px;
-			margin-bottom: 15px;
-			text-align: center;
-		}
-
-		.form-group {
-			margin-bottom: 20px;
-		}
-
-		.form-group label {
-			display: block;
-			margin-bottom: 8px;
-			color: #333;
-			font-weight: bold;
-		}
-
-		.form-input {
-			width: 100%;
-			padding: 12px;
-			border: 2px solid #ddd;
-			border-radius: 8px;
-			font-size: 16px;
-		}
-
-		.form-input:focus {
-			outline: none;
-			border-color: #4CAF50;
-		}
-
-		.error-message {
-			color: #f44336;
-			font-size: 12px;
-			margin-top: 5px;
-			display: none;
-		}
-
-		.modal-buttons {
-			display: flex;
-			gap: 10px;
-			justify-content: flex-end;
-		}
-
-		.btn {
-			padding: 10px 20px;
-			border: none;
-			border-radius: 8px;
-			cursor: pointer;
-			font-size: 14px;
-			font-weight: bold;
-		}
-
-		.btn-primary {
-			background-color: #4CAF50;
-			color: white;
-		}
-
-		.btn-secondary {
-			background-color: #f5f5f5;
-			color: #666;
-		}
-
-		/* 底部导航栏 */
-		.bottom-nav {
-			position: fixed;
-			bottom: 0;
-			left: 0;
-			width: 100%;
-			height: 60px;
-			background-color: #fff;
-			border-top: 1px solid #e5e5e5;
-			display: flex;
-			justify-content: space-around;
-			align-items: center;
-			z-index: 200;
-		}
-
-		.nav-item {
-			display: flex;
-			flex-direction: column;
-			align-items: center;
-			justify-content: center;
-			flex: 1;
-			height: 100%;
-			text-decoration: none;
-			color: #999;
-			transition: color 0.3s;
-		}
-
-		.nav-item.active {
-			color: #4CAF50;
-		}
-
-		.nav-icon {
-			width: 24px;
-			height: 24px;
-			margin-bottom: 4px;
-			font-size: 20px;
-		}
-
-		.nav-icon img {
-			width: 100%;
-			height: 100%;
-			object-fit: contain;
-		}
-
-		.nav-text {
-			font-size: 12px;
-		}
-
-		/* 功能列表样式 */
-		.function-list {
-			background-color: white;
-			margin: 20px;
-			border-radius: 10px;
-			box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-			overflow: hidden;
-			transition: all 0.3s ease;
-		}
-
-		.list-item {
-			display: flex;
-			align-items: center;
-			justify-content: space-between;
-			padding: 15px 20px;
-			border-bottom: 1px solid #f0f0f0;
-			cursor: pointer;
-			transition: background-color 0.3s;
-		}
-
-		.list-item:last-child {
-			border-bottom: none;
-		}
-
-		.list-item:hover {
-			background-color: #f9f9f9;
-		}
-
-		.list-item-left {
-			display: flex;
-			align-items: center;
-		}
-
-		.list-icon {
-			width: 20px;
-			height: 20px;
-			margin-right: 12px;
-			font-size: 16px;
-		}
-
-		.list-text {
-			font-size: 16px;
-			color: #333;
-		}
-
-		.view-btn {
-			background-color: #2196F3;
-			color: white;
-			border: none;
-			border-radius: 6px;
-			padding: 6px 12px;
-			font-size: 12px;
-			cursor: pointer;
-			transition: background-color 0.3s;
-		}
-
-		.view-btn:hover {
-			background-color: #1976D2;
-		}
-
-		/* 联系作者弹窗 */
-		.contact-modal {
-			background-color: white;
-			border-radius: 10px;
-			padding: 30px;
-			width: 90%;
-			max-width: 350px;
-			box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-			text-align: center;
-		}
-
-		.contact-title {
-			color: #333;
-			font-size: 18px;
-			margin-bottom: 20px;
-		}
-
-		.qq-info {
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			gap: 10px;
-			margin-bottom: 20px;
-			padding: 15px;
-			background-color: #f5f5f5;
-			border-radius: 8px;
-		}
-
-		.qq-number {
-			font-size: 18px;
-			font-weight: bold;
-			color: #333;
-		}
-
-		.contact-buttons {
-			display: flex;
-			gap: 10px;
-			justify-content: center;
-		}
-
-		/* 关于我们页面样式 */
-		.about-page {
-			background-color: #f5f5f5;
-			min-height: 100vh;
-			position: fixed;
-			top: 0;
-			left: 0;
-			width: 100%;
-			padding: 80px 20px 20px;
-			z-index: 500;
-			display: none;
-		}
-
-		.about-header {
-			position: fixed;
-			top: 0;
-			left: 0;
-			width: 100%;
-			background-color: #fff;
-			border-bottom: 1px solid #e5e5e5;
-			padding: 15px 20px;
-			display: flex;
-			align-items: center;
-			justify-content: space-between;
-			z-index: 600;
-		}
-
-		.back-btn {
-			background: none;
-			border: none;
-			font-size: 18px;
-			cursor: pointer;
-			padding: 5px 10px;
-			border-radius: 5px;
-		}
-
-		.back-btn:hover {
-			background-color: #f0f0f0;
-		}
-
-		.header-title {
-			font-size: 16px;
-			font-weight: bold;
-			color: #333;
-		}
-
-		.app-info {
-			text-align: center;
-			margin-top: 20px;
-		}
-
-		.app-icon {
-			width: 80px;
-			height: 80px;
-			background-color: #4CAF50;
-			border-radius: 15px;
-			margin: 0 auto 10px;
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			font-size: 36px;
-			color: white;
-		}
-
-		.app-icon img {
-			width: 100%;
-			height: 100%;
-			object-fit: cover;
-			border-radius: 15px;
-		}
-
-		.app-name {
-			font-size: 18px;
-			font-weight: bold;
-			color: #333;
-			margin-bottom: 5px;
-		}
-
-		.version-display {
-			font-size: 14px;
-			color: #666;
-		}
-
-		/* 设置页面样式 - 精简版 */
-		.settings-page {
-			background-color: #f5f5f5;
-			min-height: 100vh;
-			position: fixed;
-			top: 0;
-			left: 0;
-			width: 100%;
-			padding: 80px 20px 20px;
-			z-index: 500;
-			display: none;
-		}
-
-		.settings-header {
-			position: fixed;
-			top: 0;
-			left: 0;
-			width: 100%;
-			background-color: #fff;
-			border-bottom: 1px solid #e5e5e5;
-			padding: 15px 20px;
-			display: flex;
-			align-items: center;
-			justify-content: space-between;
-			z-index: 600;
-		}
-
-		/* 顶部图标区域 */
-		.settings-icon-container {
-			margin: 20px auto;
-			width: 80px;
-			height: 80px;
-			border-radius: 18px;
-			overflow: hidden;
-			box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-			background-color: white;
-		}
-
-		.settings-icon {
-			width: 100%;
-			height: 100%;
-			object-fit: cover;
-		}
-
-		/* 设置内容区域 */
-		.settings-content {
-			background-color: white;
-			border-radius: 10px;
-			padding: 20px;
-			margin-top: 20px;
-			box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-		}
-
-		.setting-item {
-			padding: 15px 0;
-			border-bottom: 1px solid #f0f0f0;
-			display: flex;
-			justify-content: space-between;
-			align-items: center;
-		}
-
-		.setting-item:last-child {
-			border-bottom: none;
-		}
-
-		.setting-label {
-			font-size: 16px;
-			color: #333;
-		}
-
-		.setting-value {
-			font-size: 14px;
-			color: #666;
-			display: flex;
-			align-items: center;
-			gap: 8px;
-		}
-
-		/* 多语言开关样式 */
-		.language-switch {
+		/* 文件夹堆叠特效（多层透明层叠视觉） */
+		.folder-stack {
 			position: relative;
 			display: inline-block;
-			width: 50px;
-			height: 24px;
+			margin-right: 8px;
 		}
-
-		.language-switch input {
-			opacity: 0;
-			width: 0;
-			height: 0;
-		}
-
-		.slider {
+		.folder-stack::before,
+		.folder-stack::after {
+			content: '';
 			position: absolute;
-			cursor: pointer;
-			top: 0;
-			left: 0;
-			right: 0;
-			bottom: 0;
-			background-color: #ccc;
-			transition: .4s;
-			border-radius: 24px;
-		}
-
-		.slider:before {
-			position: absolute;
-			content: "";
-			height: 18px;
-			width: 18px;
-			left: 3px;
-			bottom: 3px;
-			background-color: white;
-			transition: .4s;
-			border-radius: 50%;
-		}
-
-		input:checked + .slider {
-			background-color: #4CAF50;
-		}
-
-		input:checked + .slider:before {
-			transform: translateX(26px);
-		}
-
-		/* beta标识样式 */
-		.beta-tag {
-			background-color: #e0e0e0;
-			color: #666;
-			font-size: 10px;
-			padding: 2px 6px;
-			border-radius: 3px;
-			margin-left: 5px;
-		}
-
-		/* 微信风格通知弹窗 */
-		.wechat-notification {
-			position: fixed;
-			top: -200px;
-			left: 50%;
-			transform: translateX(-50%);
-			width: 90%;
-			max-width: 320px;
-			background: linear-gradient(135deg, #07bb07, #00d100);
-			border-radius: 8px;
-			padding: 15px;
-			box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-			z-index: 2000;
-			transition: top 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-			color: white;
-			cursor: pointer;
-		}
-
-		.wechat-notification.show {
-			top: 20px;
-		}
-
-		.wechat-notification:active {
-			top: -200px !important;
-		}
-
-		.notification-header {
-			display: flex;
-			align-items: center;
-			margin-bottom: 8px;
-		}
-
-		.studio-name {
-			font-size: 16px;
-			font-weight: bold;
-			margin-left: 8px;
-		}
-
-		.notification-content {
-			font-size: 13px;
-			opacity: 0.9;
-			line-height: 1.4;
-		}
-
-		.notification-icon {
 			width: 20px;
-			height: 20px;
-			background-color: rgba(255,255,255,0.2);
-			border-radius: 50%;
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			font-size: 12px;
+			height: 16px;
+			background: #4CAF50;
+			border-radius: 2px;
+			box-shadow: 0 1px 2px rgba(0,0,0,0.2);
 		}
-
-		/* 复制成功提示弹窗 */
-		.copy-success-modal {
-			position: fixed;
-			top: 50%;
-			left: 50%;
-			transform: translate(-50%, -50%);
-			background-color: rgba(0, 0, 0, 0.8);
-			color: white;
-			padding: 15px 25px;
-			border-radius: 8px;
-			z-index: 1500;
-			display: none;
-			font-size: 16px;
+		.folder-stack::before {
+			top: -2px;
+			left: 2px;
+			z-index: 1;
+			background: #66BB6A; /* 中间层颜色 */
+			opacity: 0.8; /* 透明度模拟层叠 */
 		}
-
-		.copy-success-modal.show {
-			display: block;
-			animation: fadeInOut 2s ease-in-out;
-		}
-
-		@keyframes fadeInOut {
-			0% { opacity: 0; }
-			20% { opacity: 1; }
-			80% { opacity: 1; }
-			100% { opacity: 0; }
-		}
-
-		/* 霸王条款弹窗样式 */
-		.terms-overlay {
-			position: fixed;
+		.folder-stack::after {
 			top: 0;
 			left: 0;
-			width: 100%;
-			height: 100%;
-			background-color: rgba(0, 0, 0, 0.6);
-			z-index: 3000;
-			display: none;
-			justify-content: center;
-			align-items: center;
-			backdrop-filter: blur(5px);
-			-webkit-backdrop-filter: blur(5px);
+			z-index: 2;
+			background: #81C784; /* 顶层颜色 */
+			opacity: 0.9;
 		}
-
-		.terms-overlay.show {
-			display: flex;
-		}
-
-		.terms-modal {
-			background-color: white;
-			border-radius: 15px;
-			width: 90%;
-			max-width: 600px;
-			max-height: 80vh;
+		.folder-stack .folder-icon {
 			position: relative;
-			box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
-			display: flex;
-			flex-direction: column;
-		}
-
-		.terms-header {
-			padding: 20px;
-			border-bottom: 1px solid #eee;
-			display: flex;
-			justify-content: space-between;
-			align-items: center;
-			background-color: #f8f9fa;
-			border-radius: 15px 15px 0 0;
-		}
-
-		.terms-title {
-			font-size: 18px;
-			font-weight: bold;
-			color: #333;
-			margin: 0;
-		}
-
-		.terms-close {
-			background: none;
-			border: none;
-			font-size: 24px;
-			color: #999;
-			cursor: pointer;
-			width: 30px;
-			height: 30px;
+			z-index: 3;
+			font-size: 16px;
+			color: white;
+			width: 20px;
+			height: 16px;
 			display: flex;
 			align-items: center;
 			justify-content: center;
-			border-radius: 50%;
-			transition: all 0.3s;
 		}
 
-		.terms-close:hover {
-			background-color: #f0f0f0;
-			color: #333;
-		}
-
-		.terms-content {
-			padding: 20px;
-			overflow-y: auto;
-			flex: 1;
-			line-height: 1.6;
-			color: #555;
-			font-size: 14px;
-		}
-
-		.loading-text {
-			text-align: center;
-			color: #999;
-			font-style: italic;
-			padding: 40px;
-		}
-
-		.error-text {
-			text-align: center;
-			color: #f44336;
-			font-style: italic;
-			padding: 40px;
-		}
-
-		/* 链接弹窗样式 */
-		.link-modal {
-			background-color: white;
-			border-radius: 10px;
-			padding: 20px;
-			width: 90%;
-			max-width: 400px;
-			box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-		}
-
-		.link-modal-header {
+		/* 堆叠空框 */
+		.stack-placeholder {
 			display: flex;
-			justify-content: space-between;
 			align-items: center;
-			margin-bottom: 15px;
-			padding-bottom: 10px;
-			border-bottom: 1px solid #eee;
+			padding: 15px 20px;
+			margin: 0 20px 10px;
+			background: #f0f0f0;
+			border: 1px dashed #ccc;
+			border-radius: 8px;
+			color: #999;
+			font-size: 14px;
+			position: relative;
+		}
+		.stack-placeholder::before,
+		.stack-placeholder::after {
+			content: '';
+			position: absolute;
+			width: 20px;
+			height: 16px;
+			background: #ddd;
+			border-radius: 2px;
+			box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+		}
+		.stack-placeholder::before {
+			top: -2px;
+			left: 2px;
+			z-index: 1;
+			background: #e0e0e0;
+			opacity: 0.7;
+		}
+		.stack-placeholder::after {
+			top: 0;
+			left: 0;
+			z-index: 2;
+			background: #e8e8e8;
+			opacity: 0.8;
+		}
+		.stack-placeholder .folder-icon {
+			position: relative;
+			z-index: 3;
+			font-size: 16px;
+			color: #aaa;
+			width: 20px;
+			height: 16px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			margin-right: 12px;
 		}
 
-		.link-modal-title {
-			font-size: 18px;
-			font-weight: bold;
-			color: #333;
+		/* 展开动画 */
+		.sub-item {
+			max-height: 0;
+			overflow: hidden;
+			transition: max-height 0.3s ease-out, padding 0.3s ease-out;
+			padding: 0 20px;
+			border-bottom: 1px solid transparent;
+		}
+		.sub-item.show {
+			max-height: 60px;
+			padding: 15px 20px;
+			border-bottom: 1px solid #f0f0f0;
 		}
 
-		.link-modal-close {
+		/* 彩蛋按钮样式 */
+		.easter-egg-btn {
 			background: none;
 			border: none;
-			font-size: 20px;
-			color: #999;
+			font-size: 18px;
 			cursor: pointer;
+			margin-left: 8px;
+			vertical-align: middle;
+			padding: 2px 6px;
+			border-radius: 4px;
+			transition: background 0.2s;
 		}
-
-		.link-content {
-			margin: 15px 0;
-		}
-
-		.link-url {
-			width: 100%;
-			padding: 10px;
-			border: 1px solid #ddd;
-			border-radius: 6px;
-			font-size: 14px;
-			word-break: break-all;
-			margin-bottom: 10px;
+		.easter-egg-btn:hover {
+			background: rgba(0,0,0,0.05);
 		}
 	</style>
 </head>
 <body>
-	<!-- 用户信息栏 -->
 	<div class="user-info-bar">
 		<div class="welcome-text" id="welcomeText">欢迎访问</div>
 		<div>
 			<span id="loginStatus" class="login-btn" onclick="showLoginModal()">点击登录</span>
-			<span id="logoutBtn" class="logout-btn" onclick="logout()" style="display: none; margin-left: 10px;">退出</span>
+			<span id="logoutBtn" class="logout-btn" onclick="logout()" style="display:none;margin-left:10px">退出</span>
 		</div>
 	</div>
 
-	<!-- 功能列表容器 -->
-	<div id="functionListContainer" class="function-list">
-		<!-- 功能列表将通过配置动态生成 -->
-	</div>
+	<div id="functionListContainer" class="function-list"></div>
 
-	<!-- 登录弹窗 -->
+	<!-- 登录弹窗（保持原样） -->
 	<div id="loginModal" class="modal-overlay" onclick="closeLoginModal(event)">
 		<div class="login-modal" onclick="event.stopPropagation()">
-			<div class="modal-header">
-				<h2 data-zh="用户登录" data-en="User Login">用户登录</h2>
-			</div>
-			
+			<div class="modal-header"><h2>用户登录</h2></div>
 			<form id="loginForm">
 				<div class="form-group">
-					<label for="username" data-zh="账号：" data-en="Username:">账号：</label>
-					<input type="text" id="username" class="form-input" placeholder="至少2位字符" data-placeholder-zh="至少2位字符" data-placeholder-en="At least 2 characters">
-					<div id="usernameError" class="error-message" data-zh="账号至少需要2位字符" data-en="Username needs at least 2 characters">账号至少需要2位字符</div>
+					<label for="username">账号：</label>
+					<input type="text" id="username" class="form-input" placeholder="至少2位字符">
+					<div id="usernameError" class="error-message">账号至少需要2位字符</div>
 				</div>
-				
 				<div class="form-group">
-					<label for="password" data-zh="密码：" data-en="Password:">密码：</label>
-					<input type="password" id="password" class="form-input" placeholder="8-12位，需含英文和数字" data-placeholder-zh="8-12位，需含英文和数字" data-placeholder-en="8-12 characters, must include letters and numbers">
-					<div id="passwordError" class="error-message" data-zh="密码需8-12位，且必须包含英文和数字" data-en="Password must be 8-12 characters and include both letters and numbers">密码需8-12位，且必须包含英文和数字</div>
+					<label for="password">密码：</label>
+					<input type="password" id="password" class="form-input" placeholder="8-12位，需含英文和数字">
+					<div id="passwordError" class="error-message">密码需8-12位，且必须包含英文和数字</div>
 				</div>
-				
 				<div class="modal-buttons">
 					<button type="button" class="btn btn-secondary" onclick="closeLoginModal()">取消</button>
-					<button type="submit" class="btn btn-primary" data-zh="确定" data-en="Confirm">确定</button>
+					<button type="submit" class="btn btn-primary">确定</button>
 				</div>
 			</form>
 		</div>
 	</div>
 
-	<!-- 联系作者弹窗 -->
+	<!-- 联系作者弹窗（保持原样） -->
 	<div id="contactModal" class="modal-overlay" onclick="closeContactModal(event)">
 		<div class="contact-modal" onclick="event.stopPropagation()">
-			<h2 class="contact-title" data-zh="联系作者" data-en="Contact Author">联系作者</h2>
+			<h2 class="contact-title">联系作者</h2>
 			<div class="qq-info">
-				<span data-zh="作者QQ：" data-en="Author QQ:">作者QQ：</span>
+				<span>作者QQ：</span>
 				<span class="qq-number" id="qqDisplay">2019947085</span>
 			</div>
 			<div class="contact-buttons">
@@ -793,8 +263,8 @@
 		</div>
 	</div>
 
-	<!-- 通用链接弹窗模板 - 普通链接 -->
-	<div id="linkModal" class="modal-overlay" onclick="closeGenericModal('linkModal', event)">
+	<!-- 链接弹窗（保持原样） -->
+	<div id="linkModal" class="modal-overlay" onclick="closeGenericModal('linkModal',event)">
 		<div class="link-modal" onclick="event.stopPropagation()">
 			<div class="link-modal-header">
 				<div class="link-modal-title" id="linkTitle">链接</div>
@@ -811,8 +281,7 @@
 		</div>
 	</div>
 
-	<!-- 通用链接弹窗模板 - link1专用 -->
-	<div id="link1Modal" class="modal-overlay" onclick="closeGenericModal('link1Modal', event)">
+	<div id="link1Modal" class="modal-overlay" onclick="closeGenericModal('link1Modal',event)">
 		<div class="link-modal" onclick="event.stopPropagation()">
 			<div class="link-modal-header">
 				<div class="link-modal-title" id="link1Title">链接1</div>
@@ -829,26 +298,24 @@
 		</div>
 	</div>
 
-	<!-- 微信风格通知弹窗 -->
+	<!-- 微信通知（保持原样） -->
 	<div id="wechatNotification" class="wechat-notification" onclick="hideWeChatNotification()">
 		<div class="notification-header">
 			<div class="notification-icon">💬</div>
 			<div class="studio-name">MZ工作室</div>
 		</div>
 		<div class="notification-content">
-			<div style="font-weight: bold; margin-bottom: 3px;">植创魔盒</div>
-			<div data-zh="我们只是PVZ的忠实爱好者！" data-en="We are just loyal fans of PVZ!">我们只是PVZ的忠实爱好者！</div>
+			<div style="font-weight:bold;margin-bottom:3px">植创魔盒</div>
+			<div>我们只是PVZ的忠实爱好者！</div>
 		</div>
 	</div>
 
-	<!-- 复制成功提示弹窗 -->
 	<div id="copySuccessModal" class="copy-success-modal">已复制到剪贴板</div>
 
-	<!-- 霸王条款弹窗 -->
 	<div id="termsOverlay" class="terms-overlay" onclick="closeTermsModal(event)">
 		<div class="terms-modal" onclick="event.stopPropagation()">
 			<div class="terms-header">
-				<h2 class="terms-title" data-zh="植创魔盒霸王条款" data-en="PVZ Magic Box Terms">植创魔盒霸王条款</h2>
+				<h2 class="terms-title">植创魔盒霸王条款</h2>
 				<button class="terms-close" onclick="closeTermsModal()">×</button>
 			</div>
 			<div class="terms-content" id="termsContent">
@@ -857,717 +324,441 @@
 		</div>
 	</div>
 
-	<!-- 底部导航栏 - 动态生成 -->
-	<div class="bottom-nav" id="bottomNav">
-		<!-- 导航项将通过JavaScript动态生成 -->
-	</div>
+	<div class="bottom-nav" id="bottomNav"></div>
 
-	<!-- 关于我们页面 -->
 	<div id="aboutPage" class="about-page">
-		<!-- 头部 -->
 		<div class="about-header">
 			<button class="back-btn" onclick="hideAbout()">←</button>
-			<div class="header-title" data-zh="关于我们" data-en="About Us">关于我们</div>
+			<div class="header-title">关于我们</div>
 		</div>
-
-		<!-- 应用信息 -->
 		<div class="app-info">
 			<div class="app-icon">
-				<img src="图标.jpg" alt="应用图标" onerror="this.style.display='none'; this.parentNode.innerHTML='📱'; this.parentNode.style.fontSize='36px'; this.parentNode.style.display='flex'; this.parentNode.style.alignItems='center'; this.parentNode.style.justifyContent='center'">
+				<img src="图标.jpg" alt="应用图标" onerror="this.style.display='none';this.parentNode.innerHTML='📱';this.parentNode.style.fontSize='36px';this.parentNode.style.display='flex';this.parentNode.style.alignItems='center';this.parentNode.style.justifyContent='center'">
 			</div>
-			<div class="app-name" data-zh="软件搜索下载" data-en="Software Search Download">软件搜索下载</div>
-			<div class="version-display" id="versionDisplay">版本 1.4</div>
+			<div class="app-name">软件搜索下载</div>
+			<div class="version-display" id="versionDisplay">版本 2.1</div>
 		</div>
 	</div>
 
-	<!-- 设置页面 - 精简版 -->
 	<div id="settingsPage" class="settings-page">
-		<!-- 头部 -->
 		<div class="settings-header">
 			<button class="back-btn" onclick="hideSettings()">←</button>
-			<div class="header-title" style="font-size: 18px; font-weight: bold; flex: 1; text-align: center;" data-zh="设置" data-en="Settings">设置</div>
-			<div style="width: 40px;"></div> <!-- 占位元素，平衡返回按钮的空间 -->
+			<div class="header-title" style="font-size:18px;font-weight:bold;flex:1;text-align:center">设置</div>
+			<div style="width:40px"></div>
 		</div>
-
-		<!-- 顶部图标 - 调用图标.jpg -->
 		<div class="settings-icon-container">
-			<img src="图标.jpg" alt="应用图标" class="settings-icon" onerror="this.style.display='none'; this.parentNode.innerHTML='⚙️'; this.parentNode.style.fontSize='36px'; this.parentNode.style.display='flex'; this.parentNode.style.alignItems='center'; this.parentNode.style.justifyContent='center';">
+			<img src="图标.jpg" alt="应用图标" class="settings-icon" onerror="this.style.display='none';this.parentNode.innerHTML='⚙️';this.parentNode.style.fontSize='36px';this.parentNode.style.display='flex';this.parentNode.style.alignItems='center';this.parentNode.style.justifyContent='center'">
 		</div>
-
-		<!-- 设置内容 -->
 		<div class="settings-content">
 			<div class="setting-item">
-				<span class="setting-label" data-zh="应用版本" data-en="App Version">应用版本</span>
-				<span class="setting-value" id="settingsVersionDisplay">1.4</span>
+				<span class="setting-label">应用版本</span>
+				<span class="setting-value" id="settingsVersionDisplay">2.1</span>
 			</div>
 			<div class="setting-item">
-				<span class="setting-label" data-zh="开发者" data-en="Developer">开发者</span>
+				<span class="setting-label">开发者</span>
 				<span class="setting-value">MZ工作室</span>
 			</div>
 			<div class="setting-item">
-				<span class="setting-label" data-zh="联系方式" data-en="Contact Info">联系方式</span>
+				<span class="setting-label">联系方式</span>
 				<span class="setting-value">QQ: 2019947085</span>
 			</div>
 			<div class="setting-item">
-				<span class="setting-label" data-zh="主题模式" data-en="Theme Mode">主题模式</span>
-				<span class="setting-value" data-zh="浅色模式" data-en="Light Mode">浅色模式</span>
-			</div>
-			<div class="setting-item">
-				<span class="setting-label" data-zh="英语模式" data-en="Translation in English mode">多语言支持</span>
-				<span class="setting-value">
-					<label class="language-switch">
-						<input type="checkbox" id="languageToggle" onchange="toggleLanguage()">
-						<span class="slider"></span>
-					</label>
-				</span>
+				<span class="setting-label">主题模式</span>
+				<span class="setting-value">浅色模式</span>
 			</div>
 		</div>
-
-		<!-- 植创魔盒霸王条款阅读 -->
-		<div class="function-list" style="margin-top: 30px;">
+		<div class="function-list" style="margin-top:30px">
 			<div class="list-item" onclick="showTermsModal()">
 				<div class="list-item-left">
 					<div class="list-icon">📋</div>
-					<div class="list-text" data-zh="植创魔盒霸王条款" data-en="PVZ Magic Box Terms">植创魔盒霸王条款</div>
+					<div class="list-text">植创魔盒霸王条款</div>
 				</div>
-				<button class="view-btn" onclick="event.stopPropagation(); showTermsModal()">阅读</button>
+				<button class="view-btn" onclick="event.stopPropagation();showTermsModal()">阅读</button>
 			</div>
 		</div>
 	</div>
 
 	<script>
-		/*********************** 可配置的底部导航 *************************/
 		const NAV_CONFIG = [
-		  { 
-			icon: 'home.png', 
-			text: { zh: '主页', en: 'Home' }, 
-			link: 'indexhome.html', 
-			active: true 
-		  },
-		  { 
-			icon: 'author.png', 
-			text: { zh: '论坛', en: 'forum ' }, 
-			link: 'index2.html' 
-		  },
-		  { 
-			icon: 'my.png', 
-			text: { zh: '我的', en: 'Profile' }, 
-			link: 'index3.html' 
-		  }
+			{icon:'home.png',text:'主页',link:'indexhome.html',active:true},
+			{icon:'author.png',text:'论坛',link:'index2.html'},
+			{icon:'my.png',text:'我的',link:'index3.html'}
 		];
 
-		/*********************** 可配置的功能列表（本地网页跳转核心） *************************/
 		const FUNCTION_LIST_CONFIG = [
-			{
-				id: 'contact',
-				icon: '📞',
-				text: { zh: '联系作者', en: 'Contact Author' },
-				actionType: 'modal', 
-				actionTarget: 'contactModal', 
-				btnText: { zh: '查看', en: 'View' }
-			},
-			{
-				id: 'settings',
-				icon: '⚙️',
-				text: { zh: '设置', en: 'Settings' },
-				actionType: 'function',
-				actionTarget: 'goToSettings',
-				btnText: { zh: '', en: '' }, 
-				showBtn: false 
-			},
-			{
-				id: 'about',
-				icon: 'ℹ️',
-				text: { zh: '关于我们', en: 'About Us' },
-				actionType: 'function',
-				actionTarget: 'showAboutNotification',
-				btnText: { zh: '', en: '' },
-				showBtn: false
-			},
-			// 本地网页跳转示例（核心新增）
-			{
-				id: 'official-site',
-				icon: '❤️‍🔥',
-				text: { zh: '支持作者（爱发电）', en: 'Official Site' },
-				actionType: 'link',
-				actionTarget: 'linkModal', 
-				linkUrl: 'https://afdian.com/a/DLHC1145', 
-				btnText: { zh: '访问', en: 'Visit' }
-			},
-			{
-				id: 'official-site-smr',
-				icon: '🔧',
-				text: { zh: '神秘人工具箱&神秘人主页', en: 'MysteryBox & MysteryHome' },
-				actionType: 'link',
-				actionTarget: 'link1Modal', 
-				linkUrl: 'https://b23.tv/MNqU5D2', 
-				btnText: { zh: '查看', en: 'Visit' }
-			},
-			{
-				id: 'official-site-zip',
-				icon: '📕',
-				text: { zh: '一键转换压缩包格式', en: 'Archive Format Converter' },
-				actionType: 'link',
-				actionTarget: 'link1Modal', 
-				linkUrl: '功能：修改压缩包格式.html', // 本地网页文件
-				btnText: { zh: '查看', en: 'Visit' }
-			},
-			{
-				id: 'official-site-123',
-				icon: '🔗',
-				text: { zh: '一键转换数值进制', en: 'Convert number base' },
-				actionType: 'link',
-				actionTarget: 'link1Modal', 
-				linkUrl: '数值进制转换.html', // 本地网页文件
-				btnText: { zh: '查看', en: 'Visit' }
-			},
-			{
-				id: 'official-site-unix',
-				icon: '⏱️',
-				text: { zh: '在线获取时间戳', en: 'Get timestamp' },
-				actionType: 'link',
-				actionTarget: 'link1Modal', 
-				linkUrl: '时间戳.html', // 本地网页文件
-				btnText: { zh: '查看', en: 'Visit' }
-			},
-			{
-				id: 'official-site-mp42jpg',
-				icon: '📹',
-				text: { zh: '视频一键抽帧（mp4转jpg）', en: 'One-click video frame extraction (MP4 to JPG)' },
-				actionType: 'link',
-				actionTarget: 'link1Modal', 
-				linkUrl: '视频抽帧.html', // 本地网页文件
-				btnText: { zh: '查看', en: 'Visit' }
-			},
-			{
-				id: 'official-site-**2webp',
-				icon: '📹',
-				text: { zh: '图片压缩（**转webp）', en: 'image compression (** to WEBP)' },
-				actionType: 'link',
-				actionTarget: 'link1Modal', 
-				linkUrl: '图片压缩.html', // 本地网页文件
-				btnText: { zh: '查看', en: 'Visit' }
-			}
+			{id:'contact',icon:'📞',text:'联系作者',actionType:'modal',actionTarget:'contactModal',btnText:'查看'},
+			{id:'settings',icon:'⚙️',text:'设置',actionType:'function',actionTarget:'goToSettings',btnText:'',showBtn:false},
+			{id:'about',icon:'ℹ️',text:'关于我们',actionType:'function',actionTarget:'showAboutNotification',btnText:'',showBtn:false},
+			{id:'official-site',icon:'❤️‍🔥',text:'支持作者（爱发电）',actionType:'link',actionTarget:'linkModal',linkUrl:'https://afdian.com/a/DLHC1145',btnText:'访问'},
+			{id:'official-site-smr',icon:'🔧',text:'神秘人工具箱&神秘人主页',actionType:'link',actionTarget:'link1Modal',linkUrl:'https://b23.tv/MNqU5D2',btnText:'查看'},
+			{id:'official-site-zip',icon:'📕',text:'一键转换压缩包格式',actionType:'link',actionTarget:'link1Modal',linkUrl:'功能：修改压缩包格式.html',btnText:'查看'},
+			{id:'official-site-123',icon:'🔗',text:'一键转换数值进制',actionType:'link',actionTarget:'link1Modal',linkUrl:'数值进制转换.html',btnText:'查看'},
+			{id:'official-site-unix',icon:'⏱️',text:'在线获取时间戳',actionType:'link',actionTarget:'link1Modal',linkUrl:'时间戳.html',btnText:'查看'},
+			{id:'official-site-mp42jpg',icon:'📹',text:'视频一键抽帧（mp4转jpg）',actionType:'link',actionTarget:'link1Modal',linkUrl:'视频抽帧.html',btnText:'查看'},
+			{id:'officiqqal-site-**2webp',icon:'🐧',text:'官方QQ 交流群(￣_,￣ )',actionType:'link',actionTarget:'link1Modal',linkUrl:'https://qun.qq.com/universal-share/share?ac=1&authKey=pKNKxoY%2FPwf9MVeWpQRvyCPX2ZeVgf0798JdPpi4%2Bl%2F%2BH6u7ISX9i%2Bo0AadZ1Mdo&busi_data=eyJncm91cENvZGUiOiI4NTczMTMyNDIiLCJ0b2tlbiI6InNOTEU1NWR4Rm5RZjNxQ05iaHVlaXljSzk4SHZBRlZoK0k4R096ZnptbEkvVk5mSlJpZ3BRckordEtoemUrTHgiLCJ1aW4iOiIyMDE5OTQ3MDg1In0%3D&data=LpkKsXNru5IsgrMrMplCddYk0Re-FyPSVL7Yn-Ca4BnLmqJSFiZz7R-k3zrlX7pddiVu9O_c7BF3c2XZCEheKw&svctype=4&tempid=h5_group_info',btnText:'加入'},		
+			{id:'official-site-**2webp',icon:'🌁',text:'图片压缩（**转webp）',actionType:'link',actionTarget:'link1Modal',linkUrl:'图片压缩.html',btnText:'查看'}							
 		];
 
-		/*********************** 通用弹窗管理函数 *************************/
-		function showGenericModal(modalId, title, url) {
-			const modal = document.getElementById(modalId);
-			const baseId = modalId.replace('Modal', '');
-			const titleElement = document.getElementById(baseId + 'Title');
-			const urlElement = document.getElementById(baseId + 'Url');
-			
-			if (titleElement) titleElement.textContent = title;
-			if (urlElement) {
-				urlElement.innerHTML = `<a href="${url}" target="_blank">${url}</a>`;
-				urlElement.setAttribute('data-link', url);
+		// 通用弹窗函数（保持原样）
+		function showGenericModal(modalId,title,url){
+			const modal=document.getElementById(modalId);
+			const baseId=modalId.replace('Modal','');
+			const titleElement=document.getElementById(baseId+'Title');
+			const urlElement=document.getElementById(baseId+'Url');
+			if(titleElement)titleElement.textContent=title;
+			if(urlElement){
+				urlElement.innerHTML=`<a href="${url}" target="_blank">${url}</a>`;
+				urlElement.setAttribute('data-link',url);
 			}
 			modal.classList.add('show');
 		}
 
-		function closeGenericModal(modalId, event) {
-			if (event && event.target !== document.getElementById(modalId)) return;
+		function closeGenericModal(modalId,event){
+			if(event&&event.target!==document.getElementById(modalId))return;
 			document.getElementById(modalId).classList.remove('show');
 		}
 
-		function copyGenericLinkFromModal(modalId) {
-			const baseId = modalId.replace('Modal', '');
-			const urlElement = document.getElementById(baseId + 'Url');
-			const url = urlElement.getAttribute('data-link');
-			
-			const textArea = document.createElement("textarea");
-			textArea.value = url;
-			textArea.style.top = "0";
-			textArea.style.left = "0";
-			textArea.style.position = "fixed";
-			textArea.style.opacity = "0";
-			
+		function copyGenericLinkFromModal(modalId){
+			const baseId=modalId.replace('Modal','');
+			const urlElement=document.getElementById(baseId+'Url');
+			const url=urlElement.getAttribute('data-link');
+			const textArea=document.createElement("textarea");
+			textArea.value=url;
+			textArea.style.position="fixed";
+			textArea.style.opacity=0;
 			document.body.appendChild(textArea);
 			textArea.focus();
 			textArea.select();
-			
-			try {
-				const successful = document.execCommand('copy');
-				if (successful) {
-					showCopySuccess();
-				} else {
-					alert(isEnglishMode ? 'Copy failed, please manually copy the link' : '复制失败，请手动复制链接');
-				}
-			} catch (err) {
-				console.error('复制失败: ', err);
-				alert(isEnglishMode ? 'Copy failed, please manually copy the link' : '复制失败，请手动复制链接');
-			}
-			
+			try{
+				const successful=document.execCommand('copy');
+				if(successful)showCopySuccess();
+				else alert('复制失败，请手动复制链接');
+			}catch(err){alert('复制失败，请手动复制链接');}
 			document.body.removeChild(textArea);
 		}
 
-		function openGenericLinkFromModal(modalId) {
-			const baseId = modalId.replace('Modal', '');
-			const urlElement = document.getElementById(baseId + 'Url');
-			const url = urlElement.getAttribute('data-link');
-			window.open(url, '_blank');
+		function openGenericLinkFromModal(modalId){
+			const baseId=modalId.replace('Modal','');
+			const urlElement=document.getElementById(baseId+'Url');
+			const url=urlElement.getAttribute('data-link');
+			window.open(url,'_blank');
 		}
 
-		/*********************** 多语言相关 *************************/
-		let isEnglishMode = false;
-		
-		function saveLanguageState(isEnglish) {
-			localStorage.setItem('isEnglish', isEnglish.toString());
-		}
-
-		function getLanguageState() {
-			return localStorage.getItem('isEnglish') === 'true';
-		}
-
-		function getNavLinkPath(configItem) {
-			if (isEnglishMode) {
-				return configItem.link;
-			}
-			return configItem.link;
-		}
-
-		function generateBottomNav() {
-			const bottomNav = document.getElementById('bottomNav');
-			let navHTML = '';
-			
-			NAV_CONFIG.forEach((item, index) => {
-				const isActive = item.active ? 'active' : '';
-				const text = isEnglishMode ? item.text.en : item.text.zh;
-				const link = getNavLinkPath(item);
-				
-				navHTML += `
-					<a href="${link}" class="nav-item ${isActive}" onclick="handleNavigation(${index}, event)">
-						<div class="nav-icon">
-							<img src="${item.icon}" alt="${text}" onerror="this.style.display='none'; this.parentNode.innerHTML='📁'; this.parentNode.style.fontSize='20px'; this.parentNode.style.display='flex'; this.parentNode.style.alignItems='center'; this.parentNode.style.justifyContent='center';">
-						</div>
-						<div class="nav-text">${text}</div>
-					</a>
-				`;
+		// 底部导航（保持原样）
+		function generateBottomNav(){
+			const bottomNav=document.getElementById('bottomNav');
+			let navHTML='';
+			NAV_CONFIG.forEach((item,index)=>{
+				const isActive=item.active?'active':'';
+				const text=item.text;
+				const link=item.link;
+				navHTML+=`<a href="${link}" class="nav-item ${isActive}" onclick="handleNavigation(${index},event)">
+					<div class="nav-icon"><img src="${item.icon}" alt="${text}" onerror="this.style.display='none';this.parentNode.innerHTML='📁';this.parentNode.style.fontSize='20px';this.parentNode.style.display='flex';this.parentNode.style.alignItems='center';this.parentNode.style.justifyContent='center';"></div>
+					<div class="nav-text">${text}</div>
+				</a>`;
 			});
-			
-			bottomNav.innerHTML = navHTML;
+			bottomNav.innerHTML=navHTML;
 		}
 
-		function generateFunctionList() {
-			const container = document.getElementById('functionListContainer');
+		// 展开/收缩状态
+		let folderExpanded = false;
+
+		// 生成功能列表（核心修改部分）
+		function generateFunctionList(){
+			const container=document.getElementById('functionListContainer');
+			const firstThree = FUNCTION_LIST_CONFIG.slice(0, 3);
+			const remainingItems = FUNCTION_LIST_CONFIG.slice(3);
 			let listHTML = '';
+
+			// 前3个功能项（联系作者、设置、关于我们）
+			firstThree.forEach(item => {
+				if (item.id === 'about') {
+					// 关于我们：左侧文本+图标，右侧彩蛋按钮
+					listHTML += `
+						<div class="list-item" onclick="toggleFolder()">
+							<div class="list-item-left">
+								<div class="list-icon">${item.icon}</div>
+								<div class="list-text">${item.text}</div>
+							</div>
+							<button class="easter-egg-btn" onclick="event.stopPropagation(); showAboutNotification()">🎁</button>
+						</div>
+					`;
+				} else {
+					// 联系作者、设置：不可折叠，仅执行功能
+					listHTML += `
+						<div class="list-item" onclick="handleFunctionAction('${item.id}')">
+							<div class="list-item-left">
+								<div class="list-icon">${item.icon}</div>
+								<div class="list-text">${item.text}</div>
+							</div>
+							${item.showBtn ? `<button class="view-btn" onclick="event.stopPropagation(); handleFunctionAction('${item.id}')">${item.btnText}</button>` : ''}
+						</div>
+					`;
+				}
+			});
+
+			// 堆叠空框（保持原样）
+			listHTML += `
+				</div>
 			
-			FUNCTION_LIST_CONFIG.forEach(item => {
-				const text = isEnglishMode ? item.text.en : item.text.zh;
-				const btnText = isEnglishMode ? item.btnText.en : item.btnText.zh;
-				const showBtn = item.showBtn !== false; 
-				
+			`;
+
+			// 剩余功能项（默认隐藏，带展开动画）
+			remainingItems.forEach(item => {
 				listHTML += `
-					<div class="list-item" onclick="handleFunctionAction('${item.id}')">
+					<div class="list-item sub-item" onclick="handleFunctionAction('${item.id}')">
 						<div class="list-item-left">
 							<div class="list-icon">${item.icon}</div>
-							<div class="list-text">${text}</div>
+							<div class="list-text">${item.text}</div>
 						</div>
-						${showBtn ? `<button class="view-btn" onclick="event.stopPropagation(); handleFunctionAction('${item.id}')">${btnText}</button>` : ''}
+						${item.showBtn ? `<button class="view-btn" onclick="event.stopPropagation(); handleFunctionAction('${item.id}')">${item.btnText}</button>` : ''}
 					</div>
 				`;
 			});
-			
+
 			container.innerHTML = listHTML;
 		}
 
-		function handleFunctionAction(itemId) {
-			const item = FUNCTION_LIST_CONFIG.find(item => item.id === itemId);
-			if (!item) return;
+		// 展开/收缩函数
+		function toggleFolder() {
+			folderExpanded = !folderExpanded;
+			const subItems = document.querySelectorAll('.sub-item');
+			subItems.forEach(item => {
+				if (folderExpanded) {
+					item.classList.add('show');
+				} else {
+					item.classList.remove('show');
+				}
+			});
+		}
 
-			switch (item.actionType) {
-				case 'modal':
-					document.getElementById(item.actionTarget).classList.add('show');
-					break;
-				case 'link':
-					showGenericModal(item.actionTarget, isEnglishMode ? item.text.en : item.text.zh, item.linkUrl);
-					break;
-				case 'page':
-					document.getElementById(item.actionTarget).style.display = 'block';
-					break;
-				case 'function':
-					if (typeof window[item.actionTarget] === 'function') {
-						window[item.actionTarget]();
-					}
-					break;
+		// 功能处理函数（保持原样）
+		function handleFunctionAction(itemId){
+			const item=FUNCTION_LIST_CONFIG.find(i=>i.id===itemId);
+			if(!item)return;
+			switch(item.actionType){
+				case'modal':document.getElementById(item.actionTarget).classList.add('show');break;
+				case'link':showGenericModal(item.actionTarget,item.text,item.linkUrl);break;
+				case'page':document.getElementById(item.actionTarget).style.display='block';break;
+				case'function':if(typeof window[item.actionTarget]==='function')window[item.actionTarget]();break;
 			}
 		}
 
-		function handleNavigation(index, event) {
-			if (event) {
-				event.preventDefault();
-			}
-
-			const configItem = NAV_CONFIG[index];
-			const targetPage = getNavLinkPath(configItem);
-			const currentLang = isEnglishMode ? 'en' : 'zh';
-			const pageNames = {
-				0: { zh: '主页', en: 'Home Page' },
-				1: { zh: '作者页', en: 'forum  Page' },
-				2: { zh: '个人中心', en: 'Profile Page' }
-			};
-
-			console.log(`🚀 导航到: ${targetPage}`);
-			window.location.href = targetPage;
+		// 导航处理（保持原样）
+		function handleNavigation(index,event){
+			if(event)event.preventDefault();
+			const configItem=NAV_CONFIG[index];
+			window.location.href=configItem.link;
 			updateNavigationState(index);
 		}
 
-		function updateNavigationState(activeIndex) {
-			const navItems = document.querySelectorAll('.bottom-nav .nav-item');
-			navItems.forEach((item, index) => {
-				if (index === activeIndex) {
-					item.classList.add('active');
-				} else {
-					item.classList.remove('active');
-				}
+		function updateNavigationState(activeIndex){
+			const navItems=document.querySelectorAll('.bottom-nav .nav-item');
+			navItems.forEach((item,index)=>{
+				if(index===activeIndex)item.classList.add('active');
+				else item.classList.remove('active');
 			});
 		}
 
-		/*********************** 多语言相关 *************************/
-		function toggleLanguage() {
-			const checkbox = document.getElementById('languageToggle');
-			isEnglishMode = checkbox.checked;
-			
-			if (isEnglishMode) {
-				translateToEnglish();
-				saveLanguageState(true);
-				setTimeout(() => {
-					generateBottomNav();
-					generateFunctionList();
-				}, 500);
-			} else {
-				translateToChinese();
-				saveLanguageState(false);
-				generateBottomNav();
-				generateFunctionList();
+		// 登录状态管理（保持原样）
+		function saveLoginState(username){
+			localStorage.setItem('username',username);
+			localStorage.setItem('isLoggedIn','true');
+			localStorage.setItem('loginTime',Date.now());
+		}
+
+		function getLoginState(){
+			const isLoggedIn=localStorage.getItem('isLoggedIn')==='true';
+			const username=localStorage.getItem('username');
+			const loginTime=parseInt(localStorage.getItem('loginTime'),10);
+			if(isLoggedIn&&loginTime){
+				const now=Date.now();
+				const oneYear=365*24*60*60*1000;
+				if(now-loginTime>oneYear){clearLoginState();return{isLoggedIn:false,username:null};}
 			}
+			return{isLoggedIn,username};
 		}
 
-		function translateToEnglish() {
-			const elements = document.querySelectorAll('[data-zh][data-en]');
-			elements.forEach(element => {
-				element.textContent = element.getAttribute('data-en');
-			});
-
-			const inputs = document.querySelectorAll('[data-placeholder-zh][data-placeholder-en]');
-			inputs.forEach(input => {
-				input.placeholder = input.getAttribute('data-placeholder-en');
-			});
-
-			document.title = 'Software Search Download';
-			updateErrorMessage('usernameError', 'Username needs at least 2 characters');
-			updateErrorMessage('passwordError', 'Password must be 8-12 characters and include both letters and numbers');
-		}
-
-		function translateToChinese() {
-			const elements = document.querySelectorAll('[data-zh][data-en]');
-			elements.forEach(element => {
-				element.textContent = element.getAttribute('data-zh');
-			});
-
-			const inputs = document.querySelectorAll('[data-placeholder-zh][data-placeholder-en]');
-			inputs.forEach(input => {
-				input.placeholder = input.getAttribute('data-placeholder-zh');
-			});
-
-			document.title = '软件搜索下载';
-			updateErrorMessage('usernameError', '账号至少需要2位字符');
-			updateErrorMessage('passwordError', '密码需8-12位，且必须包含英文和数字');
-		}
-
-		function updateErrorMessage(elementId, message) {
-			const errorElement = document.getElementById(elementId);
-			errorElement.textContent = message;
-		}
-
-		function checkLanguageState() {
-			const savedIsEnglish = getLanguageState();
-			const checkbox = document.getElementById('languageToggle');
-			checkbox.checked = savedIsEnglish;
-			isEnglishMode = savedIsEnglish;
-			
-			if (savedIsEnglish) {
-				translateToEnglish();
-			} else {
-				translateToChinese();
-			}
-			
-			generateBottomNav();
-			generateFunctionList();
-		}
-
-		/*********************** 登录相关 *************************/
-		function saveLoginState(username) {
-			localStorage.setItem('username', username);
-			localStorage.setItem('isLoggedIn', 'true');
-			localStorage.setItem('loginTime', new Date().getTime());
-		}
-
-		function getLoginState() {
-			const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true';
-			const username = localStorage.getItem('username');
-			const loginTime = localStorage.getItem('loginTime');
-			
-			if (isLoggedIn && loginTime) {
-				const now = new Date().getTime();
-				const oneYear = 365 * 24 * 60 * 60 * 1000;
-				if (now - parseInt(loginTime) > oneYear) {
-					clearLoginState();
-					return { isLoggedIn: false, username: null };
-				}
-			}
-			
-			return { isLoggedIn, username };
-		}
-
-		function clearLoginState() {
+		function clearLoginState(){
 			localStorage.removeItem('username');
 			localStorage.removeItem('isLoggedIn');
 			localStorage.removeItem('loginTime');
 		}
 
-		function extractVersionFromHTML() {
-			const titleMatch = document.title.match(/(\d+\.\d+)/);
-			if (titleMatch) {
-				return `版本 ${titleMatch[1]} 内测版`;
-			}
-			return '版本 1.4';
+		function extractVersionFromHTML(){
+			const match=document.title.match(/(\d+\.\d+)/);
+			return match?`版本 ${match[1]} 内测版`:'版本 2.1';
 		}
 
-		function validateUsername(username) {
-			return username && username.length >= 2;
+		function validateUsername(username){return username&&username.length>=2;}
+		function validatePassword(password){
+			if(!password||password.length<8||password.length>12)return false;
+			return/[a-zA-Z]/.test(password)&&/\d/.test(password);
 		}
 
-		function validatePassword(password) {
-			if (!password || password.length < 8 || password.length > 12) {
-				return false;
-			}
-			const hasLetter = /[a-zA-Z]/.test(password);
-			const hasNumber = /\d/.test(password);
-			return hasLetter && hasNumber;
-		}
-
-		function showLoginModal() {
+		// 登录弹窗控制（保持原样）
+		function showLoginModal(){
 			document.getElementById('loginModal').classList.add('show');
 			document.getElementById('username').focus();
 		}
 
-		function closeLoginModal(event) {
-			if (event && event.target !== document.getElementById('loginModal')) return;
+		function closeLoginModal(event){
+			if(event&&event.target!==document.getElementById('loginModal'))return;
 			document.getElementById('loginModal').classList.remove('show');
 			clearErrors();
 			document.getElementById('loginForm').reset();
 		}
 
-		function clearErrors() {
-			document.getElementById('usernameError').style.display = 'none';
-			document.getElementById('passwordError').style.display = 'none';
+		function clearErrors(){
+			document.getElementById('usernameError').style.display='none';
+			document.getElementById('passwordError').style.display='none';
 		}
 
-		function showError(elementId, message) {
-			const errorElement = document.getElementById(elementId);
-			errorElement.textContent = message;
-			errorElement.style.display = 'block';
+		function showError(elementId,message){
+			const el=document.getElementById(elementId);
+			el.textContent=message;
+			el.style.display='block';
 		}
 
-		function handleLogin(event) {
-			event.preventDefault();
-			
-			const username = document.getElementById('username').value.trim();
-			const password = document.getElementById('password').value;
-
+		function handleLogin(e){
+			e.preventDefault();
+			const username=document.getElementById('username').value.trim();
+			const password=document.getElementById('password').value;
 			clearErrors();
-
-			let isValid = true;
-
-			if (!validateUsername(username)) {
-				showError('usernameError', isEnglishMode ? 'Username needs at least 2 characters' : '账号至少需要2位字符');
-				isValid = false;
-			}
-
-			if (!validatePassword(password)) {
-				showError('passwordError', isEnglishMode ? 'Password must be 8-12 characters and include both letters and numbers' : '密码需8-12位，且必须包含英文和数字');
-				isValid = false;
-			}
-
-			if (!isValid) return;
-
+			let valid=true;
+			if(!validateUsername(username)){showError('usernameError','账号至少需要2位字符');valid=false;}
+			if(!validatePassword(password)){showError('passwordError','密码需8-12位，且必须包含英文和数字');valid=false;}
+			if(!valid)return;
 			saveLoginState(username);
 			updateUserInterface(username);
 			closeLoginModal();
-			alert(isEnglishMode ? 'Login successful! Welcome ' + username : '登录成功！欢迎 ' + username);
+			alert('登录成功！欢迎 '+username);
 		}
 
-		function logout() {
-			const confirmMsg = isEnglishMode ? 'Are you sure you want to log out?' : '确定退出登录吗？';
-			if (confirm(confirmMsg)) {
+		function logout(){
+			if(confirm('确定退出登录吗？')){
 				clearLoginState();
 				updateUserInterface(null);
-				alert(isEnglishMode ? 'Logged out successfully' : '已退出登录');
+				alert('已退出登录');
 			}
 		}
 
-		function updateUserInterface(username) {
-			const welcomeText = document.getElementById('welcomeText');
-			const loginStatus = document.getElementById('loginStatus');
-			const logoutBtn = document.getElementById('logoutBtn');
-
-			if (username) {
-				welcomeText.textContent = isEnglishMode ? `Welcome, ${username}` : `欢迎您，${username}`;
-				loginStatus.textContent = isEnglishMode ? 'Logged in' : '已登录';
-				loginStatus.onclick = null;
-				logoutBtn.style.display = 'inline-block';
-			} else {
-				welcomeText.textContent = isEnglishMode ? 'Welcome to visit' : '欢迎访问';
-				loginStatus.textContent = isEnglishMode ? 'Click to login' : '点击登录';
-				loginStatus.onclick = showLoginModal;
-				logoutBtn.style.display = 'none';
+		function updateUserInterface(username){
+			const welcomeText=document.getElementById('welcomeText');
+			const loginStatus=document.getElementById('loginStatus');
+			const logoutBtn=document.getElementById('logoutBtn');
+			if(username){
+				welcomeText.textContent='欢迎您，'+username;
+				loginStatus.textContent='已登录';
+				loginStatus.onclick=null;
+				logoutBtn.style.display='inline-block';
+			}else{
+				welcomeText.textContent='欢迎访问';
+				loginStatus.textContent='点击登录';
+				loginStatus.onclick=showLoginModal;
+				logoutBtn.style.display='none';
 			}
 		}
 
-		function checkLoginStatus() {
-			const loginState = getLoginState();
-			if (loginState.isLoggedIn && loginState.username) {
-				updateUserInterface(loginState.username);
-			}
+		function checkLoginStatus(){
+			const state=getLoginState();
+			if(state.isLoggedIn&&state.username)updateUserInterface(state.username);
 		}
 
-		/*********************** 联系作者 & 链接弹窗相关 *************************/
-		function showContactModal() {
-			document.getElementById('contactModal').classList.add('show');
-		}
-
-		function closeContactModal(event) {
-			if (event && event.target !== document.getElementById('contactModal')) return;
+		// 联系作者弹窗控制（保持原样）
+		function showContactModal(){document.getElementById('contactModal').classList.add('show');}
+		function closeContactModal(event){
+			if(event&&event.target!==document.getElementById('contactModal'))return;
 			document.getElementById('contactModal').classList.remove('show');
 		}
 
-		function copyQQFromModal() {
-			const qqNumber = '2019947085';
-			
-			const textArea = document.createElement("textarea");
-			textArea.value = qqNumber;
-			textArea.style.top = "0";
-			textArea.style.left = "0";
-			textArea.style.position = "fixed";
-			textArea.style.opacity = "0";
-			
+		function copyQQFromModal(){
+			const qq='2019947085';
+			const textArea=document.createElement("textarea");
+			textArea.value=qq;
+			textArea.style.position="fixed";
+			textArea.style.opacity=0;
 			document.body.appendChild(textArea);
 			textArea.focus();
 			textArea.select();
-			
-			try {
-				const successful = document.execCommand('copy');
-				if (successful) {
-					showCopySuccess();
-					setTimeout(() => {
-						closeContactModal({ target: document.getElementById('contactModal') });
-					}, 1500);
-				} else {
-					alert(isEnglishMode ? 'Copy failed, please manually copy QQ number: ' + qqNumber : '复制失败，请手动复制QQ号：' + qqNumber);
-				}
-			} catch (err) {
-				console.error('复制失败: ', err);
-				alert(isEnglishMode ? 'Copy failed, please manually copy QQ number: ' + qqNumber : '复制失败，请手动复制QQ号：' + qqNumber);
-			}
-			
+			try{
+				if(document.execCommand('copy')){showCopySuccess();setTimeout(()=>closeContactModal({target:document.getElementById('contactModal')}),1500);}
+				else alert('复制失败，请手动复制QQ号：'+qq);
+			}catch(err){alert('复制失败，请手动复制QQ号：'+qq);}
 			document.body.removeChild(textArea);
 		}
 
-		function showCopySuccess() {
-			const modal = document.getElementById('copySuccessModal');
-			modal.textContent = isEnglishMode ? 'Copied to clipboard' : '已复制到剪贴板';
+		function showCopySuccess(){
+			const modal=document.getElementById('copySuccessModal');
+			modal.textContent='已复制到剪贴板';
 			modal.classList.add('show');
-			setTimeout(() => {
-				modal.classList.remove('show');
-			}, 2000);
+			setTimeout(()=>modal.classList.remove('show'),2000);
 		}
 
-		/*********************** 通知 & 设置相关 *************************/
-		function showWeChatNotification() {
-			const notification = document.getElementById('wechatNotification');
-			notification.classList.add('show');
-		}
+		// 关于我们弹窗（原功能）
+		function showWeChatNotification(){document.getElementById('wechatNotification').classList.add('show');}
+		function hideWeChatNotification(){document.getElementById('wechatNotification').classList.remove('show');}
 
-		function hideWeChatNotification() {
-			const notification = document.getElementById('wechatNotification');
-			notification.classList.remove('show');
-		}
-
-		let lastShowTime = 0;
-		const COOLDOWN_TIME = 3000;
-
-		function showAboutNotification() {
-			const currentTime = new Date().getTime();
-			
-			if (currentTime - lastShowTime < COOLDOWN_TIME) {
-				return;
-			}
-			
+		let lastShowTime=0;
+		const COOLDOWN=3000;
+		function showAboutNotification(){
+			const now=Date.now();
+			if(now-lastShowTime<COOLDOWN)return;
 			showWeChatNotification();
-			lastShowTime = currentTime;
-			
-			setTimeout(() => {
-				hideWeChatNotification();
-			}, 3000);
+			lastShowTime=now;
+			setTimeout(hideWeChatNotification,3000);
 		}
 
-		function goToSettings() {
-			document.getElementById('functionListContainer').style.display = 'none';
-			document.getElementById('settingsPage').style.display = 'block';
-			
-			const version = extractVersionFromHTML();
-			document.getElementById('settingsVersionDisplay').textContent = version.replace('版本 ', '');
+		// 设置页面（保持原样）
+		function goToSettings(){
+			document.getElementById('functionListContainer').style.display='none';
+			document.getElementById('settingsPage').style.display='block';
+			const ver=extractVersionFromHTML();
+			document.getElementById('settingsVersionDisplay').textContent=ver.replace('版本 ','');
 		}
 
-		function hideSettings() {
-			document.getElementById('settingsPage').style.display = 'none';
-			document.getElementById('functionListContainer').style.display = 'block';
+		function hideSettings(){
+			document.getElementById('settingsPage').style.display='none';
+			document.getElementById('functionListContainer').style.display='block';
 		}
 
-		function hideAbout() {
-			document.getElementById('aboutPage').style.display = 'none';
-		}
+		function hideAbout(){document.getElementById('aboutPage').style.display='none';}
 
-		/*********************** 霸王条款相关 *************************/
-		function loadTermsContent() {
-			const termsContent = document.getElementById('termsContent');
-			
-			const xhr = new XMLHttpRequest();
-			xhr.open('GET', '霸王条款.txt', true);
-			xhr.onreadystatechange = function() {
-				if (xhr.readyState === 4) {
-					if (xhr.status === 200) {
-						const content = xhr.responseText;
-						termsContent.innerHTML = content.replace(/\n/g, '<br>');
-					} else {
-						termsContent.innerHTML = '<div class="error-text">' + (isEnglishMode ? 'Failed to read terms. Please ensure "霸王条款.txt" file exists in the same directory' : '读取霸王条款失败，请确保"霸王条款.txt"文件存在于同目录下') + '</div>';
-					}
+		// 霸王条款（保持原样）
+		function loadTermsContent(){
+			const xhr=new XMLHttpRequest();
+			xhr.open('GET','霸王条款.txt',true);
+			xhr.onreadystatechange=function(){
+				if(xhr.readyState===4){
+					const contentDiv=document.getElementById('termsContent');
+					if(xhr.status===200)contentDiv.innerHTML=xhr.responseText.replace(/\n/g,'<br>');
+					else contentDiv.innerHTML='<div class="error-text">读取霸王条款失败，请确保"霸王条款.txt"文件存在于同目录下</div>';
 				}
 			};
 			xhr.send();
 		}
 
-		function showTermsModal() {
-			document.getElementById('termsContent').innerHTML = '<div class="loading-text">' + (isEnglishMode ? 'Loading terms...' : '正在加载条款内容...') + '</div>';
+		function showTermsModal(){
+			document.getElementById('termsContent').innerHTML='<div class="loading-text">正在加载条款内容...</div>';
 			document.getElementById('termsOverlay').classList.add('show');
 			loadTermsContent();
 		}
 
-		function closeTermsModal(event) {
-			if (!event || event.target === document.getElementById('termsOverlay') || event.target.classList.contains('terms-close')) {
+		function closeTermsModal(event){
+			if(!event||event.target===document.getElementById('termsOverlay')||event.target.classList.contains('terms-close')){
 				document.getElementById('termsOverlay').classList.remove('show');
 			}
 		}
 
-		/*********************** 初始化 *************************/
-		document.getElementById('loginForm').addEventListener('submit', handleLogin);
+		// 初始化（保持原样）
+		document.getElementById('loginForm').addEventListener('submit',handleLogin);
 		checkLoginStatus();
-		checkLanguageState();
+		generateBottomNav();
+		generateFunctionList();
 
-		document.addEventListener('DOMContentLoaded', function() {
+		document.addEventListener('DOMContentLoaded',()=>{
 			console.log('🔧 可配置导航系统已初始化');
-			console.log('📁 请确保图片文件位于同目录下:', NAV_CONFIG.map(item => item.icon).join(', '));
+			console.log('📁 请确保图片文件位于同目录下:',NAV_CONFIG.map(i=>i.icon).join(', '));
 		});
 	</script>
 </body>

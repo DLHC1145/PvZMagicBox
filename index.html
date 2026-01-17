@@ -10,24 +10,24 @@
 			width: 100vw;
 			height: 100vh;
 			overflow: hidden;
-			background: url("图片.jpg") no-repeat center center;
+			background: url("2.0pvz.jpg") no-repeat center center;
 			background-size: cover;
 		}
 	</style>
 </head>
 <body>
 <script>
-const localVer = 1.2;
+const localVer = 9999;
 fetch('https://dlhc1145.github.io/PvZMagicBox/版本号.txt')
 .then(res => res.text())
 .then(remoteStr => {
 	const remoteVer = Number(remoteStr.trim());
 	setTimeout(() => {
 		window.location.href = localVer - remoteVer <= -0.1 ? '版本过低.html' : 'indexhome.html';
-	}, 2000);
+	}, 900);
 })
 .catch(() => {
-	setTimeout(() => window.location.href = 'indexhome.html', 500);
+	setTimeout(() => window.location.href = 'indexhome.html', 10);
 });
 </script>
 </body>

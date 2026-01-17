@@ -361,15 +361,13 @@
 					<ul>
 						<li>将游戏RTON文件转换为JSON进行查看和编辑</li>
 						<li>将修改后的JSON转换回RTON格式用于游戏</li>
-						<li>处理游戏进度文件(pp.dat)和资源文件(.rton)</li>
 					</ul>
-					<p>转换完全在浏览器中进行，您的文件不会上传到任何服务器，确保数据安全。</p>
-				</div>
+
 			</section>
 		</div>
 		
 		<footer>
-			<p>RTON ⇄ JSON 在线转换器 &copy; 2023 | 数据在浏览器本地处理，不会上传到服务器</p>
+			<p>RTON ⇄ JSON 在线转换器 &copy; 2025 | 数据在浏览器本地处理，爱来自红茶</p>
 		</footer>
 	</div>
 
@@ -437,8 +435,13 @@
 					output.value = jsonResult;
 					showSuccess(successDiv, '转换成功！');
 				} else if (action === 'download') {
-					downloadFile(jsonResult, 'converted.json', 'application/json');
-					showSuccess(successDiv, '文件下载成功！');
+					// 使用修复的下载函数
+					const success = await downloadFileFixed(jsonResult, 'converted.json', 'application/json');
+					if (success) {
+						showSuccess(successDiv, '文件下载成功！');
+					} else {
+						throw new Error('下载失败，请检查浏览器设置或手动保存');
+					}
 				}
 				
 			} catch (error) {
@@ -490,18 +493,35 @@
 				
 				const json2rton = new JSON2RTON();
 				json2rton.set(jsonData);
-				const rtonResult = json2rton.get("hex");
+				let rtonResult = json2rton.get("hex");
+				
+				// 确保十六进制字符串是完整的
+				rtonResult = rtonResult.replace(/\s/g, '');
+				if (rtonResult.length % 2 !== 0) {
+					throw new Error('RTON转换结果格式错误');
+				}
 				
 				hideLoading(loading);
 				
 				if (action === 'view') {
-					output.value = rtonResult;
+					// 格式化显示，每2个字符一组
+					let formatted = '';
+					for (let i = 0; i < rtonResult.length; i += 2) {
+						formatted += rtonResult.substr(i, 2) + ' ';
+						if ((i + 2) % 32 === 0) formatted += '\n';
+					}
+					output.value = formatted.trim();
 					showSuccess(successDiv, '转换成功！');
 				} else if (action === 'download') {
 					// 将十六进制转换为二进制进行下载
-					const binaryData = hexStringToArrayBuffer(rtonResult.replace(/\s/g, ''));
-					downloadFile(binaryData, 'converted.rton', 'application/octet-stream');
-					showSuccess(successDiv, '文件下载成功！');
+					const binaryData = hexStringToArrayBuffer(rtonResult);
+					// 使用修复的下载函数
+					const success = await downloadFileFixed(binaryData, 'converted.rton', 'application/octet-stream');
+					if (success) {
+						showSuccess(successDiv, '文件下载成功！');
+					} else {
+						throw new Error('下载失败，请检查浏览器设置或手动保存');
+					}
 				}
 				
 			} catch (error) {
@@ -532,12 +552,115 @@
 			document.getElementById('jsonLoading').style.display = 'none';
 		}
 		
+		// 修复的下载函数 - 确保在所有设备上都能下载
+		async function downloadFileFixed(data, filename, mimeType) {
+			return new Promise((resolve) => {
+				try {
+					// 确保数据是正确格式
+					let blobData = data;
+					if (typeof data === 'string') {
+						// 如果是字符串，直接创建Blob
+						blobData = new Blob([data], { type: mimeType });
+					} else if (data instanceof Uint8Array || data instanceof ArrayBuffer) {
+						// 如果是二进制数据
+						blobData = new Blob([data], { type: mimeType });
+					} else {
+						// 其他类型的数据
+						blobData = new Blob([JSON.stringify(data)], { type: mimeType });
+					}
+					
+					// 创建对象URL
+					const url = URL.createObjectURL(blobData);
+					
+					// 创建下载链接
+					const a = document.createElement('a');
+					a.href = url;
+					a.download = filename || 'download';
+					
+					// 添加必要的属性
+					a.style.display = 'none';
+					a.setAttribute('download', filename);
+					
+					// 添加到DOM（某些浏览器需要）
+					document.body.appendChild(a);
+					
+					// 创建并触发点击事件
+					const clickEvent = new MouseEvent('click', {
+						view: window,
+						bubbles: true,
+						cancelable: true
+					});
+					
+					// 触发下载
+					a.dispatchEvent(clickEvent);
+					
+					// 延迟清理
+					setTimeout(() => {
+						try {
+							document.body.removeChild(a);
+							URL.revokeObjectURL(url);
+						} catch (e) {
+							// 忽略清理错误
+						}
+						resolve(true);
+					}, 1000);
+					
+				} catch (error) {
+					console.error('下载错误:', error);
+					
+					// 备用方案1：通过iframe下载
+					try {
+						const blob = new Blob([data], { type: mimeType });
+						const url = URL.createObjectURL(blob);
+						
+						const iframe = document.createElement('iframe');
+						iframe.style.display = 'none';
+						iframe.src = url;
+						document.body.appendChild(iframe);
+						
+						setTimeout(() => {
+							try {
+								document.body.removeChild(iframe);
+								URL.revokeObjectURL(url);
+							} catch (e) {
+								// 忽略清理错误
+							}
+							resolve(true);
+						}, 1000);
+					} catch (iframeError) {
+						console.error('iframe下载失败:', iframeError);
+						
+						// 备用方案2：通过新窗口下载
+						try {
+							const blob = new Blob([data], { type: mimeType });
+							const url = URL.createObjectURL(blob);
+							
+							const newWindow = window.open(url, '_blank');
+							
+							setTimeout(() => {
+								try {
+									if (newWindow) newWindow.close();
+									URL.revokeObjectURL(url);
+								} catch (e) {
+									// 忽略清理错误
+								}
+								resolve(true);
+							}, 1000);
+						} catch (windowError) {
+							console.error('新窗口下载失败:', windowError);
+							resolve(false);
+						}
+					}
+				}
+			});
+		}
+		
 		// 工具函数
 		function readFileAsArrayBuffer(file) {
 			return new Promise((resolve, reject) => {
 				const reader = new FileReader();
 				reader.onload = () => resolve(reader.result);
-				reader.onerror = reject;
+				reader.onerror = (e) => reject(new Error('文件读取失败: ' + e.target.error));
 				reader.readAsArrayBuffer(file);
 			});
 		}
@@ -546,7 +669,7 @@
 			return new Promise((resolve, reject) => {
 				const reader = new FileReader();
 				reader.onload = () => resolve(reader.result);
-				reader.onerror = reject;
+				reader.onerror = (e) => reject(new Error('文件读取失败: ' + e.target.error));
 				reader.readAsText(file);
 			});
 		}
@@ -558,6 +681,12 @@
 			// 验证十六进制字符串
 			if (hexString.length % 2 !== 0) {
 				throw new Error('无效的十六进制字符串');
+			}
+			
+			// 验证十六进制字符
+			const hexRegex = /^[0-9A-Fa-f]+$/;
+			if (!hexRegex.test(hexString)) {
+				throw new Error('包含无效的十六进制字符');
 			}
 			
 			const buffer = new Uint8Array(hexString.length / 2);
@@ -572,27 +701,27 @@
 		function showError(errorDiv, message) {
 			errorDiv.textContent = message;
 			errorDiv.style.display = 'block';
+			
+			// 5秒后自动隐藏错误信息
+			setTimeout(() => {
+				errorDiv.style.display = 'none';
+			}, 5000);
 		}
 		
 		function showSuccess(successDiv, message) {
 			successDiv.textContent = message;
 			successDiv.style.display = 'block';
+			
+			// 3秒后自动隐藏成功信息
+			setTimeout(() => {
+				successDiv.style.display = 'none';
+			}, 3000);
 		}
 		
 		function hideLoading(loadingElement) {
-			loadingElement.style.display = 'none';
-		}
-		
-		function downloadFile(data, filename, mimeType) {
-			const blob = new Blob([data], {type: mimeType});
-			const url = URL.createObjectURL(blob);
-			const a = document.createElement('a');
-			a.href = url;
-			a.download = filename;
-			document.body.appendChild(a);
-			a.click();
-			document.body.removeChild(a);
-			URL.revokeObjectURL(url);
+			if (loadingElement) {
+				loadingElement.style.display = 'none';
+			}
 		}
 	</script>
 </body>

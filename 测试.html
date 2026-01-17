@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="UTF-8">
+	<title>智能僵尸添加器 - 增强版</title>
+	<script src="https://unpkg.com/jszip@3.10.1/dist/jszip.min.js"></script>
+	<script src="https://unpkg.com/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+	<style>
+		* { margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, sans-serif; }
+		body { background: #0f172a; color: #e2e8f0; padding: 20px; }
+		.container { max-width: 1400px; margin: 0 auto; }
+		header { background: #1e293b; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+		h1 { color: #60a5fa; margin-bottom: 10px; }
+		
+		.config-panel {
+			display: grid;
+			grid-template-columns: 1fr 1fr;
+			gap: 20px;
+			margin: 20px 0;
+		}
+		
+		.panel {
+			background: #1e293b;
+			padding: 20px;
+			border-radius: 8px;
+			border: 1px solid #334155;
+		}
+		
+		.panel h3 {
+			color: #60a5fa;
+			margin-bottom: 15px;
+		}
+		
+		.upload-area {
+			border: 2px dashed #3b82f6;
+			border-radius: 8px;
+			padding: 30px;
+			text-align: center;
+			background: rgba(30, 64, 175, 0.1);
+			cursor: pointer;
+			margin: 10px 0;
+			transition: all 0.3s;
+		}
+		
+		.upload-area:hover { background: rgba(30, 64, 175, 0.2); }
+		
+		textarea, input {
+			width: 100%;
+			padding: 10px;
+			margin: 5px 0;
+			background: #0f172a;
+			border: 1px solid #334155;
+			border-radius: 4px;
+			color: #e2e8f0;
+			font-family: 'Consolas', monospace;
+		}
+		
+		textarea { height: 120px; }
+		
+		.info-text {
+			color: #94a3b8;
+			font-size: 12px;
+			margin-top: 5px;
+		}
+		
+		button {
+			background: #3b82f6;
+			color: white;
+			border: none;
+			padding: 12px 24px;
+			border-radius: 6px;
+			cursor: pointer;
+			font-weight: bold;
+			margin: 5px;
+			transition: all 0.3s;
+		}
+		
+		button:hover { background: #2563eb; transform: translateY(-2px); }
+		button:disabled { background: #64748b; cursor: not-allowed; }
+		
+		.log {
+			background: #1e293b;
+			padding: 15px;
+			border-radius: 8px;
+			margin-top: 20px;
+			font-family: 'Consolas', monospace;
+			font-size: 13px;
+			white-space: pre-wrap;
+			max-height: 500px;
+			overflow-y: auto;
+		}
+		
+		.success { color: #4ade80; }
+		.warning { color: #fbbf24; }
+		.error { color: #f87171; }
+		.info { color: #60a5fa; }
+		.new-wave { color: #a855f7; }
+		
+		.wave-preview {
+			margin-top: 10px;
+			padding: 10px;
+			background: #0f172a;
+			border-radius: 4px;
+			border: 1px dashed #334155;
+		}
+		
+		.wave-item {
+			display: inline-block;
+			background: rgba(59, 130, 246, 0.2);
+			padding: 4px 8px;
+			margin: 2px;
+			border-radius: 4px;
+			font-size: 12px;
+		}
+	</style>
+</head>
+<body>
+	<div class="container">
+		<header>
+			<h1>🧬 智能僵尸添加器 - 增强版</h1>
+			<p>支持批量添加僵尸、智能波次判断、自定义僵尸名称</p>
+		</header>
+		
+		<div class="config-panel">
+			<div class="panel">
+				<h3>📁 文件上传</h3>
+				<div class="upload-area" onclick="document.getElementById('fileInput').click()">
+					点击选择ZIP文件，或拖放文件到这里
+					<div class="info-text">支持包含多个JSON文件的ZIP压缩包</div>
+				</div>
+				<input type="file" id="fileInput" accept=".zip" style="display: none;">
+				
+				<div id="fileInfo" style="margin-top: 10px;"></div>
+			</div>
+			
+			<div class="panel">
+				<h3>⚙️ 配置选项</h3>
+				
+				<label>要添加的僵尸名称（每行一个）:</label>
+				<textarea id="zombieNames" placeholder="输入僵尸RTID，每行一个
+例如：
+respro@ZombieTypes
+zombie_king@ZombieTypes
+gargantuar@ZombieTypes"></textarea>
+				<div class="info-text">格式：僵尸类型@ZombieTypes</div>
+				
+				<label>波数（每行一个，留空则智能判断）:</label>
+				<textarea id="waveNumbers" placeholder="输入波数，每行一个
+例如：
+1
+2
+3
+留空则自动判断"></textarea>
+				<div class="info-text">留空则自动检测并添加到合适的波次</div>
+				
+				<div id="wavePreview" class="wave-preview"></div>
+			</div>
+		</div>
+		
+		<div>
+			<button onclick="processZip()">开始处理</button>
+			<button onclick="downloadResult()" id="downloadBtn" disabled>下载处理结果</button>
+			<button onclick="resetAll()">重置</button>
+		</div>
+		
+		<div class="log" id="log">等待配置...</div>
+	</div>
+
+	<script>
+		let originalZip = null;
+		let processedZip = null;
+		let logElement = document.getElementById('log');
+		let fileInfoElement = document.getElementById('fileInfo');
+		let wavePreviewElement = document.getElementById('wavePreview');
+		
+		// 解析僵尸名称
+		function parseZombieNames() {
+			const input = document.getElementById('zombieNames').value.trim();
+			if (!input) {
+				addLog('⚠️ 请输入要添加的僵尸名称', 'warning');
+				return null;
+			}
+			
+			const lines = input.split('\n')
+				.map(line => line.trim())
+				.filter(line => line.length > 0);
+			
+			const zombies = lines.map(line => {
+				if (!line.includes('@ZombieTypes')) {
+					return `${line}@ZombieTypes`;
+				}
+				return line;
+			});
+			
+			addLog(`📋 解析到 ${zombies.length} 个僵尸: ${zombies.join(', ')}`, 'info');
+			return zombies;
+		}
+		
+		// 解析波数
+		function parseWaveNumbers() {
+			const input = document.getElementById('waveNumbers').value.trim();
+			if (!input) {
+				addLog('🔍 未指定波数，将自动判断', 'info');
+				return null;
+			}
+			
+			const lines = input.split('\n')
+				.map(line => line.trim())
+				.filter(line => line.length > 0)
+				.map(line => parseInt(line));
+			
+			if (lines.some(isNaN)) {
+				addLog('❌ 波数必须是数字', 'error');
+				return null;
+			}
+			
+			addLog(`🌊 指定波数: ${lines.join(', ')}`, 'info');
+			return lines;
+		}
+		
+		document.getElementById('fileInput').addEventListener('change', async (e) => {
+			const file = e.target.files[0];
+			if (!file) return;
+			
+			if (!file.name.toLowerCase().endsWith('.zip')) {
+				addLog('❌ 请选择ZIP文件', 'error');
+				return;
+			}
+			
+			fileInfoElement.innerHTML = `<span class="info">📦 已选择: ${file.name} (${(file.size/1024/1024).toFixed(2)} MB)</span>`;
+			addLog(`📦 已选择文件: ${file.name}`, 'info');
+			originalZip = file;
+		});
+		
+		async function processZip() {
+			if (!originalZip) {
+				addLog('❌ 请先选择ZIP文件', 'error');
+				return;
+			}
+			
+			const zombies = parseZombieNames();
+			if (!zombies) return;
+			
+			const waveNumbers = parseWaveNumbers();
+			
+			addLog('🚀 开始处理ZIP文件...', 'info');
+			
+			try {
+				const zip = await JSZip.loadAsync(originalZip);
+				const newZip = new JSZip();
+				let processedCount = 0;
+				let modifiedCount = 0;
+				let stats = {
+					escalationMode: 0,
+					waveMode: 0,
+					newWaveCreated: 0,
+					zombiesAdded: 0,
+					wavesModified: 0
+				};
+				
+				for (const [filename, file] of Object.entries(zip.files)) {
+					if (!file.dir && filename.toLowerCase().endsWith('.json')) {
+						addLog(`\n📄 处理文件: ${filename}`, 'info');
+						processedCount++;
+						
+						try {
+							const content = await file.async('text');
+							const result = processJsonFile(content, filename, zombies, waveNumbers, stats);
+							
+							if (result.modified) {
+								newZip.file(filename, result.content);
+								modifiedCount++;
+							} else {
+								newZip.file(filename, content);
+							}
+						} catch (err) {
+							addLog(`⚠️ 处理失败: ${err.message}`, 'warning');
+							newZip.file(filename, await file.async('string'));
+						}
+					} else if (!file.dir) {
+						newZip.file(filename, await file.async('arraybuffer'));
+					}
+				}
+				
+				processedZip = await newZip.generateAsync({type: 'blob'});
+				
+				// 显示统计信息
+				addLog(`\n📊 ======== 处理统计 ========`, 'info');
+				addLog(`   总处理文件数: ${processedCount}`, 'info');
+				addLog(`   已修改文件数: ${modifiedCount}`, 'success');
+				addLog(`\n📋 处理详情:`, 'info');
+				addLog(`   • 随机出怪模式: ${stats.escalationMode} 个`, 'info');
+				addLog(`   • 常规波次模式: ${stats.waveMode} 个`, 'info');
+				addLog(`   • 新建波次: ${stats.newWaveCreated} 个`, 'new-wave');
+				addLog(`   • 添加僵尸数: ${stats.zombiesAdded} 个`, 'success');
+				addLog(`   • 修改波次数: ${stats.wavesModified} 个`, 'success');
+				
+				addLog('\n✅ 处理完成！', 'success');
+				document.getElementById('downloadBtn').disabled = false;
+				
+			} catch (err) {
+				addLog(`❌ 处理失败: ${err.message}`, 'error');
+			}
+		}
+		
+		function processJsonFile(content, filename, zombies, waveNumbers, stats) {
+			let json;
+			
+			try {
+				json = JSON.parse(content);
+			} catch (err) {
+				try {
+					const fixed = content.replace(/([{,]\s*)(\w+)(\s*:)/g, '$1"$2"$3');
+					json = JSON.parse(fixed);
+					addLog('  🔧 已修复JSON格式', 'warning');
+				} catch (err2) {
+					addLog(`  ❌ JSON解析失败: ${err2.message}`, 'error');
+					return { modified: false, content: null };
+				}
+			}
+			
+			if (!json.objects || !Array.isArray(json.objects)) {
+				addLog('  ⚠️ 无objects数组，跳过', 'warning');
+				return { modified: false, content: null };
+			}
+			
+			// 查找关卡模式
+			let hasEscalation = false;
+			let escalationModule = null;
+			let waveManager = null;
+			let totalWaves = 0;
+			
+			for (let obj of json.objects) {
+				if (obj.objclass === 'LevelEscalationModuleProperties' && obj.objdata) {
+					hasEscalation = true;
+					escalationModule = obj;
+				}
+				if (obj.objclass === 'WaveManagerProperties' && obj.objdata && obj.objdata.Waves) {
+					waveManager = obj;
+					totalWaves = obj.objdata.Waves ? obj.objdata.Waves.length : 0;
+				}
+			}
+			
+			addLog(`  📈 总波数: ${totalWaves}`, 'info');
+			
+			let modified = false;
+			
+			// 模式1: 随机出怪模式
+			if (hasEscalation && escalationModule) {
+				const zombiePool = escalationModule.objdata.ZombiePool;
+				if (zombiePool && Array.isArray(zombiePool)) {
+					let addedCount = 0;
+					for (const zombie of zombies) {
+						const zombieRTID = `RTID(${zombie})`;
+						if (!zombiePool.includes(zombieRTID)) {
+							zombiePool.push(zombieRTID);
+							addedCount++;
+							stats.zombiesAdded++;
+						}
+					}
+					if (addedCount > 0) {
+						addLog(`  ✅ 已在ZombiePool中添加 ${addedCount} 个僵尸`, 'success');
+						modified = true;
+						stats.escalationMode++;
+					} else {
+						addLog('  ⏭️ ZombiePool已包含所有指定僵尸', 'warning');
+					}
+				}
+			}
+			
+			// 模式2: 常规波次模式
+			if (waveManager && waveManager.objdata && waveManager.objdata.Waves) {
+				const waves = waveManager.objdata.Waves;
+				
+				// 确定要处理的波次
+				let wavesToProcess = [];
+				if (waveNumbers) {
+					// 使用指定的波数
+					wavesToProcess = waveNumbers
+						.map(num => num - 1) // 转换为0-based索引
+						.filter(index => index >= 0 && index < waves.length);
+				} else {
+					// 自动判断：尝试前3波
+					wavesToProcess = [0, 1, 2].filter(index => index < waves.length);
+				}
+				
+				if (wavesToProcess.length === 0) {
+					addLog('  ⚠️ 无有效波次可处理', 'warning');
+				} else {
+					addLog(`  🌊 处理波次: ${wavesToProcess.map(i => i+1).join(', ')}`, 'info');
+					
+					for (const waveIndex of wavesToProcess) {
+						const waveItems = waves[waveIndex];
+						if (!waveItems || waveItems.length === 0) continue;
+						
+						// 查找这个波次中的僵尸波
+						for (let waveItem of waveItems) {
+							const cleanName = waveItem.replace(/^RTID\(|\)$/g, '').split('@')[0];
+							
+							for (let obj of json.objects) {
+								if (obj.aliases && obj.aliases.includes(cleanName) && 
+									obj.objdata && obj.objdata.Zombies &&
+									(obj.objclass === 'SpawnZombiesJitteredWaveActionProps' || 
+									 obj.objclass === 'SpawnZombiesWaveActionProps' ||
+									 obj.objclass === 'SpawnZombiesRandomWaveActionProps')) {
+									
+									let addedCount = 0;
+									for (const zombie of zombies) {
+										const hasZombie = obj.objdata.Zombies.some(z => 
+											z.Type && z.Type.includes(zombie.split('@')[0])
+										);
+										
+										if (!hasZombie) {
+											obj.objdata.Zombies.push({
+												"Type": `RTID(${zombie})`
+											});
+											addedCount++;
+											stats.zombiesAdded++;
+										}
+									}
+									
+									if (addedCount > 0) {
+										addLog(`  ✅ 波次 ${waveIndex+1} (${cleanName}) 添加 ${addedCount} 个僵尸`, 'success');
+										modified = true;
+										stats.waveMode++;
+										stats.wavesModified++;
+									}
+									break;
+								}
+							}
+						}
+					}
+					
+					// 如果指定波数但未找到僵尸波，创建新波次
+					if (waveNumbers && !modified) {
+						addLog('  🆕 未找到指定波次的僵尸波，尝试创建新波次...', 'warning');
+						
+						for (const waveIndex of wavesToProcess) {
+							if (waveIndex >= waves.length) continue;
+							
+							const newWaveName = `AutoWave${Date.now()}${waveIndex}`;
+							const newWaveRTID = `RTID(${newWaveName}@CurrentLevel)`;
+							
+							// 创建新波次对象
+							const newWaveObject = {
+								"aliases": [newWaveName],
+								"objclass": "SpawnZombiesJitteredWaveActionProps",
+								"objdata": {
+									"AdditionalPlantfood": 0,
+									"Zombies": zombies.map(zombie => ({
+										"Type": `RTID(${zombie})`
+									}))
+								}
+							};
+							
+							// 添加到objects数组
+							json.objects.push(newWaveObject);
+							
+							// 添加到指定波次
+							if (!waves[waveIndex]) {
+								waves[waveIndex] = [newWaveRTID];
+							} else {
+								waves[waveIndex].push(newWaveRTID);
+							}
+							
+							addLog(`  ✅ 在波次 ${waveIndex+1} 创建新波次 ${newWaveName}`, 'success');
+							modified = true;
+							stats.newWaveCreated++;
+							stats.wavesModified++;
+							stats.zombiesAdded += zombies.length;
+						}
+					}
+				}
+			}
+			
+			if (!modified) {
+				addLog('  ⏭️ 未进行修改', 'info');
+				return { modified: false, content: null };
+			}
+			
+			return { 
+				modified: true, 
+				content: JSON.stringify(json, null, 2) 
+			};
+		}
+		
+		async function downloadResult() {
+			if (!processedZip) {
+				addLog('❌ 没有可下载的文件', 'error');
+				return;
+			}
+			
+			const fileName = originalZip.name.replace(/\.zip$/i, '_modified.zip');
+			saveAs(processedZip, fileName);
+			addLog(`📥 已生成文件: ${fileName}`, 'success');
+		}
+		
+		function resetAll() {
+			document.getElementById('zombieNames').value = 'respro@ZombieTypes';
+			document.getElementById('waveNumbers').value = '';
+			originalZip = null;
+			processedZip = null;
+			logElement.innerHTML = '等待配置...';
+			fileInfoElement.innerHTML = '';
+			document.getElementById('downloadBtn').disabled = true;
+			addLog('🔄 已重置所有配置', 'info');
+		}
+		
+		function addLog(message, type = 'info') {
+			const timestamp = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+			const logLine = `[${timestamp}] <span class="${type}">${message}</span>\n`;
+			logElement.innerHTML += logLine;
+			logElement.scrollTop = logElement.scrollHeight;
+		}
+		
+		// 拖放功能
+		const dropArea = document.querySelector('.upload-area');
+		['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+			dropArea.addEventListener(eventName, preventDefaults, false);
+		});
+		
+		function preventDefaults(e) {
+			e.preventDefault();
+			e.stopPropagation();
+		}
+		
+		['dragenter', 'dragover'].forEach(eventName => {
+			dropArea.addEventListener(eventName, () => {
+				dropArea.style.background = 'rgba(59, 130, 246, 0.3)';
+			}, false);
+		});
+		
+		['dragleave', 'drop'].forEach(eventName => {
+			dropArea.addEventListener(eventName, () => {
+				dropArea.style.background = 'rgba(30, 64, 175, 0.1)';
+			}, false);
+		});
+		
+		dropArea.addEventListener('drop', (e) => {
+			const dt = e.dataTransfer;
+			const files = dt.files;
+			if (files.length > 0) {
+				const file = files[0];
+				if (file.name.toLowerCase().endsWith('.zip')) {
+					addLog(`📦 已拖放文件: ${file.name}`, 'info');
+					originalZip = file;
+					fileInfoElement.innerHTML = `<span class="info">📦 已选择: ${file.name} (${(file.size/1024/1024).toFixed(2)} MB)</span>`;
+				} else {
+					addLog('❌ 请拖放ZIP文件', 'error');
+				}
+			}
+		});
+		
+		// 初始化默认值
+		document.getElementById('zombieNames').value = 'respro@ZombieTypes';
+	</script>
+</body>
+</html>
