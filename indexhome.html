@@ -5,6 +5,44 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 	<title>植创魔盒</title>
 	<style>
+	/* ========== 新增Splash弹窗样式 ========== */
+#splashPopup {
+  position: fixed;
+  top: 20px; /* 上下留20px空隙 */
+  left: 20px; /* 左右留20px空隙 */
+  right: 20px;
+  bottom: 20px;
+  background-color: #fff;
+  border-radius: 20px; /* 大圆角 */
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  z-index: 5000; /* 层级最高，覆盖所有内容 */
+  overflow: hidden;
+  display: none; /* 默认隐藏 */
+}
+#splashCloseBtn {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  width: 36px;
+  height: 36px;
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #999;
+  cursor: pointer;
+  border-radius: 50%;
+  transition: all 0.2s;
+  z-index: 5001;
+}
+#splashCloseBtn:hover {
+  background-color: #f5f5f5;
+  color: #333;
+}
+#splashContent {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
 .software-item-special {
 	position: relative;
 	border-radius: 12px;
@@ -831,6 +869,12 @@
 	</style>
 </head>
 <body>
+<!-- 新增：Splash全屏弹窗 -->
+<div id="splashPopup">
+  <button id="splashCloseBtn">×</button>
+  <!-- 嵌套链接内容（用iframe承载） -->
+  <iframe id="splashContent" src="" frameborder="0"></iframe>
+</div>
 	<div class="search-section">
 		<div class="search-container">
 			<div class="search-icon-area"></div>
@@ -915,7 +959,19 @@ function checkLanguageState() {
 function getTranslatedSoftwareData() {
 	return originalSoftwareData;
 }
+// ========== 新增：Splash弹窗控制 ==========
+const splashPopup = document.getElementById('splashPopup');
+const splashCloseBtn = document.getElementById('splashCloseBtn');
+const splashContent = document.getElementById('splashContent');
 
+// 关闭弹窗逻辑（原有代码）
+splashCloseBtn.addEventListener('click', () => {
+  splashPopup.style.display = 'none';
+  splashContent.src = ''; // 清空链接，避免缓存
+  // 👇 新增这行：关闭后显示原详情页 👇
+  const currentItem = translatedSoftwareData.find(s => s.SplashScreen) || originalSoftwareData.find(s => s.SplashScreen);
+  currentItem && renderDetailPopup(currentItem);
+});
 		// ========== 底部导航渲染 ==========
 		const NAV_CONFIG = [
 			{ icon: 'home.png', text: { zh: '主页', en: 'Home' }, link: 'index.html', active: true },
@@ -1031,6 +1087,8 @@ const originalSoftwareData = [
 				score: "8.6分  Plants vs. Zombies 2: Edgest X shuttle X Reflourished “月虹市场”联动进行中",
 				forceFirst: true,
 				textpng: ["edgest图1.jpg","edgest图2.jpg"],
+				SplashScreen:true,
+				splashUrl: "edgest.html",
 				downloadUrl: "https://www.123684.com/s/zWgIjv-XcA8",
 				image: "植物大战僵尸2：Edgest.png",
 					popup: {
@@ -1387,58 +1445,70 @@ function renderSoftwareList(softwareToShow, container = softwareListEl) {
 	}).join('');
 
 	container.innerHTML = listHTML;
-}
-
-// 提取下载按钮生成逻辑，避免重复
+}// 提取下载按钮生成逻辑，避免重复（修复历史记录下载触发弹窗）
 function getDownloadButton(item) {
-	const btnText = item.downloadText || (isEnglishMode ? 'Download' : '下载');
-	if (item.popup) {
-		return `<button class="download-btn-main" onclick="showFullscreenPopup('${item.name}')">${btnText}</button>`;
-	} else if (item.downloadUrl && item.downloadUrl.trim() !== '' && item.downloadUrl !== '无') {
-		const isHtml = item.downloadUrl.endsWith('.html');
-		return `<a href="${item.downloadUrl}" class="download-btn-main" target="_blank">${btnText}</a>`;
-	} else {
-		const noDownloadText = isEnglishMode ? 'No download' : '暂无下载';
-		return `<span class="download-btn-main" disabled>${noDownloadText}</span>`;
-	}
+  const btnText = item.downloadText || (isEnglishMode ? 'Download' : '下载');
+  // 关键：只要有popup，不管有没有downloadUrl，都触发弹窗（不直接跳转链接）
+  if (item.popup) {
+	return `<button class="download-btn-main" onclick="showFullscreenPopup('${item.name}')">${btnText}</button>`;
+  } else if (item.downloadUrl && item.downloadUrl.trim() !== '' && item.downloadUrl !== '无') {
+	const isHtml = item.downloadUrl.endsWith('.html');
+	return `<a href="${item.downloadUrl}" class="download-btn-main" target="_blank">${btnText}</a>`;
+  } else {
+	const noDownloadText = isEnglishMode ? 'No download' : '暂无下载';
+	return `<span class="download-btn-main" disabled>${noDownloadText}</span>`;
+  }
+}
+function showFullscreenPopup(name) {
+  const item = translatedSoftwareData.find(s => s.name === name) || originalSoftwareData.find(s => translateText(s.name) === name);
+  if (!item || !item.popup) return;
+
+  // 新增：判断是否开启Splash弹窗
+  if (item.SplashScreen === true && item.splashUrl) {
+	splashContent.src = item.splashUrl; // 加载嵌套链接
+	splashPopup.style.display = 'block'; // 显示Splash弹窗
+	
+
+  } else {
+	// 不开启Splash，直接显示原详情弹窗
+	renderDetailPopup(item);
+  }
 }
 
-		function showFullscreenPopup(name) {
-			const item = translatedSoftwareData.find(s => s.name === name) || originalSoftwareData.find(s => translateText(s.name) === name);
-			if (!item || !item.popup) return;
-			fullscreenModalTitle.textContent = item.name;
-			fullscreenScore.textContent = item.score;
-			if (item.textpng && item.textpng.length > 0) {
-				imageShowcase.style.display = 'block';
-				renderImageSlider(item.textpng);
-			} else {
-				imageShowcase.style.display = 'none';
-			}
-		// 白色遮罩效果
-const overlay = document.createElement('div');
-overlay.className = 'white-overlay';
-document.body.appendChild(overlay);
-setTimeout(() => overlay.remove(), 1000);
-			// 设置描述文字内容
-			fullscreenDesc.textContent = item.popup.text;
-			
-			fullscreenDownloadOptions.innerHTML = '';
-			if (item.popup.downloads) {
-				const titleText = isEnglishMode ? 'Please choose download method:' : '请选择下载方式：';
-				fullscreenDownloadTitle.textContent = titleText;
-				item.popup.downloads.forEach(opt => {
-					const btn = document.createElement('button');
-					btn.className = 'fullscreen-download-option';
-					btn.textContent = opt.text;
-					btn.onclick = () => { opt.url && window.open(opt.url, '_blank'); hideFullscreenModal(); };
-					fullscreenDownloadOptions.appendChild(btn);
-				});
-			} else {
-				fullscreenDownloadTitle.textContent = '';
-			}
-			fullscreenModal.classList.add('active');
-		}
-
+// 新增：提取原详情弹窗渲染逻辑（原函数内容移到这里）
+function renderDetailPopup(item) {
+  fullscreenModalTitle.textContent = item.name;
+  fullscreenScore.textContent = item.score;
+  if (item.textpng && item.textpng.length > 0) {
+	imageShowcase.style.display = 'block';
+	renderImageSlider(item.textpng);
+  } else {
+	imageShowcase.style.display = 'none';
+  }
+  // 白色遮罩效果
+  const overlay = document.createElement('div');
+  overlay.className = 'white-overlay';
+  document.body.appendChild(overlay);
+  setTimeout(() => overlay.remove(), 1000);
+  // 设置描述文字
+  fullscreenDesc.textContent = item.popup.text;
+  
+  fullscreenDownloadOptions.innerHTML = '';
+  if (item.popup.downloads) {
+	const titleText = isEnglishMode ? 'Please choose download method:' : '请选择下载方式：';
+	fullscreenDownloadTitle.textContent = titleText;
+	item.popup.downloads.forEach(opt => {
+	  const btn = document.createElement('button');
+	  btn.className = 'fullscreen-download-option';
+	  btn.textContent = opt.text;
+	  btn.onclick = () => { opt.url && window.open(opt.url, '_blank'); hideFullscreenModal(); };
+	  fullscreenDownloadOptions.appendChild(btn);
+	});
+  } else {
+	fullscreenDownloadTitle.textContent = '';
+  }
+  fullscreenModal.classList.add('active');
+}
 		function renderImageSlider(images) {
 			imageSlider.innerHTML = '';
 			sliderNav.innerHTML = '';
@@ -1534,20 +1604,29 @@ setTimeout(() => overlay.remove(), 1000);
 				).slice(0, 2);
 				if (!results.length) return;
 				results.forEach(r => shown.add(r.name));
-				const resHtml = results.map(r => {
-					const link = r.downloadUrl && r.downloadUrl.trim() && r.downloadUrl !== '无' ? r.downloadUrl : '#';
-					const disabled = (!link || link === '#') ? 'disabled' : '';
-					const downloadText = isEnglishMode ? 'Download' : '下载';
-					return `
-					<div class="history-result-item">
-						<img src="${r.image}" class="history-result-img" alt="${r.name}">
-						<div class="history-result-info">
-							<div class="history-result-name">${r.name}</div>
-							<div class="history-result-score">${r.score}</div>
-						</div>
-						<a href="${link}" class="download-btn-main" target="_blank" ${disabled} style="padding:6px 12px;font-size:12px;">${downloadText}</a>
-					</div>`;
-				}).join('');
+const resHtml = results.map(r => {
+  const btnText = r.downloadText || (isEnglishMode ? 'Download' : '下载');
+  // 关键：历史记录也判断是否有popup，有则触发弹窗
+  let downloadHtml = '';
+  if (r.popup) {
+	// 有popup：渲染按钮，点击触发弹窗
+	downloadHtml = `<button class="download-btn-main" onclick="showFullscreenPopup('${r.name}')" style="padding:6px 12px;font-size:12px;">${btnText}</button>`;
+  } else {
+	// 无popup：按原逻辑跳转链接
+	const link = r.downloadUrl && r.downloadUrl.trim() && r.downloadUrl !== '无' ? r.downloadUrl : '#';
+	const disabled = (!link || link === '#') ? 'disabled' : '';
+	downloadHtml = `<a href="${link}" class="download-btn-main" target="_blank" ${disabled} style="padding:6px 12px;font-size:12px;">${btnText}</a>`;
+  }
+  return `
+  <div class="history-result-item">
+	<img src="${r.image}" class="history-result-img" alt="${r.name}">
+	<div class="history-result-info">
+	  <div class="history-result-name">${r.name}</div>
+	  <div class="history-result-score">${r.score}</div>
+	</div>
+	${downloadHtml}
+  </div>`;
+}).join('');
 				const searchLabel = isEnglishMode ? 'Search:' : '搜索：';
 				html += `
 				<div class="history-search-item">

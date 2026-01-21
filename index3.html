@@ -69,7 +69,7 @@
 		.wechat-notification:active{top:-200px!important}
 		.notification-header{display:flex;align-items:center;margin-bottom:8px}
 		.studio-name{font-size:16px;font-weight:bold;margin-left:8px}
-		.notification-content{font-size:13px;opacity:.9;line-height:2.1}
+		.notification-content{font-size:13px;opacity:.9;line-height:2.2}
 		.notification-icon{width:20px;height:20px;background:rgba(255,255,255,.2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px}
 		.copy-success-modal{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.8);color:#fff;padding:15px 25px;border-radius:8px;z-index:1500;display:none;font-size:16px}
 		.copy-success-modal.show{display:block;animation:fadeInOut 2s}
@@ -336,7 +336,7 @@
 				<img src="图标.jpg" alt="应用图标" onerror="this.style.display='none';this.parentNode.innerHTML='📱';this.parentNode.style.fontSize='36px';this.parentNode.style.display='flex';this.parentNode.style.alignItems='center';this.parentNode.style.justifyContent='center'">
 			</div>
 			<div class="app-name">软件搜索下载</div>
-			<div class="version-display" id="versionDisplay">版本 2.1</div>
+			<div class="version-display" id="versionDisplay">版本 2.2</div>
 		</div>
 	</div>
 
@@ -352,7 +352,7 @@
 		<div class="settings-content">
 			<div class="setting-item">
 				<span class="setting-label">应用版本</span>
-				<span class="setting-value" id="settingsVersionDisplay">2.1</span>
+				<span class="setting-value" id="settingsVersionDisplay">2.2</span>
 			</div>
 			<div class="setting-item">
 				<span class="setting-label">开发者</span>
@@ -587,7 +587,7 @@
 
 		function extractVersionFromHTML(){
 			const match=document.title.match(/(\d+\.\d+)/);
-			return match?`版本 ${match[1]} 内测版`:'版本 2.1';
+			return match?`版本 ${match[1]} 内测版`:'版本 2.2';
 		}
 
 		function validateUsername(username){return username&&username.length>=2;}

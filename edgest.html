@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DOCX文件阅读器</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.2/mammoth.browser.min.js"></script>
+    <style>
+        body {
+            /* 更换为细黑体（系统兼容：Windows细黑体/ macOS黑体-细） */
+            font-family: 'Microsoft YaHei Light', 'Heiti SC Light', 'SimHei', 'Helvetica Neue', sans-serif;
+            margin: 0;
+            padding: 0; /* 移除页面边距，让内容贴边 */
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 100%; /* 占满屏幕宽度 */
+            margin: 0;
+            background-color: white;
+            border-radius: 0; /* 取消圆角，贴合屏幕 */
+            box-shadow: none; /* 取消阴影 */
+            overflow: hidden;
+        }
+        
+        .header {
+            display: none; /* 完全删除顶部标题区域 */
+        }
+        
+        .controls {
+            display: none; /* 隐藏控制按钮区域 */
+        }
+        
+        .content-area {
+            padding: 15px;
+            min-height: 100vh; /* 占满全屏高度 */
+            max-height: none; /* 取消最大高度限制 */
+            overflow-y: auto;
+        }
+        
+        /* 缩小字号+细黑体统一 */
+        .docx-content {
+            line-height: 1.5;
+            font-size: 14px; /* 原16px → 缩小为14px */
+            color: #333;
+            /* 继承细黑体，确保所有内容统一字体 */
+            font-family: inherit;
+        }
+        
+        .docx-content h1 {
+            font-size: 24px; /* 原28px → 缩小为24px */
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 8px;
+            margin-top: 20px;
+            margin-bottom: 12px;
+            font-weight: 500; /* 细黑体标题，不加粗 */
+        }
+        
+        .docx-content h2 {
+            font-size: 20px; /* 原24px → 缩小为20px */
+            margin-top: 25px;
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+        
+        .docx-content h3 {
+            font-size: 18px; /* 原20px → 缩小为18px */
+            margin-top: 20px;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+        
+        .docx-content p {
+            margin-bottom: 12px;
+            text-align: justify;
+        }
+        
+        /* 图片居中+自适应比例+贴边显示 */
+        .docx-content img {
+            display: block;
+            margin: 15px auto; /* 水平居中 */
+            max-width: 100%; /* 最大宽度占满容器 */
+            height: auto; /* 保持宽高比 */
+            object-fit: contain; /* 完整显示图片，不裁剪 */
+        }
+        
+        .docx-content table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 15px 0;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+        }
+        
+        .docx-content table, .docx-content th, .docx-content td {
+            border: 1px solid #ddd;
+        }
+        
+        .docx-content th, .docx-content td {
+            padding: 10px;
+            text-align: left;
+        }
+        
+        .docx-content th {
+            background-color: #3498db;
+            color: white;
+            font-weight: 500; /* 表头也用细黑体 */
+        }
+        
+        .docx-content tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+        
+        .docx-content ul, .docx-content ol {
+            margin: 12px 0;
+            padding-left: 25px;
+        }
+        
+        .docx-content li {
+            margin-bottom: 4px;
+        }
+        
+        .file-info {
+            display: none; /* 隐藏文件信息 */
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #666;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 2s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error {
+            color: #f44336;
+            background-color: #ffebee;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 20px 0;
+            border-left: 4px solid #f44336;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 已删除.header标题区域 -->
+        <div class="controls">
+            <button class="load-btn" id="loadBtn" onclick="loadDocxFile()">
+                加载 EDGESTWORD.docx
+            </button>
+            <div class="status" id="status">点击按钮加载文档</div>
+        </div>
+        
+        <div class="content-area" id="contentArea">
+            <div class="loading">
+                <div class="spinner"></div>
+                <p>正在加载文档，请稍候...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 页面加载完成后立即加载文档，无延迟
+        window.addEventListener('load', loadDocxFile);
+
+        async function loadDocxFile() {
+            const contentArea = document.getElementById('contentArea');
+            
+            try {
+                // 构建文件路径（同目录）
+                const filePath = './EDGESTWORD.docx';
+                const response = await fetch(filePath);
+                
+                if (!response.ok) {
+                    throw new Error(`无法找到文件: ${filePath}`);
+                }
+                
+                // 转换为ArrayBuffer
+                const arrayBuffer = await response.arrayBuffer();
+                
+                // 使用mammoth.js转换DOCX为HTML
+                const result = await mammoth.convertToHtml({arrayBuffer: arrayBuffer});
+                
+                // 直接显示内容（无额外提示）
+                if (result.value.trim()) {
+                    contentArea.innerHTML = `<div class="docx-content">${result.value}</div>`;
+                } else {
+                    contentArea.innerHTML = `
+                        <div class="error">
+                            ⚠️ 文件内容为空或无法正确解析
+                        </div>
+                    `;
+                }
+                
+            } catch (error) {
+                console.error('加载文件时出错:', error);
+                contentArea.innerHTML = `
+                    <div class="error">
+                        ❌ 加载失败：${error.message}<br>
+                        请确保 EDGESTWORD.docx 文件在同目录下
+                    </div>
+                `;
+            }
+        }
+
+        // 保留键盘快捷键（Ctrl/Cmd + R 重新加载）
+        document.addEventListener('keydown', function(event) {
+            if ((event.ctrlKey || event.metaKey) && event.key === 'r') {
+                event.preventDefault();
+                document.getElementById('contentArea').innerHTML = `
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        <p>正在重新加载文档，请稍候...</p>
+                    </div>
+                `;
+                loadDocxFile();
+            }
+        });
+    </script>
+</body>
+</html>
