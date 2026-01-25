@@ -1,3 +1,16 @@
-version=2,
-http:（链接）,
-（链接2）
+{
+  "name": "pvzbox",
+  "version": 2,
+  "files": [
+     { "链接", "/storage/emulated/0/com.dlhc/index.home" },
+     { "链接", "/storage/emulated/0/com.dlhc/index.home" }
+  ]
+},
+{
+  "name": "pvz2fxb",
+  "version": 1,
+  "files": [
+     { "链接", "/storage/emulated/0/com.dlhc/index.home" },
+     { "链接","/storage/emulated/0/com.dlhc/index.home" }
+  ]
+}
