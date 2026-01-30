@@ -8,7 +8,7 @@
 		* { margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, sans-serif; }
 		body { background: #f5f5f5; padding: 20px; min-height: 100vh; }
 		.container { max-width: 1000px; margin: 0 auto; background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-		h1 { text-align: center; margin-bottom: 20px; color: #2c3e50; }
+		h1 { text-align: center; margin-bottom: 20px; color: #2c3e50; font-size: 1.6rem; }
 		
 		.upload-section { margin-bottom: 20px; padding: 15px; background: #f9f9f9; border-radius: 6px; }
 		.upload-btn { background: #3498db; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; }
@@ -46,11 +46,19 @@
 		
 		.app-badge { background: #ecf0f1; color: #7f8c8d; padding: 2px 6px; border-radius: 3px; font-size: 12px; margin-right: 5px; }
 		
-		/* 响应式调整 */
+		.export-section { margin-top: 20px; padding: 15px; background: #f9f9f9; border-radius: 6px; }
+		.export-section h2 { margin-bottom: 10px; font-size: 16px; }
+		.btn-export { background: #9b59b6; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; width: 100%; }
+		
+		.code-preview { background: #2c3e50; color: #ecf0f1; padding: 15px; border-radius: 6px; font-family: 'Courier New', monospace; font-size: 14px; white-space: pre-wrap; overflow-x: auto; margin-top: 10px; }
+		.code-preview code { display: block; }
+		
 		@media (max-width: 768px) {
 			.app-item { flex-direction: column; align-items: flex-start; }
-			.app-actions { margin-top: 10px; width: 100%; }
-			.app-actions .btn { flex: 1; }
+			.app-actions { margin-top: 10px; width: 100%; display: flex; gap: 5px; }
+			.app-actions .btn { flex: 1; text-align: center; padding: 8px 0; }
+			.download-option { flex-direction: column; gap: 5px; }
+			.download-option .btn-delete { width: 100%; }
 		}
 	</style>
 </head>
@@ -66,14 +74,21 @@
 		
 		<div class="app-list" id="appList">
 			<div style="text-align: center; padding: 40px; color: #7f8c8d;">
-				暂无应用数据，请先上传HTML文件
+				暂无应用数据，请先上传文件或添加新应用
 			</div>
 		</div>
 		
 		<button class="btn-add" id="addAppBtn">添加新应用</button>
+		
+		<div class="export-section">
+			<h2>文件导出</h2>
+			<button class="btn-export" id="exportFile">导出完整HTML文件</button>
+			<div class="code-preview" id="codePreview" style="display: none; margin-top:10px;">
+				<code id="codeContent"></code>
+			</div>
+		</div>
 	</div>
 	
-	<!-- 应用编辑模态框 -->
 	<div class="modal" id="appModal">
 		<div class="modal-content">
 			<div class="modal-header">
@@ -83,39 +98,33 @@
 			<div class="modal-body">
 				<div class="form-group">
 					<label for="appName">应用名称</label>
-					<input type="text" id="appName" class="form-control">
+					<input type="text" id="appName" class="form-control" placeholder="必填">
 				</div>
-				
 				<div class="form-group">
 					<label for="appScore">评分描述</label>
-					<input type="text" id="appScore" class="form-control">
+					<input type="text" id="appScore" class="form-control" placeholder="例：9.2分 安全稳定">
 				</div>
-				
 				<div class="form-group">
 					<label for="appImage">图片路径</label>
-					<input type="text" id="appImage" class="form-control">
+					<input type="text" id="appImage" class="form-control" placeholder="本地路径或网络链接">
 				</div>
-				
 				<div class="form-group">
 					<label for="appDownloadUrl">下载链接</label>
-					<input type="text" id="appDownloadUrl" class="form-control">
+					<input type="text" id="appDownloadUrl" class="form-control" placeholder="主下载链接">
 				</div>
-				
 				<div class="form-group">
 					<label for="appDownloadText">下载按钮文本</label>
-					<input type="text" id="appDownloadText" class="form-control">
+					<input type="text" id="appDownloadText" class="form-control" placeholder="例：立即下载/获取">
 				</div>
 				
 				<div class="checkbox-group">
 					<input type="checkbox" id="isSpecial">
 					<label for="isSpecial">特殊样式</label>
 				</div>
-				
 				<div class="checkbox-group">
 					<input type="checkbox" id="forceFirst">
-					<label for="forceFirst">优先显示</label>
+					<label for="forceFirst">优先显示（置顶）</label>
 				</div>
-				
 				<div class="checkbox-group">
 					<input type="checkbox" id="SplashScreen">
 					<label for="SplashScreen">进入前显示弹窗</label>
@@ -123,16 +132,16 @@
 				
 				<div class="form-group" id="splashUrlGroup" style="display: none;">
 					<label for="splashUrl">弹窗链接</label>
-					<input type="text" id="splashUrl" class="form-control">
+					<input type="text" id="splashUrl" class="form-control" placeholder="弹窗跳转链接">
 				</div>
 				
 				<div class="form-group">
-					<label>弹窗内容</label>
-					<textarea id="popupText" class="form-control" rows="3"></textarea>
+					<label>弹窗内容（留空则无弹窗配置）</label>
+					<textarea id="popupText" class="form-control" rows="3" placeholder="弹窗显示的文本内容"></textarea>
 				</div>
 				
 				<div class="download-options">
-					<label>下载选项</label>
+					<label>下载选项（至少填1组才会生成）</label>
 					<div id="downloadOptions"></div>
 					<button class="add-download" id="addDownload">添加下载选项</button>
 				</div>
@@ -145,11 +154,10 @@
 	</div>
 
 	<script>
-		// 应用数据
 		let apps = [];
 		let currentEditingIndex = -1;
+		let originalHtmlContent = ''; // 保存上传文件的完整内容
 		
-		// DOM元素
 		const uploadBtn = document.getElementById('uploadBtn');
 		const fileInput = document.getElementById('fileInput');
 		const parseStatus = document.getElementById('parseStatus');
@@ -164,8 +172,10 @@
 		const splashUrlGroup = document.getElementById('splashUrlGroup');
 		const addDownload = document.getElementById('addDownload');
 		const downloadOptions = document.getElementById('downloadOptions');
+		const exportFile = document.getElementById('exportFile');
+		const codePreview = document.getElementById('codePreview');
+		const codeContent = document.getElementById('codeContent');
 		
-		// 表单元素
 		const appName = document.getElementById('appName');
 		const appScore = document.getElementById('appScore');
 		const appImage = document.getElementById('appImage');
@@ -176,7 +186,7 @@
 		const splashUrl = document.getElementById('splashUrl');
 		const popupText = document.getElementById('popupText');
 		
-		// 事件监听
+		// 事件绑定
 		uploadBtn.addEventListener('click', () => fileInput.click());
 		fileInput.addEventListener('change', handleFileUpload);
 		addAppBtn.addEventListener('click', () => {
@@ -191,104 +201,64 @@
 		SplashScreen.addEventListener('change', () => {
 			splashUrlGroup.style.display = SplashScreen.checked ? 'block' : 'none';
 		});
-		addDownload.addEventListener('click', addDownloadOption);
+		addDownload.addEventListener('click', () => addDownloadOption());
+		exportFile.addEventListener('click', exportCompleteHtml);
 		
-		// 处理文件上传
+		// 上传解析（保存完整HTML+提取应用数据）
 		function handleFileUpload() {
-			if (fileInput.files.length === 0) return;
-			
+			if (!fileInput.files.length) return;
 			const file = fileInput.files[0];
-			
 			if (file.type !== 'text/html') {
 				parseStatus.innerHTML = '<span style="color: #e74c3c;">错误：请上传HTML文件</span>';
 				return;
 			}
-			
 			const reader = new FileReader();
 			reader.onload = function(e) {
 				try {
-					// 解析HTML文件中的app数据
+					// 保存上传文件的完整内容（关键！导出时复用）
+					originalHtmlContent = e.target.result;
 					const parser = new DOMParser();
-					const doc = parser.parseFromString(e.target.result, 'text/html');
-					
-					// 查找originalSoftwareData数组
+					const doc = parser.parseFromString(originalHtmlContent, 'text/html');
 					const scriptContent = doc.querySelector('script').textContent;
 					const match = scriptContent.match(/const originalSoftwareData = (\[.*?\]);/s);
 					
 					if (match) {
-						// 使用Function构造函数安全地解析数组
 						const dataArray = new Function('return ' + match[1])();
 						apps = dataArray;
 						parseStatus.innerHTML = `<span style="color: #2ecc71;">成功：解析到 ${apps.length} 个应用</span>`;
 					} else {
-						// 如果没有找到数据，使用示例数据
-						apps = [
-							{
-								name: "示例应用1",
-								score: "8.5分 示例描述",
-								image: "example1.jpg",
-								downloadUrl: "https://example.com/app1",
-								downloadText: "下载",
-								isSpecial: false,
-								forceFirst: false,
-								SplashScreen: false,
-								popup: {
-									text: "示例弹窗内容",
-									downloads: [
-										{ url: "https://example.com/download1", text: "下载选项1" },
-										{ url: "https://example.com/download2", text: "下载选项2" }
-									]
-								}
-							}
-						];
-						parseStatus.innerHTML = `<span style="color: #f39c12;">警告：未找到应用数据，已加载示例数据</span>`;
+						// 无数据则初始化示例，保留完整HTML
+						apps = [{
+							name: "示例应用",
+							score: "8.5分 示例描述",
+							image: "example.jpg",
+							downloadUrl: "https://example.com",
+							downloadText: "下载",
+							isSpecial: false,
+							forceFirst: false,
+							SplashScreen: false
+						}];
+						parseStatus.innerHTML = `<span style="color: #f39c12;">警告：未找到应用数据，加载示例应用</span>`;
 					}
-					
 					renderAppList();
 				} catch (error) {
-					parseStatus.innerHTML = `<span style="color: #e74c3c;">错误：解析文件失败 - ${error.message}</span>`;
+					parseStatus.innerHTML = `<span style="color: #e74c3c;">错误：解析失败 - ${error.message}</span>`;
 				}
 			};
-			
-			reader.onerror = function() {
-				parseStatus.innerHTML = '<span style="color: #e74c3c;">错误：读取文件失败</span>';
-			};
-			
 			reader.readAsText(file);
 		}
 		
 		// 渲染应用列表
 		function renderAppList() {
-			if (apps.length === 0) {
+			if (!apps.length) {
 				appList.innerHTML = '<div style="text-align: center; padding: 40px; color: #7f8c8d;">暂无应用数据</div>';
 				return;
 			}
-			
-			// 将置顶的应用排在前面
-			const sortedApps = [...apps].sort((a, b) => {
-				if (a.forceFirst && !b.forceFirst) return -1;
-				if (!a.forceFirst && b.forceFirst) return 1;
-				return 0;
-			});
-			
+			const sortedApps = [...apps].sort((a, b) => a.forceFirst && !b.forceFirst ? -1 : (!a.forceFirst && b.forceFirst ? 1 : 0));
 			appList.innerHTML = sortedApps.map((app, index) => {
 				const originalIndex = apps.findIndex(a => a === app);
-				return `
-					<div class="app-item">
-						<div class="app-info">
-							<h3>${app.name} ${app.forceFirst ? '<span class="app-badge">置顶</span>' : ''} ${app.isSpecial ? '<span class="app-badge">特殊</span>' : ''}</h3>
-							<p>${app.score}</p>
-							<div>
-								${app.SplashScreen ? '<span class="app-badge">有弹窗</span>' : ''}
-								${app.popup ? '<span class="app-badge">有详情</span>' : ''}
-							</div>
-						</div>
-						<div class="app-actions">
-							<button class="btn btn-edit" onclick="editApp(${originalIndex})">编辑</button>
-							<button class="btn btn-delete" onclick="deleteApp(${originalIndex})">删除</button>
-						</div>
-					</div>
-				`;
+				const hasPopup = app.popup ? '<span class="app-badge">有弹窗</span>' : '';
+				return `<div class="app-item"><div class="app-info"><h3>${app.name} ${app.forceFirst ? '<span class="app-badge">置顶</span>' : ''} ${app.isSpecial ? '<span class="app-badge">特殊</span>' : ''}</h3><p>${app.score}</p><div>${app.SplashScreen ? '<span class="app-badge">启动弹窗</span>' : ''} ${hasPopup}</div></div><div class="app-actions"><button class="btn btn-edit" onclick="editApp(${originalIndex})">编辑</button><button class="btn btn-delete" onclick="deleteApp(${originalIndex})">删除</button></div></div>`;
 			}).join('');
 		}
 		
@@ -296,7 +266,6 @@
 		window.editApp = function(index) {
 			currentEditingIndex = index;
 			modalTitle.textContent = '编辑应用';
-			
 			const app = apps[index];
 			appName.value = app.name || '';
 			appScore.value = app.score || '';
@@ -307,48 +276,34 @@
 			forceFirst.checked = app.forceFirst || false;
 			SplashScreen.checked = app.SplashScreen || false;
 			splashUrl.value = app.splashUrl || '';
-			popupText.value = app.popup ? app.popup.text : '';
-			
-			// 显示/隐藏弹窗链接输入框
+			popupText.value = app.popup?.text || '';
 			splashUrlGroup.style.display = SplashScreen.checked ? 'block' : 'none';
-			
-			// 渲染下载选项
 			downloadOptions.innerHTML = '';
-			if (app.popup && app.popup.downloads) {
-				app.popup.downloads.forEach((download, i) => {
-					addDownloadOption(download.url, download.text, i);
-				});
-			}
-			
+			app.popup?.downloads?.forEach((item, i) => addDownloadOption(item.url, item.text, i));
 			appModal.style.display = 'flex';
 		};
 		
 		// 删除应用
 		window.deleteApp = function(index) {
-			if (confirm('确定要删除这个应用吗？')) {
+			if (confirm('确定删除该应用？')) {
 				apps.splice(index, 1);
 				renderAppList();
 				showToast('应用已删除');
 			}
 		};
 		
-		// 保存应用数据
+		// 保存应用（无弹窗不生成popup字段）
 		function saveAppData() {
 			if (!appName.value.trim()) {
-				alert('请输入应用名称');
+				alert('请输入应用名称！');
 				return;
 			}
-			
-			// 收集下载选项
 			const downloads = [];
 			document.querySelectorAll('.download-option').forEach(option => {
-				const url = option.querySelector('input[type="text"]').value;
-				const text = option.querySelector('input[type="text"]:nth-child(2)').value;
-				if (url.trim() && text.trim()) {
-					downloads.push({ url: url.trim(), text: text.trim() });
-				}
+				const url = option.querySelector('input:first-child').value.trim();
+				const text = option.querySelector('input:last-child').value.trim();
+				url && text && downloads.push({url, text});
 			});
-			
 			const appData = {
 				name: appName.value.trim(),
 				score: appScore.value.trim(),
@@ -357,75 +312,70 @@
 				downloadText: appDownloadText.value.trim(),
 				isSpecial: isSpecial.checked,
 				forceFirst: forceFirst.checked,
-				SplashScreen: SplashScreen.checked,
-				splashUrl: splashUrl.value.trim(),
-				popup: {
-					text: popupText.value.trim(),
-					downloads: downloads
-				}
+				SplashScreen: SplashScreen.checked
 			};
-			
-			if (currentEditingIndex === -1) {
-				// 新增应用
-				apps.push(appData);
-				showToast('应用已添加');
-			} else {
-				// 编辑现有应用
-				apps[currentEditingIndex] = appData;
-				showToast('应用已更新');
+			if (SplashScreen.checked && splashUrl.value.trim()) appData.splashUrl = splashUrl.value.trim();
+			const popupTextVal = popupText.value.trim();
+			if (popupTextVal || downloads.length > 0) {
+				appData.popup = { text: popupTextVal, downloads: downloads };
 			}
-			
+			currentEditingIndex === -1 ? apps.push(appData) : apps[currentEditingIndex] = appData;
+			showToast(currentEditingIndex === -1 ? '应用已添加' : '应用已更新');
 			renderAppList();
 			appModal.style.display = 'none';
 		}
 		
 		// 添加下载选项
-		function addDownloadOption(url = '', text = '', index = null) {
+		function addDownloadOption(url = '', text = '') {
 			const optionDiv = document.createElement('div');
 			optionDiv.className = 'download-option';
-			optionDiv.innerHTML = `
-				<input type="text" placeholder="下载链接" value="${url}">
-				<input type="text" placeholder="按钮文本" value="${text}">
-				<button class="btn-delete" onclick="this.parentElement.remove()">删除</button>
-			`;
+			optionDiv.innerHTML = `<input type="text" placeholder="下载链接" value="${url}"><input type="text" placeholder="按钮文本" value="${text}"><button class="btn-delete" onclick="this.parentElement.remove()">删除</button>`;
 			downloadOptions.appendChild(optionDiv);
 		}
 		
 		// 重置表单
 		function resetForm() {
-			appName.value = '';
-			appScore.value = '';
-			appImage.value = '';
-			appDownloadUrl.value = '';
-			appDownloadText.value = '';
-			isSpecial.checked = false;
-			forceFirst.checked = false;
-			SplashScreen.checked = false;
-			splashUrl.value = '';
-			popupText.value = '';
+			appName.value = ''; appScore.value = ''; appImage.value = '';
+			appDownloadUrl.value = ''; appDownloadText.value = '';
+			isSpecial.checked = forceFirst.checked = SplashScreen.checked = false;
+			splashUrl.value = ''; popupText.value = '';
 			downloadOptions.innerHTML = '';
 			splashUrlGroup.style.display = 'none';
 		}
 		
-		// 显示提示消息
+		// 提示框
 		function showToast(message) {
 			const toast = document.createElement('div');
 			toast.textContent = message;
-			toast.style.cssText = `
-				position: fixed;
-				bottom: 20px;
-				right: 20px;
-				background: #2ecc71;
-				color: white;
-				padding: 15px 25px;
-				border-radius: 6px;
-				z-index: 1001;
-			`;
+			toast.style.cssText = 'position:fixed;bottom:20px;right:20px;background:#2ecc71;color:white;padding:15px 25px;border-radius:6px;z-index:1001;';
 			document.body.appendChild(toast);
+			setTimeout(() => toast.remove(), 3000);
+		}
+		
+		// 核心：导出完整HTML（替换应用数据，保留原文件所有内容）
+		function exportCompleteHtml() {
+			if (!apps.length) {
+				alert('暂无应用数据，无法导出！');
+				return;
+			}
+			if (!originalHtmlContent) {
+				alert('请先上传HTML文件！');
+				return;
+			}
 			
-			setTimeout(() => {
-				toast.remove();
-			}, 3000);
+			// 生成新的应用数据代码
+			const newDataCode = `const originalSoftwareData = ${JSON.stringify(apps, null, 2)};`;
+			// 替换原文件中的应用数据，其他内容完全保留
+			const newHtmlContent = originalHtmlContent.replace(/const originalSoftwareData = (\[.*?\]);/s, newDataCode);
+			
+			// 创建下载文件
+			const blob = new Blob([newHtmlContent], { type: 'text/html' });
+			const a = document.createElement('a');
+			a.href = URL.createObjectURL(blob);
+			a.download = '应用数据_编辑后.html';
+			a.click();
+			URL.revokeObjectURL(a.href);
+			showToast('完整HTML文件已导出！');
 		}
 	</script>
 </body>
