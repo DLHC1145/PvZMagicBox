@@ -474,15 +474,10 @@ iz的月光花 moonflower_iz
 
 ====================================
 《僵尸代码》
-按照中文版世界归属排放（非严格意义）
-僵尸名称大部分参考了游戏僵尸图鉴和官网参考
-你可以通过搜索世界名称快速寻找到需要的僵尸
-如“神秘埃及” “平行宇宙” “花园战争” “牌面纷争”
-#需要注意的是，游戏图鉴的名称也不是统一的，比如举着旗帜的僵尸，在神秘埃及叫旗子木乃伊僵尸，而在未来世界叫未来旗帜僵尸
-#精英级僵尸一般为自带韧性条的僵尸，BOSS级僵尸一般需要由模块生成才可正常行动，部分精英僵尸和BOSS不换贴图变种不多标注
+
 
 ●主线
-○神秘埃及
+
 -主线关
 木乃伊僵尸 mummy
 木乃伊路障僵尸 mummy_armor1
@@ -516,7 +511,7 @@ iz的月光花 moonflower_iz
 记忆骆驼双牌僵尸 camel_twohump_touch
 记忆骆驼多牌僵尸 camel_manyhump_touch
 
-○海盗港湾
+
 -主线关
 海盗僵尸 pirate
 路障海盗僵尸 pirate_armor1
@@ -561,7 +556,6 @@ iz的月光花 moonflower_iz
 -无尽模式
 西部巨人僵尸 cowboy_gargantuar_danger
 
-○功夫世界
 -主线关-功夫
 功夫普通僵尸 kongfu_basic
 路障功夫僵尸 kongfu_basic_armor1
@@ -710,15 +704,15 @@ iz的月光花 moonflower_iz
 -僵王博士
 獠牙征服者 zombossmech_iceage
 
--小游戏
+
 (植物迷阵)
 獠牙征服者 zombossmech_iceage_eliminate
 冬日响叮当木桩放的冰鼬 iceage_weasel_hover
 
--无尽模式
+
 地懒巨人僵尸 iceage_gargantuar_danger
 
--冰河再临
+
 洞穴猛犸头僵尸 iceage_armor3_elite
 精英冰鼬 iceage_weasel_elite
 精英猎人僵尸 iceage_hunter_elite
@@ -2237,7 +2231,6 @@ z公司："MusicType": "MiniGame_B"
 双旦响叮当的雪人 gingle_summon
 春节响叮当的舞狮 gingle_liondance
 
-○其他模式活动
 火焰 gourdFire
 元宝大作战的元宝 christmas_protect
 世界杯矿车 railcart_worldcup
