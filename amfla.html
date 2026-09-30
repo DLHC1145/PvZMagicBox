@@ -531,6 +531,62 @@ function pathFrom(subpaths){
   }
   return p;
 }
+/* ── Flash 有向边段串接 ────────────────────────────────────────────────
+   [坑2] Edge 的 edges/cubics 是"有向边段", 不是闭合轮廓: fillStyle0 = 该边
+   **左侧**的填充, fillStyle1 = **右侧**的填充, '!' 只是分段符。
+   必须按填充索引把边段串成闭合环再 fill; 直接把每段当独立子路径 fill,
+   得到的是一堆零面积碎片 —— 看上去就是"只剩描边、中空"。
+   方向统一取"填充在左侧", 这样外轮廓与孔洞自然反向, nonzero 能正确挖洞。 */
+function segEnd(p){
+  return p.cubics.length ? [p.cubics[p.cubics.length-1][4], p.cubics[p.cubics.length-1][5]] : [p.start[0], p.start[1]];
+}
+function reversePath(p){
+  const end = segEnd(p), cubics = [];
+  for (let i = p.cubics.length - 1; i >= 0; i--){
+	const c = p.cubics[i];
+	const prev = (i > 0) ? [p.cubics[i-1][4], p.cubics[i-1][5]] : p.start;
+	cubics.push([c[2], c[3], c[0], c[1], prev[0], prev[1]]);
+  }
+  return { start: [end[0], end[1]], cubics, closed: p.closed };
+}
+const STITCH_EPS = 0.02;
+const stitchKey = p => Math.round(p[0]/STITCH_EPS) + ',' + Math.round(p[1]/STITCH_EPS);
+/* 返回该填充的若干闭合环, 每个环已合并成**一条**子路径(整体 closePath) */
+function stitchFillRings(segs, idx){
+  const dirs = [];
+  for (const sg of segs){
+	if (sg.fs0 === idx) dirs.push({ p: sg.path, s: sg.path.start, e: segEnd(sg.path) });
+	else if (sg.fs1 === idx){ const r = reversePath(sg.path); dirs.push({ p: r, s: r.start, e: segEnd(r) }); }
+  }
+  if (!dirs.length) return [];
+  const byStart = new Map();
+  dirs.forEach((d, i) => { const k = stitchKey(d.s); if (!byStart.has(k)) byStart.set(k, []); byStart.get(k).push(i); });
+  const used = new Array(dirs.length).fill(false), rings = [];
+  for (let i = 0; i < dirs.length; i++){
+	if (used[i]) continue;
+	used[i] = true;
+	let cur = dirs[i];
+	const startKey = stitchKey(cur.s), cubics = cur.p.cubics.slice();
+	let guard = 0;
+	while (guard++ <= dirs.length){
+	  const cands = byStart.get(stitchKey(cur.e)) || [];
+	  let nxt = -1;
+	  for (const ci of cands){ if (!used[ci]){ nxt = ci; break; } }
+	  if (nxt < 0) break;
+	  used[nxt] = true; cur = dirs[nxt];
+	  for (const c of cur.p.cubics) cubics.push(c);
+	  if (stitchKey(cur.e) === startKey) break;
+	}
+	if (cubics.length) rings.push({ start: dirs[i].s.slice(), cubics, closed: true });
+  }
+  return rings;
+}
+/* 取某填充的填充路径: 优先串环, 串不出来时退回原边段(至少不比原来差) */
+function fillPathsFor(segs, idx){
+  const rings = stitchFillRings(segs, idx);
+  if (rings.length) return rings;
+  return segs.filter(sg => sg.fs0 === idx || sg.fs1 === idx).map(sg => sg.path);
+}
 /* 返回 { canvas, minX, minY, w, h }，canvas 像素 = ceil(w*ss) x ceil(h*ss) */
 function rasterizeShape(shape, ss, targetHint){
   const fills = parseFills(shape), strokes = parseStrokes(shape);
@@ -556,20 +612,12 @@ function rasterizeShape(shape, ss, targetHint){
   ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
   ctx.scale(scale, scale); ctx.translate(-minX, -minY);
 
-  /* 按 fillStyle 索引分组（fs0 = 左 / fs1 = 右），各自闭合成子路径后 nonzero 填充 */
-  const byFill = new Map();
-  for (const sg of segs){
-	for (const [idx, d] of [[sg.fs0, 1], [sg.fs1, -1]]){
-	  if (idx <= 0) continue;
-	  if (!byFill.has(idx)) byFill.set(idx, []);
-	  byFill.get(idx).push(sg.path);
-	}
-  }
-  for (const idx of [...byFill.keys()].sort((a,b)=>a-b)){
+  /* 按 fillStyle 索引: 先串成闭合环, 再各自 nonzero 填充（孔洞靠环绕向自动挖出） */
+  for (const idx of [...fills.keys()].sort((a,b)=>a-b)){
 	const fs = fills.get(idx); if (!fs) continue;
-	const p = pathFrom(byFill.get(idx));
+	const paths = fillPathsFor(segs, idx); if (!paths.length) continue;
 	ctx.fillStyle = makeFillStyle(ctx, fs, minX, minY, maxX, maxY);
-	ctx.fill(p, 'nonzero');
+	ctx.fill(pathFrom(paths), 'nonzero');
   }
   /* 描边 */
   const byStroke = new Map();
@@ -637,19 +685,13 @@ function parseFilters(e){
   }
   return out.length ? out : null;
 }
-/* 元素最终矩阵：含 transformationPoint(轴心) 语义 M' = T(tp)·M·T(-tp) */
+/* 元素最终矩阵（[坑13] ★transformationPoint 必须忽略★）。
+   <Matrix> 已经把实例相对元件注册点的最终仿射变换写全了;
+   <transformationPoint> 只是 Animate 自由变换手柄的轴心, 属编辑期数据。
+   实测把它参与运算(无论 T(tp)·M·T(-tp) 还是"以 tp 为轴心重算平移"),
+   都会让头发/手臂等 tp 非零的部件整体偏移 —— 即用户反馈的"相对错位"。 */
 function matWithTP(e){
-  let m = matOf(ch(e, 'matrix'));
-  const tp = ch(e, 'transformationPoint');
-  const pt = tp ? ch(tp, 'Point') : null;
-  if (pt){
-	const px = atF(pt,'x',0), py = atF(pt,'y',0);
-	if (px || py){
-	  const [a,b,c,d,tx,ty] = m;
-	  m = [a,b,c,d, tx + px - (a*px + c*py), ty + py - (b*px + d*py)];
-	}
-  }
-  return m;
+  return matOf(ch(e, 'matrix'));
 }
 function parseFrameEl(f){
   const fr = { index: atI(f,'index',0), duration: Math.max(1, atI(f,'duration',1)),
@@ -877,18 +919,12 @@ function paintShape(ctx, shape){
   const fills = parseFills(shape), strokes = parseStrokes(shape);
   let segs; try { segs = parseEdges(shape); } catch(e){ return; }
   if (!segs.length) return;
-  const byFill = new Map();
-  for (const sg of segs){
-	for (const idx of [sg.fs0, sg.fs1]){
-	  if (idx <= 0) continue;
-	  if (!byFill.has(idx)) byFill.set(idx, []);
-	  byFill.get(idx).push(sg.path);
-	}
-  }
-  for (const idx of [...byFill.keys()].sort((a,b)=>a-b)){
+  /* 与 rasterizeShape 同一条管线: 有向边段先串环再填充 */
+  for (const idx of [...fills.keys()].sort((a,b)=>a-b)){
 	const fs = fills.get(idx); if (!fs) continue;
+	const paths = fillPathsFor(segs, idx); if (!paths.length) continue;
 	ctx.fillStyle = makeFillStyle(ctx, fs);
-	ctx.fill(pathFrom(byFill.get(idx)), 'nonzero');
+	ctx.fill(pathFrom(paths), 'nonzero');
   }
   const byStroke = new Map();
   for (const sg of segs){ if (sg.ss > 0){ if (!byStroke.has(sg.ss)) byStroke.set(sg.ss, []); byStroke.get(sg.ss).push(sg.path); } }
@@ -1075,6 +1111,39 @@ function renderSquare(sym, inner, doc, cx, cy, half, px){
   ctx.scale(s, s); ctx.translate(-(cx-half), -(cy-half));
   renderTimeline(ctx, sym.timeline, inner, doc, 0);
   return cv;
+}
+/* 逐帧采样（可含"该元件不存在"的帧）-> 关键帧序列。
+   [错位] 采样缺失的帧不能直接丢：丢掉后 AM 会把"消失前"的姿态线性插值到
+   "再出现"的姿态上，元件在本该空掉的一整段帧里继续可见并一路滑动 —— 看
+   起来就是部件错位、该消失的没消失。这里把缺失段显式写成 1e-4 缩放的隐藏
+   关键帧（与 AM→FLA 写「终止帧」用的是同一套约定）。 */
+function collapseSamples(samples){
+  if (!samples.length) return null;
+  let anyVisible = false;
+  for (const s of samples) if (s.kf){ anyVisible = true; break; }
+  if (!anyVisible) return null;              /* 整段都不存在 -> 不产出 shape */
+  let prev = null;
+  for (const s of samples){ if (s.kf) prev = s.kf; else s.hide = prev; }
+  let next = null;
+  for (let i=samples.length-1;i>=0;i--){ const s=samples[i]; if (s.kf) next = s.kf; else if (!s.hide) s.hide = next; }
+  const val = s => {
+	if (s.kf) return [s.kf.loc[0], s.kf.loc[1], s.kf.rot, s.kf.scl[0], s.kf.scl[1], s.kf.skew[0], s.kf.skew[1]];
+	const h = s.hide || { loc:[0,0], scl:[1,1], rot:0, skew:[0,0] };
+	return [h.loc[0], h.loc[1], h.rot, h.scl[0]*1e-4, h.scl[1]*1e-4, h.skew[0], h.skew[1]];
+  };
+  const vals = samples.map(val);
+  const diff = (a,b) => { let m = 0; for (let i=0;i<a.length;i++) m = Math.max(m, Math.abs(a[i]-b[i])); return m > 1e-7; };
+  const out = [];
+  for (let i=0;i<samples.length;i++){
+	const vis = !!samples[i].kf;
+	const boundary = (i===0) || (i===samples.length-1) ||
+	  vis !== !!samples[i-1].kf || vis !== !!samples[i+1].kf ||
+	  diff(vals[i], vals[i-1]) || diff(vals[i], vals[i+1]);
+	if (!boundary) continue;
+	const v = vals[i];
+	out.push({ t: samples[i].t, loc:[v[0],v[1]], scl:[v[3],v[4]], rot:v[2], skew:[v[5],v[6]], ease:null });
+  }
+  return out;
 }
 class Fla2Am {
   constructor(doc, ss, opts){
@@ -1374,20 +1443,12 @@ class Fla2Am {
 	  for (const [e, m] of layerItemsAt(layer, fr)){
 		if (e.isSymbol && (!name || e.libName === name) && this._fxKey(e) === (fxKey || '')){ mat = m; break; }
 	  }
-	  if (!mat) continue;
+	  if (!mat){ samples.push({ t: fr/fps*1000, kf: null }); continue; }
 	  const p = matApply(mat, cx, cy);
 	  const [rot, sx, sy, kx, ky] = trsFromFineDecompose(mat);
-	  const cur = [p[0], p[1], rot*180/Math.PI, sx, sy, kx, ky];
-	  samples.push({ t: fr/fps*1000, cur, kf: { t: fr/fps*1000, loc:[p[0],p[1]], scl:[sx,sy], rot: rot*180/Math.PI, skew:[kx,ky], ease:null } });
+	  samples.push({ t: fr/fps*1000, kf: { t: fr/fps*1000, loc:[p[0],p[1]], scl:[sx,sy], rot: rot*180/Math.PI, skew:[kx,ky], ease:null } });
 	}
-	const diff = (a,b) => { let m = 0; for (let i=0;i<a.length;i++) m = Math.max(m, Math.abs(a[i]-b[i])); return m > 1e-7; };
-	const out = [];
-	for (let i=0;i<samples.length;i++){
-	  const firstOfRun = (i===0) || diff(samples[i].cur, samples[i-1].cur);
-	  const lastOfRun = (i===samples.length-1) || diff(samples[i].cur, samples[i+1].cur);
-	  if (firstOfRun || lastOfRun) out.push(samples[i].kf);
-	}
-	return out;
+	return collapseSamples(samples) || [];
   }
   /* ── 动画符号层的拆解 ─────────────────────────────────────────────────
 	 [核心] 主时间线上排着若干「标签符号」实例(label/idle、label/walk…)。
@@ -1398,7 +1459,6 @@ class Fla2Am {
 	 旧实现正是后者(316 帧 → 316 张全幅图/37MB), 这里改为前者。 */
   _slicedShapes(layer, keyFrames, totalFrames, fps, visT0, visT1){
 	const outs = [];
-	const diff = (a,b) => { let m = 0; for (let i=0;i<a.length;i++) m = Math.max(m, Math.abs(a[i]-b[i])); return m > 1e-7; };
 	for (const f of keyFrames){
 	  const instDur = Math.max(1, f.duration), frStart = f.index;
 	  for (const el of f.elements){
@@ -1430,21 +1490,16 @@ class Fla2Am {
 			  const fr = frStart + k;
 			  const inF = k % symDur;
 			  const hit = layerItemsAt(inner, inF).find(([e]) => e.libName === partName);
-			  if (!hit) continue;
+			  if (!hit){ samples.push({ t: fr/fps*1000, kf: null }); continue; }
 			  /* 部件局部 -> 舞台: 外层实例矩阵 ∘ 部件矩阵 */
 			  const mat = matMul(el.mat, hit[0].mat);
 			  const p = matApply(mat, m.cx, m.cy);
 			  const [rot, sx, sy, kx, ky] = trsFromFineDecompose(mat);
-			  samples.push({ t: fr/fps*1000, cur:[p[0],p[1],rot,sx,sy,kx,ky],
+			  samples.push({ t: fr/fps*1000,
 				kf:{ t: fr/fps*1000, loc:[p[0],p[1]], scl:[sx,sy], rot: rot*180/Math.PI, skew:[kx,ky], ease:null } });
 			}
-			if (!samples.length) continue;
-			const kfs = [];
-			for (let i=0;i<samples.length;i++){
-			  const firstOfRun = (i===0) || diff(samples[i].cur, samples[i-1].cur);
-			  const lastOfRun  = (i===samples.length-1) || diff(samples[i].cur, samples[i+1].cur);
-			  if (firstOfRun || lastOfRun) kfs.push(samples[i].kf);
-			}
+			const kfs = collapseSamples(samples);
+			if (!kfs || !kfs.length) continue;
 			outs.push({ label: partName.split('/').pop(), png: m.png,
 						startMs: samples[0].t, endMs: samples[samples.length-1].t + 1000/fps,
 						halfW: m.hw, halfH: m.hh, kfs });
