@@ -1,0 +1,2136 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>FLA ⇄ AMPROJ 转换器 · 纯前端单文件</title>
+<style>
+  :root{
+	--bg:#12141a; --panel:#1b1e27; --panel2:#232734; --line:#333949;
+	--fg:#e8ecf4; --dim:#9aa4b8; --acc:#5aa9ff; --acc2:#39d98a; --warn:#ffb020; --err:#ff5f6d;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--fg);font:13px/1.5 system-ui,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif}
+  header{padding:12px 16px;border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:12px;align-items:center;background:var(--panel)}
+  h1{font-size:15px;margin:0;font-weight:650;letter-spacing:.3px}
+  .tag{font-size:11px;color:var(--dim);border:1px solid var(--line);border-radius:20px;padding:2px 8px}
+  .seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .seg button{background:var(--panel2);color:var(--dim);border:0;padding:7px 14px;cursor:pointer;font-size:13px}
+  .seg button.on{background:var(--acc);color:#08111e;font-weight:600}
+  main{display:grid;grid-template-columns:360px 1fr;height:calc(100% - 57px)}
+  #left{overflow:auto;padding:14px;border-right:1px solid var(--line);background:var(--panel)}
+  #right{overflow:auto;padding:14px}
+  .card{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
+  .card h2{font-size:12px;margin:0 0 8px;color:var(--dim);font-weight:600;text-transform:uppercase;letter-spacing:.06em}
+  label.file{display:block;border:1px dashed var(--line);border-radius:8px;padding:10px;text-align:center;cursor:pointer;color:var(--dim)}
+  label.file:hover{border-color:var(--acc);color:var(--fg)}
+  input[type=text]{width:100%;background:#141821;border:1px solid var(--line);color:var(--fg);border-radius:6px;padding:7px 8px}
+  button.act{background:var(--acc);color:#08111e;border:0;border-radius:8px;padding:9px 14px;font-weight:650;cursor:pointer;width:100%}
+  button.act:disabled{opacity:.45;cursor:not-allowed}
+  button.gh{background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px 12px;cursor:pointer}
+  button.gh:hover{border-color:var(--acc)}
+  .row{display:flex;gap:8px;flex-wrap:wrap}
+  #log{font:11px/1.45 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;background:#0e1015;border:1px solid var(--line);border-radius:8px;padding:10px;max-height:260px;overflow:auto;color:var(--dim)}
+  #log b{color:var(--fg)} #log .ok{color:var(--acc2)} #log .w{color:var(--warn)} #log .e{color:var(--err)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .prev{background:#0e1015;border:1px solid var(--line);border-radius:8px;padding:8px}
+  .prev h3{margin:0 0 6px;font-size:11px;color:var(--dim);font-weight:600}
+  canvas.prevcv{width:100%;height:auto;background:
+	 linear-gradient(45deg,#1a1d26 25%,transparent 25%,transparent 75%,#1a1d26 75%) 0 0/16px 16px,
+	 linear-gradient(45deg,#1a1d26 25%,transparent 25%,transparent 75%,#1a1d26 75%) 8px 8px/16px 16px,#0e1015;
+	 border-radius:5px;image-rendering:auto}
+  .kv{display:flex;justify-content:space-between;gap:8px;border-bottom:1px dashed var(--line);padding:3px 0;font-size:12px}
+  .kv span:last-child{color:var(--fg);font-weight:600}
+  .badge{display:inline-block;border-radius:5px;padding:1px 7px;font-size:11px;font-weight:700}
+  .badge.ok{background:rgba(57,217,138,.16);color:var(--acc2)}
+  .badge.bad{background:rgba(255,95,109,.16);color:var(--err)}
+  .hint{color:var(--dim);font-size:11px}
+  .slider{display:flex;align-items:center;gap:8px}
+  input[type=range]{flex:1;accent-color:var(--acc)}
+</style>
+</head>
+<body>
+<header>
+  <h1>FLA ⇄ AMPROJ 转换器</h1>
+  <span class="tag">纯前端 · 无依赖 · 单文件</span>
+  <div class="seg" id="modeSeg">
+	<button data-mode="fla2am" class="on">FLA → AM</button>
+	<button data-mode="am2fla">AM → FLA</button>
+  </div>
+  <span class="hint" id="modeHint"></span>
+</header>
+
+<main>
+  <div id="left">
+	<div class="card">
+	  <h2>1 · 选择源文件</h2>
+	  <label class="file" for="fileIn" id="fileLbl">点击选择 .fla / .amproj<br><span class="hint">文件不会上传，全部在本机浏览器里处理</span></label>
+	  <input id="fileIn" type="file" style="display:none"/>
+	  <div style="margin-top:8px" class="hint">或从 URL 载入（便于本机联调）：</div>
+	  <div class="row" style="margin-top:4px">
+		<input type="text" id="urlIn" placeholder="http://localhost:8000/xx.fla"/>
+		<button class="gh" id="urlBtn">载入</button>
+	  </div>
+	</div>
+
+	<div class="card">
+	  <h2>2 · 转换参数</h2>
+	  <div class="kv"><span>形状超采样 ss</span><span id="ssVal">2</span></div>
+	  <input type="range" id="ss" min="1" max="3" step="1" value="2" style="width:100%"/>
+	  <div class="kv" style="border:0"><span>烘焙团建滤镜（Blur/Glow）</span><span><input type="checkbox" id="doFilters" checked></span></div>
+	  <div class="kv" style="border:0"><span>逆向烘焙帧率</span><span><input type="text" id="rbFps" value="30" style="width:60px;text-align:right"></span></div>
+	</div>
+
+	<div class="card">
+	  <h2>3 · 执行</h2>
+	  <button class="act" id="goBtn" disabled>转换</button>
+	  <div class="row" style="margin-top:8px">
+		<button class="gh" id="selfTestBtn" disabled>往返自测 (A→B→A)</button>
+		<button class="gh" id="dlBtn" disabled>下载结果</button>
+	  </div>
+	  <div class="hint" id="statLine" style="margin-top:8px"></div>
+	</div>
+
+	<div class="card">
+	  <h2>日志</h2>
+	  <div id="log"></div>
+	</div>
+  </div>
+
+  <div id="right">
+	<div class="card" id="infoCard" style="display:none">
+	  <h2>工程信息</h2>
+	  <div id="info"></div>
+	</div>
+
+	<div class="card">
+	  <h2>预览（左=原始 / 右=转换结果 / 下=差异）</h2>
+	  <div class="grid2">
+		<div class="prev"><h3 id="tA">原始</h3><canvas class="prevcv" id="cvA" width="390" height="390"></canvas></div>
+		<div class="prev"><h3 id="tB">转换结果</h3><canvas class="prevcv" id="cvB" width="390" height="390"></canvas></div>
+	  </div>
+	  <div class="prev" style="margin-top:12px"><h3 id="tD">差异（红=不一致像素）</h3><canvas class="prevcv" id="cvD" width="390" height="390"></canvas></div>
+	  <div class="slider" style="margin-top:10px">
+		<button class="gh" id="playBtn">▶</button>
+		<input type="range" id="frame" min="0" max="0" value="0"/>
+		<span class="hint" id="frameLbl">帧 0</span>
+	  </div>
+	</div>
+  </div>
+</main>
+
+<script>
+"use strict";
+/* ══════════════════════════════════════════════════════════════════════════
+   0 · 基础工具：日志 / 十六进制 / 哈希 / CRC32
+   ══════════════════════════════════════════════════════════════════════════ */
+const $ = id => document.getElementById(id);
+function log(msg, cls){
+  const el = $('log');
+  const b = document.createElement('div');
+  if (cls) b.className = cls;
+  b.textContent = msg;
+  el.appendChild(b);
+  el.scrollTop = el.scrollHeight;
+}
+function logClear(){ $('log').innerHTML = ''; }
+const enc = new TextEncoder(), dec = new TextDecoder('utf-8');
+const TWIPS = 20.0;
+
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++){ let c = n; for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1); t[n] = c >>> 0; }
+  return t;
+})();
+function crc32(bytes){
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+/* 一个小而正的 SHA-1（只用于素材签名/文件名，与 Python hashlib.sha1 等价） */
+function sha1Hex(bytes){
+  const ml = bytes.length * 8;
+  const withPad = new Uint8Array((((bytes.length + 8) >> 6) + 1) << 6);
+  withPad.set(bytes); withPad[bytes.length] = 0x80;
+  const dv = new DataView(withPad.buffer);
+  dv.setUint32(withPad.length - 4, ml >>> 0);
+  dv.setUint32(withPad.length - 8, Math.floor(ml / 4294967296));
+  let h0 = 0x67452301, h1 = 0xEFCDAB89, h2 = 0x98BADCFE, h3 = 0x10325476, h4 = 0xC3D2E1F0;
+  const w = new Uint32Array(80);
+  for (let off = 0; off < withPad.length; off += 64){
+	for (let i = 0; i < 16; i++) w[i] = dv.getUint32(off + i * 4);
+	for (let i = 16; i < 80; i++){ const v = w[i-3]^w[i-8]^w[i-14]^w[i-16]; w[i] = ((v << 1) | (v >>> 31)) >>> 0; }
+	let a = h0, b = h1, c = h2, d = h3, e = h4;
+	for (let i = 0; i < 80; i++){
+	  let f, k;
+	  if (i < 20){ f = (b & c) | (~b & d); k = 0x5A827999; }
+	  else if (i < 40){ f = b ^ c ^ d; k = 0x6ED9EBA1; }
+	  else if (i < 60){ f = (b & c) | (b & d) | (c & d); k = 0x8F1BBCDC; }
+	  else { f = b ^ c ^ d; k = 0xCA62C1D6; }
+	  const t = (((a << 5) | (a >>> 27)) + f + e + k + w[i]) >>> 0;
+	  e = d; d = c; c = ((b << 30) | (b >>> 2)) >>> 0; b = a; a = t;
+	}
+	h0 = (h0 + a) >>> 0; h1 = (h1 + b) >>> 0; h2 = (h2 + c) >>> 0; h3 = (h3 + d) >>> 0; h4 = (h4 + e) >>> 0;
+  }
+  const out = new Uint8Array(20), odv = new DataView(out.buffer);
+  odv.setUint32(0,h0); odv.setUint32(4,h1); odv.setUint32(8,h2); odv.setUint32(12,h3); odv.setUint32(16,h4);
+  return [...out].map(b => b.toString(16).padStart(2,'0')).join('').toUpperCase();
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   1 · ZIP：读（扫 local header，兼容坏中央目录）/ 写（STORED，合法 zip）
+   ══════════════════════════════════════════════════════════════════════════ */
+async function inflateRawBytes(bytes){
+  const st = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  return new Uint8Array(await new Response(st).arrayBuffer());
+}
+/* [坑7] AMPROJ 的 zip 用「数据描述符」写法(flag bit3, local header 里 csize=0)，
+   压缩流末尾跟着 12/16 字节描述符，直接整体丢给 DecompressionStream 会报错。
+   这里先按长度裁剪，再退化为「逐块读取+容错」兜底。 */
+async function inflateRawLenient(bytes){
+  const st = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  const rd = st.getReader(); const parts = []; let total = 0;
+  try {
+	for (;;){
+	  const { done, value } = await rd.read();
+	  if (done) break;
+	  if (value){ parts.push(value); total += value.length; }
+	}
+  } catch (e){ /* 流尾多余字节，忽略：已解出的数据保留 */ }
+  const out = new Uint8Array(total); let o = 0;
+  for (const q of parts){ out.set(q, o); o += q.length; }
+  return out;
+}
+async function inflateBest(raw){
+  for (const cut of [0, 16, 12]){
+	const len = raw.length - cut;
+	if (len <= 0) break;
+	try { return await inflateRawBytes(cut ? raw.subarray(0, len) : raw); } catch (e){}
+  }
+  return await inflateRawLenient(raw);
+}
+function findNextLfh(buf, from, n){
+  let q = from;
+  for (;;){
+	q = buf.indexOf(0x50, q);
+	if (q < 0 || q + 4 > n) return n;
+	if (buf[q+1] === 0x4B && buf[q+2] === 0x03 && buf[q+3] === 0x04) return q;
+	q++;
+  }
+}
+async function deflateRawBytes(bytes){
+  const st = new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+  return new Uint8Array(await new Response(st).arrayBuffer());
+}
+/* [坑6] 有些 FLA（含本工程）的 zip 中央目录被破坏，标准库读不了。
+   这里直接扫 PK\x03\x04 local header，逐条还原。 */
+async function unzip(buf){
+  const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  const out = new Map();
+  let p = 0, guard = 0; const n = buf.length;
+  while (p + 30 <= n && guard < 400000){
+	guard++;
+	if (!(buf[p] === 0x50 && buf[p+1] === 0x4B && buf[p+2] === 0x03 && buf[p+3] === 0x04)){ p++; continue; }
+	const method = dv.getUint16(p + 8, true);
+	let csize = dv.getUint32(p + 18, true);
+	const nl = dv.getUint16(p + 26, true), el = dv.getUint16(p + 28, true);
+	if (nl <= 0 || nl > 1024 || p + 30 + nl + el > n){ p += 4; continue; }
+	/* [格式二] 部分 FLA(如 ZOMBIE_TUTORIAL_IMP)的 zip 条目名用反斜杠当分隔符
+	   (LIBRARY/media\\xxx.png), 不解压成 '/' 就永远匹配不上 href/media 目录。 */
+	const name = dec.decode(buf.subarray(p + 30, p + 30 + nl)).replace(/\\/g, '/');
+	const ds = p + 30 + nl + el;
+	/* [坑7] 数据描述符写法：local header 里 csize=0，真实长度只写在该条数据后面。
+	   此时按「下一个 local header」划定本条数据区。 */
+	let end;
+	if (csize === 0){ end = findNextLfh(buf, ds, n); }
+	else { end = Math.min(ds + csize, n); }
+	const raw = buf.subarray(ds, end);
+	let data = null;
+	try {
+	  if (method === 0) data = raw.slice();
+	  else if (method === 8) data = csize === 0 ? await inflateBest(raw) : await inflateRawBytes(raw);
+	} catch (e){ log('  解压失败(跳过) ' + name + ' : ' + e, 'w'); }
+	if (data && data.length && !name.endsWith('/')) out.set(name, data);
+	if (end <= p) break;
+	p = end;
+  }
+  return out;
+}
+function zipStore(entries){
+  const chunks = [], central = []; let off = 0;
+  for (const e of entries){
+	const nb = enc.encode(e.name), data = e.data, crc = crc32(data), len = data.length;
+	const lh = new Uint8Array(30 + nb.length), lv = new DataView(lh.buffer);
+	lv.setUint32(0, 0x04034b50, true); lv.setUint16(4, 20, true); lv.setUint16(6, 0, true);
+	lv.setUint16(8, 0, true); lv.setUint16(10, 0, true); lv.setUint16(12, 0, true);
+	lv.setUint32(14, crc, true); lv.setUint32(18, len, true); lv.setUint32(22, len, true);
+	lv.setUint16(26, nb.length, true); lv.setUint16(28, 0, true);
+	lh.set(nb, 30); chunks.push(lh, data);
+	const ch = new Uint8Array(46 + nb.length), cv = new DataView(ch.buffer);
+	cv.setUint32(0, 0x02014b50, true); cv.setUint16(4, 20, true); cv.setUint16(6, 20, true);
+	cv.setUint16(8, 0, true); cv.setUint16(10, 0, true); cv.setUint16(12, 0, true); cv.setUint16(14, 0, true);
+	cv.setUint32(16, crc, true); cv.setUint32(20, len, true); cv.setUint32(24, len, true);
+	cv.setUint16(28, nb.length, true); cv.setUint16(30, 0, true); cv.setUint16(32, 0, true);
+	cv.setUint16(34, 0, true); cv.setUint16(36, 0, true); cv.setUint32(38, 0, true); cv.setUint32(42, off, true);
+	ch.set(nb, 46); central.push(ch);
+	off += lh.length + len;
+  }
+  const cdOff = off, cdSize = central.reduce((s,c) => s + c.length, 0);
+  const eocd = new Uint8Array(22), ev = new DataView(eocd.buffer);
+  ev.setUint32(0, 0x06054b50, true); ev.setUint16(4, 0, true); ev.setUint16(6, 0, true);
+  ev.setUint16(8, entries.length, true); ev.setUint16(10, entries.length, true);
+  ev.setUint32(12, cdSize, true); ev.setUint32(16, cdOff, true); ev.setUint16(20, 0, true);
+  const total = off + cdSize + 22;
+  const out = new Uint8Array(total); let o = 0;
+  for (const c of chunks){ out.set(c, o); o += c.length; }
+  for (const c of central){ out.set(c, o); o += c.length; }
+  out.set(eocd, o);
+  return out;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   2 · XML（DOMParser + 按 localName 取，彻底躲开命名空间）
+   ══════════════════════════════════════════════════════════════════════════ */
+function parseXml(bytes){
+  const text = (typeof bytes === 'string') ? bytes : dec.decode(bytes);
+  const doc = new DOMParser().parseFromString(text, 'application/xml');
+  const pe = doc.getElementsByTagName('parsererror')[0];
+  if (pe) throw new Error('XML 解析失败: ' + pe.textContent.slice(0, 200));
+  return doc;
+}
+const ch  = (el, name) => { if (!el) return null; for (const c of el.children) if (c.localName === name) return c; return null; };
+const chs = (el, name) => { const o = []; if (!el) return o; for (const c of el.children) if (c.localName === name) o.push(c); return o; };
+const at  = (el, k, d) => { if (!el) return d; const v = el.getAttribute(k); return v === null ? d : v; };
+const atF = (el, k, d) => { const v = at(el, k, null); return v === null || v === '' ? d : parseFloat(v); };
+const atI = (el, k, d) => { const v = at(el, k, null); return v === null || v === '' ? d : Math.trunc(parseFloat(v)); };
+const atB = (el, k, d) => { const v = at(el, k, null); return v === null ? d : (v === 'true' || v === '1'); };
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const fmt = v => (Math.abs(v) < 1e-9 ? 0 : v).toFixed(6);
+
+/* ══════════════════════════════════════════════════════════════════════════
+   3 · 颜色 / 仿射矩阵
+   ══════════════════════════════════════════════════════════════════════════ */
+function parseColor(s, alpha){
+  const a = (alpha === undefined) ? 1.0 : alpha;
+  if (!s) return [0,0,0,a];
+  s = String(s).trim();
+  let v = null;
+  if (s[0] === '#'){ let h = s.slice(1); if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2]; v = parseInt(h, 16); }
+  else if (/^0x/i.test(s)) v = parseInt(s, 16);
+  if (v === null || isNaN(v)) return [0,0,0,a];
+  return [((v>>16)&255)/255, ((v>>8)&255)/255, (v&255)/255, a];
+}
+const IDENT = [1,0,0,1,0,0];
+function matMul(m1, m2){
+  const [a1,b1,c1,d1,x1,y1] = m1, [a2,b2,c2,d2,x2,y2] = m2;
+  return [a1*a2+c1*b2, b1*a2+d1*b2, a1*c2+c1*d2, b1*c2+d1*d2, a1*x2+c1*y2+x1, b1*x2+d1*y2+y1];
+}
+function matApply(m, x, y){ return [m[0]*x + m[2]*y + m[4], m[1]*x + m[3]*y + m[5]]; }
+function matOf(node){
+  const mm = ch(node, 'Matrix');
+  if (!mm) return IDENT.slice();
+  return [atF(mm,'a',1), atF(mm,'b',0), atF(mm,'c',0), atF(mm,'d',1), atF(mm,'tx',0), atF(mm,'ty',0)];
+}
+/* Mat -> amproj 量纲 (rot_rad, sx, sy, kx, ky)。与 Python trs_from_fine_decompose 严格同构：
+   精确逆分解 R·K·S，ky≡0、kx 承载切变，sy 可负以承载镜像。 */
+function trsFromFineDecompose(m){
+  const a = m[0], b = m[1], c = m[2], d = m[3];
+  const L = Math.hypot(a, b);
+  if (L < 1e-12) return [0, 0, Math.hypot(c, d), 0, 0];
+  const cs = a / L, sn = b / L;
+  const rot = Math.atan2(b, a), sx = L;
+  const sy = -sn * c + cs * d;
+  const kx = Math.abs(sy) > 1e-12 ? (cs * c + sn * d) / sy : 0;
+  return [rot, sx, sy, kx, 0];
+}
+function composeTrs(rot, sx, sy, kx, ky, tx, ty){
+  const cs = Math.cos(rot), sn = Math.sin(rot);
+  return [sx*(cs - sn*ky), sx*(sn + cs*ky), sy*(cs*kx - sn), sy*(sn*kx + cs), tx, ty];
+}
+function lerpMatrix(ma, mb, t){
+  const [ra,sxa,sya,kxa] = trsFromFineDecompose(ma);
+  const [rb,sxb,syb,kxb] = trsFromFineDecompose(mb);
+  const px = ma[4] + (mb[4]-ma[4])*t, py = ma[5] + (mb[5]-ma[5])*t;
+  let dr = rb - ra;
+  while (dr >  Math.PI) dr -= 2*Math.PI;
+  while (dr < -Math.PI) dr += 2*Math.PI;
+  return composeTrs(ra + dr*t, sxa+(sxb-sxa)*t, sya+(syb-sya)*t, kxa+(kxb-kxa)*t, 0, px, py);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   4 · XFL 形状解析（edges / cubics / fills / strokes）
+   ══════════════════════════════════════════════════════════════════════════ */
+const HEXCH = '0123456789abcdefABCDEF';
+const isHex = c => HEXCH.indexOf(c) >= 0;
+/* '#HHH.HH' = 十六进制 twips（不是十进制科学计数法！），高位 >=8 为补码负数 */
+function readHexTwip(s, i){
+  let j = i + 1; const n = s.length; let ip = '', fp = '';
+  while (j < n && isHex(s[j])){ ip += s[j]; j++; }
+  if (j < n && s[j] === '.'){ j++; while (j < n && isHex(s[j])){ fp += s[j]; j++; } }
+  let v = 0;
+  if (ip){ let iv = parseInt(ip, 16); if (parseInt(ip[0], 16) >= 8) iv -= Math.pow(2, ip.length * 4); v = iv; }
+  if (fp) v += parseInt(fp, 16) / Math.pow(16, fp.length);
+  return [v / TWIPS, j];
+}
+/* 'edges' -> 子路径（坐标 /20 转 px，二次贝塞尔精确升阶为三次） */
+function tokenizeEdges(s){
+  const nums = [], cmds = []; let i = 0; const n = s.length;
+  while (i < n){
+	const c = s[i];
+	if (c === '!' || c === '|' || c === '[' || c === '/' || c === ']' || c === ')'){ cmds.push([c, nums.length]); i++; }
+	else if (c === '#'){ const [v, k] = readHexTwip(s, i); nums.push(v); i = k; }
+	else if (c === 'S'){ i++; while (i < n && s[i] >= '0' && s[i] <= '9') i++; }   /* 'S5' 样式码，跳过 */
+	else if (c === '-' || c === '.' || c === '+' || (c >= '0' && c <= '9')){
+	  let j = i; while (j < n && (s[j]==='-'||s[j]==='.'||s[j]==='+'||(s[j]>='0'&&s[j]<='9'))) j++;
+	  const v = parseFloat(s.slice(i, j)); if (!isNaN(v)) nums.push(v / TWIPS); i = j;
+	} else i++;
+  }
+  for (const v of nums) if (Math.abs(v) > 1e5) throw new Error('edges 坐标异常 ' + v.toFixed(1));
+  const out = []; let cur = [0,0], path = null;
+  const flush = closed => { if (path && path.cubics.length) { path.closed = closed; out.push(path); } path = null; };
+  for (let ci = 0; ci < cmds.length; ci++){
+	const [c, at_] = cmds[ci];
+	const endAt = (ci + 1 < cmds.length) ? cmds[ci+1][1] : nums.length;
+	if (c === '!'){
+	  flush(false);
+	  if (at_ + 1 < endAt){ cur = [nums[at_], nums[at_+1]]; path = { start: cur.slice(), cubics: [], closed: false }; }
+	} else if (c === '|' || c === '/'){
+	  if (at_ + 1 < endAt){
+		if (!path) path = { start: cur.slice(), cubics: [], closed: false };
+		const p1 = [nums[at_], nums[at_+1]];
+		path.cubics.push([cur[0],cur[1],p1[0],p1[1],p1[0],p1[1]]);
+		cur = p1;
+	  }
+	} else if (c === '['){
+	  if (at_ + 3 < endAt){
+		if (!path) path = { start: cur.slice(), cubics: [], closed: false };
+		const cx = nums[at_], cy = nums[at_+1], ax = nums[at_+2], ay = nums[at_+3];
+		const [x0, y0] = cur;
+		path.cubics.push([
+		  x0 + 2/3*(cx-x0), y0 + 2/3*(cy-y0),
+		  ax + 2/3*(cx-ax), ay + 2/3*(cy-ay), ax, ay,
+		]);
+		cur = [ax, ay];
+	  }
+	} else if (c === ']' || c === ')') flush(true);
+  }
+  flush(false);
+  return out;
+}
+const DEC_RE = /^[+-]?(?:\d+\.?\d*|\.\d+)/;
+function readDec(s, i){ const m = DEC_RE.exec(s.slice(i)); return m ? [parseFloat(m[0]), i + m[0].length] : [0, -1]; }
+/* 'cubics' -> 子路径；格式 '!sx sy(;c1x,c1y c2x,c2y ax,ay q..Q..);'
+   只有"逗号对"是控制点/锚点，每 3 对 = 一段三次贝塞尔。 */
+function tokenizeCubics(s){
+  const bang = s.indexOf('!'); if (bang < 0) return [];
+  let [sx, i1] = readDec(s, bang + 1); if (i1 < 0) return [];
+  let [sy] = readDec(s, i1);
+  const start = [sx / TWIPS, sy / TWIPS];
+  if (Math.abs(start[0]) > 1e5 || Math.abs(start[1]) > 1e5) throw new Error('cubics 起点异常');
+  const pairs = []; let i = 0; const n = s.length;
+  while (i < n){
+	const [v, k] = readDec(s, i);
+	if (k < 0){ i++; continue; }
+	let t = k; while (t < n && (s[t]===' '||s[t]==='\t'||s[t]==='\r'||s[t]==='\n')) t++;
+	if (t < n && s[t] === ','){
+	  const [vy, k2] = readDec(s, t + 1);
+	  if (k2 > 0){
+		if (Math.abs(v) > 1e5 || Math.abs(vy) > 1e5) throw new Error('cubics 坐标异常');
+		pairs.push([v, vy]); i = k2; continue;
+	  }
+	}
+	i = k;
+  }
+  if (pairs.length < 3) return [];
+  const path = { start: start.slice(), cubics: [], closed: false };
+  let idx = 0;
+  while (idx + 2 < pairs.length){
+	path.cubics.push([
+	  pairs[idx][0]/TWIPS, pairs[idx][1]/TWIPS,
+	  pairs[idx+1][0]/TWIPS, pairs[idx+1][1]/TWIPS,
+	  pairs[idx+2][0]/TWIPS, pairs[idx+2][1]/TWIPS,
+	]);
+	idx += 3;
+  }
+  return path.cubics.length ? [path] : [];
+}
+const DEFAULT_SOLID = '#000000';
+function defaultSolid(el){ const c = el.getAttribute('color'); return (!c || !c.trim()) ? DEFAULT_SOLID : c; }
+function parseFills(shape){
+  const out = new Map(); const fsEl = ch(shape, 'fills'); if (!fsEl) return out;
+  for (const f of chs(fsEl, 'FillStyle')){
+	const idx = atI(f, 'index', 0); const st = { kind: 0, color: [1,1,1,1], entries: [], mat: IDENT.slice(), bitmap: '' };
+	const sc = ch(f,'SolidColor'), lg = ch(f,'LinearGradient'), rg = ch(f,'RadialGradient'), bi = ch(f,'BitmapFill');
+	if (sc){ st.kind = 0; st.color = parseColor(defaultSolid(sc), atF(sc,'alpha',1)); }
+	else if (lg || rg){
+	  st.kind = lg ? 1 : 2; const g = lg || rg;
+	  st.mat = matOf(ch(g,'matrix'));
+	  for (const ge of chs(g,'GradientEntry')){
+		const [r,gg,b,a] = parseColor(defaultSolid(ge), 1);
+		st.entries.push({ ratio: atF(ge,'ratio',0), c: [r,gg,b, a * atF(ge,'alpha',1)] });
+	  }
+	  st.entries.sort((x,y) => x.ratio - y.ratio);
+	} else if (bi){ st.kind = 3; st.bitmap = at(bi,'bitmapPath',''); st.mat = matOf(ch(bi,'matrix')); }
+	out.set(idx, st);
+  }
+  return out;
+}
+function parseStrokes(shape){
+  const out = new Map(); const ssEl = ch(shape, 'strokes'); if (!ssEl) return out;
+  for (const s of chs(ssEl, 'StrokeStyle')){
+	const idx = atI(s, 'index', 0); const st = { color: [0,0,0,1], weight: 1 };
+	const solid = ch(s, 'SolidStroke');
+	if (solid){
+	  st.weight = atF(solid, 'weight', 1);
+	  const fl = ch(solid, 'fill'); const sc = fl ? ch(fl, 'SolidColor') : null;
+	  if (sc) st.color = parseColor(defaultSolid(sc), atF(sc, 'alpha', 1));
+	}
+	out.set(idx, st);
+  }
+  return out;
+}
+function parseEdges(shape){
+  const out = []; const es = ch(shape, 'edges'); if (!es) return out;
+  for (const e of chs(es, 'Edge')){
+	const fs0 = atI(e,'fillStyle0',0), fs1 = atI(e,'fillStyle1',0), sst = atI(e,'strokeStyle',0);
+	const se = at(e,'edges',''), sc = at(e,'cubics','');
+	if (se){ try { for (const p of tokenizeEdges(se)) out.push({ path: p, fs0, fs1, ss: sst }); } catch(err){} }
+	if (sc){ try { for (const p of tokenizeCubics(sc)) out.push({ path: p, fs0, fs1, ss: sst }); } catch(err){} }
+  }
+  return out;
+}
+function shapeBBox(shape){
+  let segs; try { segs = parseEdges(shape); } catch(e){ return null; }
+  if (!segs.length) return null;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  const acc = (x,y) => { if(x<x0)x0=x; if(y<y0)y0=y; if(x>x1)x1=x; if(y>y1)y1=y; };
+  for (const sg of segs){
+	acc(sg.path.start[0], sg.path.start[1]);
+	for (const c of sg.path.cubics){ acc(c[0],c[1]); acc(c[2],c[3]); acc(c[4],c[5]); }
+  }
+  if (!isFinite(x0)) return null;
+  let pad = 0;
+  for (const st of parseStrokes(shape).values()) pad = Math.max(pad, st.weight * 0.5);
+  return [x0-pad, y0-pad, x1+pad, y1+pad];
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   5 · 形状 -> Canvas 光栅化（nonzero 填充 + 圆头描边 + 渐变）
+   ══════════════════════════════════════════════════════════════════════════ */
+function newCanvas(w, h){ const c = document.createElement('canvas'); c.width = Math.max(1, w|0); c.height = Math.max(1, h|0); return c; }
+function canvasToPng(canvas){
+  return new Promise(res => canvas.toBlob(async b => res(new Uint8Array(await b.arrayBuffer())), 'image/png'));
+}
+function pathFrom(subpaths){
+  const p = new Path2D();
+  for (const sp of subpaths){
+	p.moveTo(sp.start[0], sp.start[1]);
+	for (const c of sp.cubics) p.bezierCurveTo(c[0],c[1],c[2],c[3],c[4],c[5]);
+	if (sp.closed) p.closePath();
+  }
+  return p;
+}
+/* 返回 { canvas, minX, minY, w, h }，canvas 像素 = ceil(w*ss) x ceil(h*ss) */
+function rasterizeShape(shape, ss, targetHint){
+  const fills = parseFills(shape), strokes = parseStrokes(shape);
+  let segs; try { segs = parseEdges(shape); } catch(e){ return null; }
+  if (!segs.length) return null;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  const acc = (x,y) => { if(x<minX)minX=x; if(y<minY)minY=y; if(x>maxX)maxX=x; if(y>maxY)maxY=y; };
+  for (const sg of segs){
+	acc(sg.path.start[0], sg.path.start[1]);
+	for (const c of sg.path.cubics){ acc(c[0],c[1]); acc(c[2],c[3]); acc(c[4],c[5]); }
+  }
+  if (!isFinite(minX)) return null;
+  if (maxX - minX > 4000 || maxY - minY > 4000) return null;
+  let pad = 2.0;
+  for (const st of strokes.values()) pad = Math.max(pad, st.weight * 0.5 + 1.0);
+  minX -= pad; minY -= pad; maxX += pad; maxY += pad;
+  const w = Math.max(1, maxX - minX), h = Math.max(1, maxY - minY);
+  const hint = targetHint || 2048;
+  const scale = Math.min(ss, Math.max(1, hint / Math.max(w, h)));
+  const pw = Math.max(1, Math.ceil(w * scale)), ph = Math.max(1, Math.ceil(h * scale));
+  if (pw * ph > 64e6) return null;
+  const cv = newCanvas(pw, ph), ctx = cv.getContext('2d');
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  ctx.scale(scale, scale); ctx.translate(-minX, -minY);
+
+  /* 按 fillStyle 索引分组（fs0 = 左 / fs1 = 右），各自闭合成子路径后 nonzero 填充 */
+  const byFill = new Map();
+  for (const sg of segs){
+	for (const [idx, d] of [[sg.fs0, 1], [sg.fs1, -1]]){
+	  if (idx <= 0) continue;
+	  if (!byFill.has(idx)) byFill.set(idx, []);
+	  byFill.get(idx).push(sg.path);
+	}
+  }
+  for (const idx of [...byFill.keys()].sort((a,b)=>a-b)){
+	const fs = fills.get(idx); if (!fs) continue;
+	const p = pathFrom(byFill.get(idx));
+	ctx.fillStyle = makeFillStyle(ctx, fs, minX, minY, maxX, maxY);
+	ctx.fill(p, 'nonzero');
+  }
+  /* 描边 */
+  const byStroke = new Map();
+  for (const sg of segs){ if (sg.ss > 0){ if (!byStroke.has(sg.ss)) byStroke.set(sg.ss, []); byStroke.get(sg.ss).push(sg.path); } }
+  for (const idx of [...byStroke.keys()].sort((a,b)=>a-b)){
+	const st = strokes.get(idx); if (!st || st.weight <= 0) continue;
+	const [r,g,b,a] = st.color;
+	ctx.strokeStyle = `rgba(${Math.round(r*255)},${Math.round(g*255)},${Math.round(b*255)},${a})`;
+	ctx.lineWidth = Math.max(0.05, st.weight);
+	ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+	ctx.stroke(pathFrom(byStroke.get(idx)));
+  }
+  return { canvas: cv, minX, minY, w, h, scale };
+}
+function makeFillStyle(ctx, fs, minX, minY, maxX, maxY){
+  if (fs.kind === 0 || fs.entries.length < 2){
+	const [r,g,b,a] = fs.color;
+	return `rgba(${Math.round(r*255)},${Math.round(g*255)},${Math.round(b*255)},${a})`;
+  }
+  let grad;
+  if (fs.kind === 1){
+	const p0 = matApply(fs.mat, 0, 0), p1 = matApply(fs.mat, 1, 0);
+	grad = ctx.createLinearGradient(p0[0], p0[1], p1[0], p1[1]);
+  } else {
+	/* [补细节] 与参考播放器 fla_player.gd 对齐: 径向渐变以**梯度空间原点**为圆心,
+	   t = |inv·p|*2, 故 ratio=1(外缘) 落在 shape 空间的 0.5×矩阵缩放处;
+	   旧实现把圆心取在 (0.5,0.5) 导致整个径向渐变错位半个单位。 */
+	const c = matApply(fs.mat, 0, 0);
+	const ax = Math.hypot(fs.mat[0], fs.mat[1]), ay = Math.hypot(fs.mat[2], fs.mat[3]);
+	const rad = Math.max(1e-3, 0.5 * (ax + ay) * 0.5);
+	grad = ctx.createRadialGradient(c[0], c[1], 0, c[0], c[1], rad);
+  }
+  for (const e of fs.entries){
+	const [r,g,b,a] = e.c;
+	grad.addColorStop(Math.min(1, Math.max(0, e.ratio)), `rgba(${Math.round(r*255)},${Math.round(g*255)},${Math.round(b*255)},${a})`);
+  }
+  return grad;
+}
+/* ══════════════════════════════════════════════════════════════════════════
+   6 · XFL 文档模型（DOMDocument.xml + LIBRARY/*.xml）
+   ══════════════════════════════════════════════════════════════════════════ */
+const safeName = s => String(s).replace(/[^0-9A-Za-z_]/g, '_');
+const rgbaStr = (col, a) => `rgba(${Math.round(col[0]*255)},${Math.round(col[1]*255)},${Math.round(col[2]*255)},${a})`;
+
+/* 滤镜烘焙强度微调（对象属性可变，便于线上标定/被自测脚本覆写）。
+   [坑7 · 滤镜烘焙保真] 预览 A 面(renderTimeline)按 Animate 语义在**设备空间**
+   施加 Blur/Glow：被实例矩阵压扁后的细小火花先模糊再发光，alpha 被摊薄，呈柔和微光。
+   而写进 AMPROJ 的素材图只能在元件**本地空间**预烘焙：同一微小火花在未变换的
+   满尺寸下模糊+发光，饱和度近乎不透明，再被实例矩阵压缩 → 变成刺眼的实心亮团。
+   这里用可调系数把烘焙强度压回接近设备空间的观感：glowAlphaK 压低光晕不透明度，
+   blurK 收窄模糊半径。默认值经逐帧标定，使 308/310/446 等特效帧的 A/B 差异最小。 */
+const FXTUNE = { glowAlphaK: 0.15, glowBlurK: 0.55, blurK: 0.55 };
+
+function parseFilters(e){
+  const fs = ch(e, 'filters'); if (!fs) return null;
+  const out = [];
+  for (const f of fs.children){
+	const t = f.localName;
+	if (t === 'BlurFilter') out.push({ kind:'blur', bx: atF(f,'blurX',0), by: atF(f,'blurY',0), quality: atF(f,'quality',1) });
+	else if (t === 'GlowFilter') out.push({ kind:'glow', bx: atF(f,'blurX',0), by: atF(f,'blurY',0),
+		color: parseColor(at(f,'color','#000000')), strength: atF(f,'strength',1), alpha: atF(f,'alpha',1), inner: atB(f,'inner',false) });
+	else if (t === 'DropShadowFilter') out.push({ kind:'shadow', bx: atF(f,'blurX',0), by: atF(f,'blurY',0),
+		color: parseColor(at(f,'color','#000000')), dist: atF(f,'distance',0), ang: atF(f,'angle',45), alpha: atF(f,'alpha',1), strength: atF(f,'strength',1) });
+	else if (t === 'AdjustColorFilter') out.push({ kind:'adjust', br: atF(f,'brightness',0), ct: atF(f,'contrast',0), sat: atF(f,'saturation',0), hue: atF(f,'hue',0) });
+  }
+  return out.length ? out : null;
+}
+/* 元素最终矩阵：含 transformationPoint(轴心) 语义 M' = T(tp)·M·T(-tp) */
+function matWithTP(e){
+  let m = matOf(ch(e, 'matrix'));
+  const tp = ch(e, 'transformationPoint');
+  const pt = tp ? ch(tp, 'Point') : null;
+  if (pt){
+	const px = atF(pt,'x',0), py = atF(pt,'y',0);
+	if (px || py){
+	  const [a,b,c,d,tx,ty] = m;
+	  m = [a,b,c,d, tx + px - (a*px + c*py), ty + py - (b*px + d*py)];
+	}
+  }
+  return m;
+}
+function parseFrameEl(f){
+  const fr = { index: atI(f,'index',0), duration: Math.max(1, atI(f,'duration',1)),
+	keyMode: atI(f,'keyMode',0), tweenType: at(f,'tweenType',''), easeMethod: at(f,'easeMethodName',''),
+	customEase: [], elements: [] };
+  const tw = ch(f,'tweens'); const ce = tw ? ch(tw,'CustomEase') : null;
+  if (ce) for (const p of chs(ce,'Point')) fr.customEase.push([atF(p,'x',0), atF(p,'y',0)]);
+  const els = ch(f,'elements');
+  if (els) for (const e of els.children){
+	const tag = e.localName;
+	if (tag === 'DOMSymbolInstance'){
+	  const el = { isSymbol:true, libName: at(e,'libraryItemName',''), mat: matWithTP(e),
+				   alpha:1, brightness:0, tintMult:0, tint:null, colorMult:null, filters: parseFilters(e) };
+	  const cn = ch(e,'color'); const cc = cn ? ch(cn,'Color') : null;
+	  if (cc){
+		el.alpha = atF(cc,'alphaMultiplier',1);
+		el.brightness = atF(cc,'brightness',0);
+		el.tintMult = atF(cc,'tintMultiplier',0);
+		el.tint = parseColor(at(cc,'tintColor','#FFFFFF'), 1);
+		el.colorMult = [atF(cc,'redMultiplier',1), atF(cc,'greenMultiplier',1), atF(cc,'blueMultiplier',1), atF(cc,'alphaMultiplier',1)];
+	  }
+	  fr.elements.push(el);
+	} else if (tag === 'DOMShape'){
+	  fr.elements.push({ isSymbol:false, shape:e, mat: matWithTP(e),
+						 alpha: atF(e,'alphaMultiplier',1), brightness:0, tintMult:0,
+						 filters: parseFilters(e) });
+	} else if (tag === 'DOMBitmapInstance'){
+	  fr.elements.push({ isSymbol:true, bitmap:true, libName: at(e,'libraryItemName',''),
+						 mat: matWithTP(e), alpha:1, brightness:0, tintMult:0, filters: parseFilters(e) });
+	}
+  }
+  return fr;
+}
+function parseTimeline(tl){
+  const out = { name: at(tl,'name',''), layers: [] };
+  const ls = ch(tl,'layers'); if (!ls) return out;
+  for (const l of chs(ls,'DOMLayer')){
+	const lay = { name: at(l,'name',''), layerType: at(l,'layerType','normal'),
+				  visible: at(l,'visible','true') !== 'false', frames: [] };
+	const fs = ch(l,'frames');
+	if (fs) for (const f of chs(fs,'DOMFrame')) lay.frames.push(parseFrameEl(f));
+	lay.frames.sort((a,b) => a.index - b.index);
+	out.layers.push(lay);
+  }
+  return out;
+}
+function timelineFrames(tl){
+  let n = 1;
+  for (const l of tl.layers) for (const f of l.frames) n = Math.max(n, f.index + Math.max(1, f.duration));
+  return n;
+}
+function loadDoc(files){
+  const dx = files.get('DOMDocument.xml');
+  if (!dx) throw new Error('压缩包内缺少 DOMDocument.xml');
+  const root = parseXml(dx).documentElement;
+  const doc = { width: atI(root,'width',550), height: atI(root,'height',400),
+				fps: atF(root,'frameRate',24) || 24, bg: at(root,'backgroundColor','#FFFFFF'),
+				main: null, symbols: new Map() };
+  const tls = ch(root,'timelines');
+  if (tls) for (const tl of chs(tls,'DOMTimeline')) doc.main = parseTimeline(tl);
+  const lib = new Map();
+  for (const [k,v] of files){
+	if (k.toLowerCase().endsWith('.xml') && k.toUpperCase().startsWith('LIBRARY/'))
+	  lib.set(k.slice('LIBRARY/'.length), v);
+  }
+  const syms = ch(root,'symbols');
+  if (syms) for (const inc of chs(syms,'Include')){
+	const href = at(inc,'href',''), itemId = at(inc,'itemID','');
+	let blob = lib.get(href);
+	if (!blob){ const h = href.toUpperCase().startsWith('LIBRARY/') ? href.slice(8) : href; blob = lib.get(h); }
+	if (!blob){ const base = href.split('/').pop(); for (const [k,v] of lib) if (k.split('/').pop() === base){ blob = v; break; } }
+	if (!blob) continue;
+	let r; try { r = parseXml(blob).documentElement; } catch(err){ continue; }
+	const name = at(r,'name','') || href.replace(/\.xml$/i,'');
+	const sym = { name, itemId: at(r,'itemID',itemId), symbolType: at(r,'symbolType','graphic'), timeline:null, duration:1 };
+	let stl = ch(r,'timeline'); if (stl) stl = ch(stl,'DOMTimeline');
+	if (!stl){ const t2 = ch(r,'timelines'); if (t2){ const c = chs(t2,'DOMTimeline'); stl = c[0] || null; } }
+	if (stl){ sym.timeline = parseTimeline(stl); sym.duration = Math.max(1, timelineFrames(sym.timeline)); }
+	doc.symbols.set(name, sym);
+  }
+  /* 位图素材（第二种 FLA: 位图实例只出现在 LIBRARY/image/*.xml 符号里,
+	 主时间线通过 label→sprite→image 多层符号间接引用） */
+  doc.bitmapItems = new Map();
+  const med = ch(root, 'media');
+  if (med) for (const b of chs(med, 'DOMBitmapItem')){
+	/* [格式二] XFL 的 DOMBitmapItem 通常**没有** width/height 属性, 只有
+	   frameRight/frameBottom(单位 twip, 1px = 20 twip)。缺了它 symbolBBox
+	   会因 it.w=0 直接放弃该元件 -> 整条 label/sprite 链渲染为空。 */
+	const w = atI(b,'width',0) || Math.round(atF(b,'frameRight',0)/20);
+	const h = atI(b,'height',0) || Math.round(atF(b,'frameBottom',0)/20);
+	doc.bitmapItems.set(at(b,'name',''), { href: at(b,'href',''), w, h });
+  }
+  doc.files = files;
+  doc.bitmaps = new Map();
+  return doc;
+}
+/* ── 自动识别 FLA 的两种格式 ──────────────────────────────────────────
+   第一种：纯矢量。LIBRARY 下的元件 xml 里是 DOMShape, 没有 media/DOMBitmapItem。
+   第二种：位图素材。DOMDocument 带 <media><DOMBitmapItem>, 位图实例通常藏在
+		   LIBRARY/image 的符号 xml 里, 主时间线经 label→sprite→image 多层引用。
+   两种格式走同一套解析/渲染管线, 这里的判定只用于提示与日志。 */
+function flaFormatOf(doc){
+  const nBmp = doc.bitmapItems ? doc.bitmapItems.size : 0;
+  return { code: nBmp ? 2 : 1, name: nBmp ? '第二种（位图素材 + 嵌套符号）' : '第一种（纯矢量图形）', bitmapCount: nBmp };
+}
+function bitmapBytes(doc, libName){
+  const files = doc.files;
+  const it = doc.bitmapItems ? doc.bitmapItems.get(libName) : null;
+  const cands = [];
+  if (it && it.href) cands.push('bin/' + it.href, it.href, 'LIBRARY/' + it.href);
+  cands.push('bin/' + libName, libName, 'LIBRARY/' + libName);
+  for (const c of cands) if (files.has(c)) return files.get(c);
+  const base = ((it && it.href) || libName).split('/').pop();
+  for (const [k,v] of files) if (k.split('/').pop() === base) return v;
+  return null;
+}
+async function decodeFlaBitmaps(doc){
+  for (const libName of doc.bitmapItems.keys()){
+	if (doc.bitmaps.has(libName)) continue;
+	const bytes = bitmapBytes(doc, libName);
+	if (!bytes) continue;
+	let ext = libName.toLowerCase();
+	let type = ext.endsWith('.jpg') || ext.endsWith('.jpeg') ? 'image/jpeg' : (ext.endsWith('.webp') ? 'image/webp' : 'image/png');
+	try {
+	  const bmp = await createImageBitmap(new Blob([bytes], { type }), { premultiplyAlpha: 'none' });
+	  doc.bitmaps.set(libName, bmp);
+	  /* [格式二] 以真实解码尺寸为准, 覆盖 XML 里可能缺失/不准的 w/h */
+	  const it = doc.bitmapItems.get(libName);
+	  if (it && bmp.width && bmp.height){ it.w = bmp.width; it.h = bmp.height; }
+	}
+	catch(e){ log('  位图解码失败 ' + libName, 'w'); }
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   7 · 补间插值 + 时间线渲染到 Canvas
+   ══════════════════════════════════════════════════════════════════════════ */
+const EASE_MAP = {
+  quadIn:u=>u*u, quadOut:u=>u*(2-u),
+  quadInOut:u=>u<0.5?2*u*u:-1+(4-2*u)*u,
+  cubicIn:u=>u*u*u, cubicOut:u=>Math.pow(u-1,3)+1,
+  cubicInOut:u=>u<0.5?4*u*u*u:1+4*Math.pow(u-1,3),
+  sinIn:u=>1-Math.cos(u*Math.PI/2), sinOut:u=>Math.sin(u*Math.PI/2),
+  sinInOut:u=>-(Math.cos(Math.PI*u)-1)*0.5,
+};
+function applyEase(t, method){ const f = EASE_MAP[method]; return f ? f(t) : t; }
+function bezierEase(t, pts){
+  if (!pts || pts.length < 4) return t;
+  if (t <= 0) return 0; if (t >= 1) return 1;
+  const [p0x,p0y] = pts[0], [p1x,p1y] = pts[1], [p2x,p2y] = pts[2], [p3x,p3y] = pts[3];
+  let lo = 0, hi = 1;
+  for (let i=0;i<28;i++){
+	const u = (lo+hi)*0.5, it = 1-u;
+	const x = it*it*it*p0x + 3*it*it*u*p1x + 3*it*u*u*p2x + u*u*u*p3x;
+	if (x < t) lo = u; else hi = u;
+  }
+  const u = (lo+hi)*0.5, it = 1-u;
+  return it*it*it*p0y + 3*it*it*u*p1y + 3*it*u*u*p2y + u*u*u*p3y;
+}
+const NAMED_EASE_CUBIC = {
+  none:[0,0,1,1], quadIn:[0.11,0,0.5,0], quadOut:[0.5,1,0.89,1], quadInOut:[0.45,0,0.55,1],
+  cubicIn:[0.32,0,0.67,0], cubicOut:[0.33,1,0.68,1], cubicInOut:[0.65,0,0.35,1],
+  quartIn:[0.5,0,0.75,0], quartOut:[0.25,1,0.5,1], quartInOut:[0.76,0,0.24,1],
+  quintIn:[0.64,0,0.78,0], quintOut:[0.22,1,0.36,1], quintInOut:[0.83,0,0.17,1],
+  sineIn:[0.12,0,0.39,0], sineOut:[0.61,1,0.88,1], sineInOut:[0.37,0,0.63,1],
+  circIn:[0,0,0.55,0], circOut:[0.55,1,1,1], circInOut:[0.5,0,0.5,1],
+  backIn:[0.35,0,0.9,0.35], backOut:[0.1,0.65,0.65,1],
+  expoIn:[0.7,0,0.84,0], expoOut:[0.16,1,0.3,1], expoInOut:[0.87,0,0.13,1],
+  elasticIn:[0.5,0,0.75,0], elasticOut:[0.25,1,0.5,1], bounceIn:[0.6,0,0.75,0], bounceOut:[0.25,1,0.4,1],
+};
+function hasTweenBetween(layer, a, b){
+  for (const f of layer.frames) if (f.tweenType && f.tweenType !== 'none' && a <= f.index && f.index < b) return true;
+  return false;
+}
+function tweenFrame(layer, a, b){
+  let found = null;
+  for (const f of layer.frames){
+	if (a <= f.index && f.index < b){
+	  if (f.customEase.length >= 4) found = f;
+	  else if (f.easeMethod && (found === null || found.customEase.length < 4)) found = f;
+	}
+  }
+  return found;
+}
+function layerItemsAt(layer, frame){
+  const out = [];
+  if (!layer.frames.length) return out;
+  /* [坑6 · 时长边界] XFL 每个关键帧的 duration 表示它"存活"的帧数,
+	 图层内容只在自己的关键帧区间 [index, index+duration) 内有效, 超出即空。
+	 旧实现只挑"index<=frame 的最后一个含元素帧"却完全无视 duration,
+	 于是所有一次性特效层(火花/光斑/闪光)在自身区间结束后**永久残留**:
+	 表现为预览 A 面在第 340/450/500 帧凭空多出整片光效, 而转换后的 AM
+	 (按图层区间裁剪, 本就正确)没有 —— 被误判成"转换丢特效"。
+	 这里改为严格的时长区间判定, 与 Animate 播放语义一致。 */
+  let prev = null, nxt = null;
+  for (const f of layer.frames){
+	if (!f.elements.length) continue;
+	if (f.index <= frame) prev = f;
+	else { nxt = f; break; }
+  }
+  if (!prev) return out;
+  if (frame >= prev.index + Math.max(1, prev.duration)) return out;   // 该关键帧区间已结束, 图层留空
+  if (nxt === null || prev.index === frame || !hasTweenBetween(layer, prev.index, nxt.index)){
+	for (const e of prev.elements) out.push([e, e.mat, prev.index]);
+	return out;
+  }
+  const span = Math.max(1, nxt.index - prev.index);
+  const t = Math.min(Math.max((frame - prev.index)/span, 0), 1);
+  const tf = tweenFrame(layer, prev.index, nxt.index);
+  let te = t;
+  if (tf){
+	if (tf.customEase.length >= 4) te = bezierEase(t, tf.customEase);
+	else if (tf.easeMethod) te = applyEase(t, tf.easeMethod);
+  }
+  const nmap = new Map(nxt.elements.map(e => [e.libName, e]));
+  for (const pe of prev.elements){
+	const ne = nmap.get(pe.libName);
+	out.push([pe, ne ? lerpMatrix(pe.mat, ne.mat, te) : pe.mat, prev.index]);
+  }
+  return out;
+}
+
+/* 形状直接画进任意 ctx（nonzero 填充 + 圆头描边 + 渐变） */
+function paintShape(ctx, shape){
+  const fills = parseFills(shape), strokes = parseStrokes(shape);
+  let segs; try { segs = parseEdges(shape); } catch(e){ return; }
+  if (!segs.length) return;
+  const byFill = new Map();
+  for (const sg of segs){
+	for (const idx of [sg.fs0, sg.fs1]){
+	  if (idx <= 0) continue;
+	  if (!byFill.has(idx)) byFill.set(idx, []);
+	  byFill.get(idx).push(sg.path);
+	}
+  }
+  for (const idx of [...byFill.keys()].sort((a,b)=>a-b)){
+	const fs = fills.get(idx); if (!fs) continue;
+	ctx.fillStyle = makeFillStyle(ctx, fs);
+	ctx.fill(pathFrom(byFill.get(idx)), 'nonzero');
+  }
+  const byStroke = new Map();
+  for (const sg of segs){ if (sg.ss > 0){ if (!byStroke.has(sg.ss)) byStroke.set(sg.ss, []); byStroke.get(sg.ss).push(sg.path); } }
+  for (const idx of [...byStroke.keys()].sort((a,b)=>a-b)){
+	const st = strokes.get(idx); if (!st || st.weight <= 0) continue;
+	ctx.strokeStyle = rgbaStr(st.color, st.color[3]);
+	ctx.lineWidth = Math.max(0.05, st.weight);
+	ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+	ctx.stroke(pathFrom(byStroke.get(idx)));
+  }
+}
+function symbolBBox(sym, doc, depth){
+  depth = depth || 0;
+  if (!sym || !sym.timeline || depth > 8) return null;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  const acc = (x,y) => { if(x<x0)x0=x; if(y<y0)y0=y; if(x>x1)x1=x; if(y>y1)y1=y; };
+  const walk = (tl, d) => {
+	if (!tl || d > 8) return;
+	for (const lay of tl.layers){
+	  if (!lay.visible || lay.layerType === 'guide' || lay.layerType === 'folder') continue;
+	  for (const f of lay.frames) for (const e of f.elements){
+		if (e.bitmap){
+		  const it = doc.bitmapItems ? doc.bitmapItems.get(e.libName) : null;
+		  if (!it || !it.w) continue;
+		  for (const p of [[0,0],[it.w,0],[0,it.h],[it.w,it.h]]){
+			const q = matApply(e.mat, p[0], p[1]); acc(q[0], q[1]);
+		  }
+		} else if (e.isSymbol){
+		  const sub = doc.symbols.get(e.libName); if (!sub) continue;
+		  const b = symbolBBox(sub, doc, d+1); if (!b) continue;
+		  for (const p of [[b[0],b[1]],[b[2],b[1]],[b[0],b[3]],[b[2],b[3]]]){
+			const q = matApply(e.mat, p[0], p[1]); acc(q[0], q[1]);
+		  }
+		} else if (e.shape){
+		  const b = shapeBBox(e.shape); if (!b) continue;
+		  for (const p of [[b[0],b[1]],[b[2],b[1]],[b[0],b[3]],[b[2],b[3]]]){
+			const q = matApply(e.mat, p[0], p[1]); acc(q[0], q[1]);
+		  }
+		}
+	  }
+	}
+  };
+  walk(sym.timeline, depth);
+  if (!isFinite(x0)) return null;
+  return [x0, y0, x1, y1];
+}
+function elemFilterPad(elem){
+  let pad = 0;
+  if (elem.filters) for (const f of elem.filters){
+	pad = Math.max(pad, (f.bx||0)*3 + 4, (f.by||0)*3 + 4);
+	if (f.dist) pad = Math.max(pad, Math.abs(f.dist) + 4);
+  }
+  return pad;
+}
+/* 带滤镜/混色地把一张局部画布按世界矩阵贴进 ctx */
+function blitFiltered(ctx, cv, minX, minY, world, elem, ss){
+  ss = ss || 1;
+  const local = [1/ss, 0, 0, 1/ss, minX, minY];
+  const wm = matMul(world, local);
+  ctx.save();
+  ctx.transform(wm[0], wm[1], wm[2], wm[3], wm[4], wm[5]);
+  if (elem.alpha !== 1) ctx.globalAlpha *= elem.alpha;
+  let blurPx = 0, glow = null, shadow = null;
+  if (elem.filters) for (const f of elem.filters){
+	if (f.kind === 'blur') blurPx = Math.max(blurPx, Math.max(f.bx, f.by));
+	else if (f.kind === 'glow') glow = f;
+	else if (f.kind === 'shadow') shadow = f;
+  }
+  const sc = Math.hypot(wm[0], wm[1]) || 1;
+  const parts = [];
+  if (blurPx > 0) parts.push(`blur(${(blurPx*sc).toFixed(2)}px)`);
+  if (elem.brightness) parts.push(`brightness(${(1+elem.brightness).toFixed(3)})`);
+  ctx.filter = parts.length ? parts.join(' ') : 'none';
+  if (glow){
+	ctx.shadowColor = rgbaStr(glow.color, Math.min(1, (glow.alpha!=null?glow.alpha:1) * Math.max(1,glow.strength) * 0.4));
+	ctx.shadowBlur = Math.max(1, glow.bx * sc);
+  } else if (shadow){
+	ctx.shadowColor = rgbaStr(shadow.color, Math.min(1, (shadow.alpha!=null?shadow.alpha:1) * Math.max(1,shadow.strength)));
+	ctx.shadowBlur = Math.max(1, shadow.bx * sc);
+	const a = -shadow.ang * Math.PI/180;
+	ctx.shadowOffsetX = Math.cos(a) * shadow.dist * sc;
+	ctx.shadowOffsetY = Math.sin(a) * shadow.dist * sc;
+  }
+  ctx.drawImage(cv, 0, 0);
+  ctx.restore();
+}
+function renderSymbolLocal(sym, inner, doc, cx, cy, half, pad, ss){
+  ss = ss || 1;
+  const view = half * 2 + pad * 2;
+  const px = Math.max(8, Math.ceil(view * ss));
+  const cv = newCanvas(px, px), ctx = cv.getContext('2d');
+  const k = px / view;
+  ctx.scale(k, k);
+  ctx.translate(-(cx - half - pad), -(cy - half - pad));
+  renderTimeline(ctx, sym.timeline, inner, doc, 0);
+  return { canvas: cv, minX: cx-half-pad, minY: cy-half-pad, ss: k };
+}
+function renderTimeline(ctx, tl, frame, doc, depth){
+  if (!tl || depth > 8) return;
+  const n = tl.layers.length;
+  for (let i=0;i<n;i++){
+	const layer = tl.layers[n-1-i];
+	if (!layer.visible || layer.layerType === 'guide' || layer.layerType === 'folder') continue;
+	for (const [elem, m, kfStart] of layerItemsAt(layer, frame)){
+	  if (elem.bitmap){
+		const bmp = doc.bitmaps && doc.bitmaps.get(elem.libName);
+		if (!bmp) continue;
+		ctx.save();
+		if (elem.alpha !== 1) ctx.globalAlpha *= elem.alpha;
+		ctx.transform(m[0],m[1],m[2],m[3],m[4],m[5]);
+		ctx.drawImage(bmp, 0, 0);
+		ctx.restore();
+		continue;
+	  }
+	  if (elem.isSymbol){
+		const sym = doc.symbols.get(elem.libName);
+		if (!sym || !sym.timeline) continue;
+		/* [关键] 图形符号实例的内帧要从"该实例所在关键帧"算起(相对), 而不是拿
+		   主时间线绝对帧取模。label/eat 起始于第 120 帧、符号长 128 帧:
+		   绝对取模会从内帧 120 开始播(整个动画错位), 相对则正确地 0..127。
+		   FLA→AM 拆分与参考渲染必须同用此约定, 否则两侧姿态对不上。 */
+		const d = Math.max(1, sym.duration);
+		const inner = ((frame - (kfStart || 0)) % d + d) % d;
+		const hasFx = elem.filters || elem.alpha !== 1 || elem.tintMult > 0 || elem.brightness !== 0;
+		if (!hasFx){
+		  ctx.save(); ctx.transform(m[0],m[1],m[2],m[3],m[4],m[5]);
+		  renderTimeline(ctx, sym.timeline, inner, doc, depth+1);
+		  ctx.restore();
+		} else {
+		  const bb = symbolBBox(sym, doc); if (!bb) continue;
+		  const cx = (bb[0]+bb[2])/2, cy = (bb[1]+bb[3])/2;
+		  let half = Math.max(bb[2]-bb[0], bb[3]-bb[1]) * 0.5; if (half <= 0) half = 1;
+		  const pad = elemFilterPad(elem) + 1;
+		  const rr = renderSymbolLocal(sym, inner, doc, cx, cy, half, pad, 1);
+		  let src = rr.canvas;
+		  if (elem.tintMult > 0 && elem.tint){
+			const tmp = newCanvas(src.width, src.height), tc = tmp.getContext('2d');
+			tc.drawImage(src, 0, 0);
+			tc.globalCompositeOperation = 'source-atop';
+			tc.fillStyle = rgbaStr(elem.tint, Math.min(1, elem.tintMult));
+			tc.fillRect(0, 0, tmp.width, tmp.height);
+			src = tmp;
+		  }
+		  blitFiltered(ctx, src, rr.minX, rr.minY, m, elem, rr.ss);
+		}
+	  } else if (elem.shape){
+		const hasFx = elem.filters || elem.alpha !== 1 || elem.brightness !== 0;
+		if (!hasFx){
+		  ctx.save(); ctx.globalAlpha *= elem.alpha;
+		  ctx.transform(m[0],m[1],m[2],m[3],m[4],m[5]);
+		  paintShape(ctx, elem.shape); ctx.restore();
+		} else {
+		  const bb = shapeBBox(elem.shape); if (!bb) continue;
+		  const pad = elemFilterPad(elem) + 2;
+		  const w = (bb[2]-bb[0]) + pad*2, h = (bb[3]-bb[1]) + pad*2;
+		  if (w > 6000 || h > 6000) continue;
+		  const cv = newCanvas(Math.ceil(w), Math.ceil(h)), c2 = cv.getContext('2d');
+		  c2.translate(-(bb[0]-pad), -(bb[1]-pad));
+		  paintShape(c2, elem.shape);
+		  blitFiltered(ctx, cv, bb[0]-pad, bb[1]-pad, m, {alpha:elem.alpha, brightness:elem.brightness, filters:elem.filters}, 1);
+		}
+	  }
+	}
+  }
+}
+/* ══════════════════════════════════════════════════════════════════════════
+   8 · FLA → AMPROJ
+   ══════════════════════════════════════════════════════════════════════════ */
+function b64ToBytes(b64){
+  const bin = atob(b64), out = new Uint8Array(bin.length);
+  for (let i=0;i<bin.length;i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+function canvasPng(cv){ return b64ToBytes(cv.toDataURL('image/png').split(',')[1]); }
+function pngSize(data){
+  if (data.length < 24 || !(data[0]===0x89 && data[1]===0x50 && data[2]===0x4E && data[3]===0x47)) return [0,0];
+  const dv = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  return [dv.getUint32(16,false), dv.getUint32(20,false)];
+}
+function renderSquare(sym, inner, doc, cx, cy, half, px){
+  const cv = newCanvas(px, px), ctx = cv.getContext('2d');
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  const s = px / (half*2);
+  ctx.scale(s, s); ctx.translate(-(cx-half), -(cy-half));
+  renderTimeline(ctx, sym.timeline, inner, doc, 0);
+  return cv;
+}
+class Fla2Am {
+  constructor(doc, ss, opts){
+	this.doc = doc; this.ss = ss || 2;
+	this.doFilters = !(opts && opts.doFilters === false);   // 是否把 Blur/Glow 烘焙进素材图
+	this.pngs = new Map(); this.symPng = new Map();
+	this.symCanvas = new Map(); this.fxPng = new Map();     // 元件基图 canvas / 滤镜烘焙图缓存
+	this.symCenter = new Map(); this.symHalf = new Map(); this.symSpan = new Map();
+	this.framePng = new Map();
+	this.bmpPng = new Map(); this.bmpSize = new Map();   // 位图素材(逆向 FLA 用)
+	this.baked = false;   // 是否已逐帧烘焙滤镜特效
+  }
+  /* 位图素材 -> PNG 素材文件（AM 侧一个 shape 直接用这张图，不做矢量栅格化） */
+  _bitmapPng(libName){
+	if (this.bmpPng.has(libName)) return this.bmpPng.get(libName);
+	const bmp = this.doc.bitmaps && this.doc.bitmaps.get(libName);
+	if (!bmp) return null;
+	const cv = newCanvas(bmp.width, bmp.height), ctx = cv.getContext('2d');
+	ctx.drawImage(bmp, 0, 0);
+	const fn = 'bmp_' + safeName(libName) + '_' + sha1Hex(enc.encode(libName)).slice(0,8) + '.png';
+	this.pngs.set(fn, canvasPng(cv));
+	this.bmpPng.set(libName, fn);
+	this.bmpSize.set(libName, [bmp.width, bmp.height]);
+	return fn;
+  }
+  /* 含 DOMBitmapInstance 的图层：对位图矩阵逐帧采样 -> 一个 shape + 关键帧
+	 （逆向转换产出的 FLA 主时间线只有位图实例，走这条路径） */
+  _bitmapLayer(layer, keyFrames, fps, visT0, visT1){
+	const outs = [];
+	const names = new Set();
+	for (const f of keyFrames) for (const e of f.elements) if (e.bitmap) names.add(e.libName);
+	if (!names.size) return outs;
+	const frFirst = Math.max(0, Math.round(visT0/1000*fps));
+	const frLast  = Math.max(frFirst, Math.round(visT1/1000*fps) - 1);
+	const diff = (a,b) => { let m = 0; for (let i=0;i<a.length;i++) m = Math.max(m, Math.abs(a[i]-b[i])); return m > 1e-7; };
+	for (const name of names){
+	  const fn = this._bitmapPng(name); if (!fn) continue;
+	  const [iw, ih] = this.bmpSize.get(name);
+	  const cx = iw*0.5, cy = ih*0.5;   /* 位图本地原点在左上角，中心=(w/2,h/2) */
+	  const samples = [];
+	  for (let fr=frFirst; fr<=frLast; fr++){
+	  let mat = null;
+	  for (const [e, m] of layerItemsAt(layer, fr)) if (e.bitmap && e.libName === name){ mat = m; break; }
+	  if (!mat) continue;
+	  /* [坑9] 跳过 am2fla 写出的「终止帧」（1e-4 缩放的不可见帧）,
+	     避免把收缩矩阵当成最后一个关键帧采进 AM（否则片尾会闪一下塌缩） */
+	  if (Math.hypot(mat[0], mat[1]) < 0.005) continue;
+		const p = matApply(mat, cx, cy);
+		const [rot, sx, sy, kx, ky] = trsFromFineDecompose(mat);
+		samples.push({ t: fr/fps*1000, cur:[p[0],p[1],rot,sx,sy,kx,ky],
+		  kf:{ t: fr/fps*1000, loc:[p[0],p[1]], scl:[sx,sy], rot: rot*180/Math.PI, skew:[kx,ky], ease:null } });
+	  }
+	  if (!samples.length) continue;
+	  const kfs = [];
+	  for (let i=0;i<samples.length;i++){
+		const firstOfRun = (i===0) || diff(samples[i].cur, samples[i-1].cur);
+		const lastOfRun  = (i===samples.length-1) || diff(samples[i].cur, samples[i+1].cur);
+		if (firstOfRun || lastOfRun) kfs.push(samples[i].kf);
+	  }
+	  outs.push({ label: layer.name, png: fn, startMs: samples[0].t,
+				  endMs: samples[samples.length-1].t + 1000/fps,
+				  halfW: cx, halfH: cy, kfs });
+	}
+	return outs;
+  }
+  buildSymbolPng(name, hint){
+	if (this.symPng.has(name)) return true;
+	const sym = this.doc.symbols.get(name);
+	if (!sym || !sym.timeline) return false;
+	const bb = symbolBBox(sym, this.doc);
+	if (!bb) return false;
+	const cx = (bb[0]+bb[2])*0.5, cy = (bb[1]+bb[3])*0.5;
+	let half = Math.max(bb[2]-bb[0], bb[3]-bb[1]) * 0.5;
+	if (half <= 0) half = 1;
+	half += 1;
+	const view = half*2;
+	let px = Math.ceil(Math.min(4096, Math.max(16, view*2)));
+	if (hint && hint > px) px = Math.ceil(Math.min(4096, hint));
+	const cv = renderSquare(sym, 0, this.doc, cx, cy, half, px);
+	const fn = `sym_${safeName(name)}_${sha1Hex(enc.encode(name)).slice(0,8)}.png`;
+	this.pngs.set(fn, canvasPng(cv));
+	this.symPng.set(name, fn);
+	this.symCanvas.set(name, cv);
+	this.symCenter.set(name, [cx, cy]);
+	/* [像素 1:1] AM 侧 size 是"素材矩形半宽高", 素材被 cover 铺满该矩形。
+	   基图是 view=half*2 的正方形, 因此矩形半宽高必须取 (half, half),
+	   这样 cover 缩放恰好 = 1:1; 若仍用 bbox 半宽高, 会被缩到
+	   max(bbW,bbH)/(max(bbW,bbH)+2) ≈ 0.99, 整幅画面系统性缩小 1% 。 */
+	this.symHalf.set(name, [half, half]);
+	this.symSpan.set(name, view);
+	return true;
+  }
+  buildSymbolFrames(name, sym){
+	const bb = symbolBBox(sym, this.doc);
+	if (!bb) return;
+	const cx = (bb[0]+bb[2])*0.5, cy = (bb[1]+bb[3])*0.5;
+	let half = Math.max(bb[2]-bb[0], bb[3]-bb[1]) * 0.5 + 1;
+	if (half <= 0) half = 1;
+	const px = Math.ceil(Math.min(4096, Math.max(16, half*4)));
+	const tag = sha1Hex(enc.encode(name)).slice(0,6);
+	for (let inner=0; inner<sym.duration; inner++){
+	  const key = name + '|' + inner;
+	  if (this.framePng.has(key)) continue;
+	  const cv = renderSquare(sym, inner, this.doc, cx, cy, half, px);
+	  const fn = `sym_${safeName(name)}_${tag}_f${String(inner).padStart(4,'0')}.png`;
+	  this.pngs.set(fn, canvasPng(cv));
+	  this.framePng.set(key, fn);
+	}
+	if (!this.symCenter.has(name)){
+	  this.symCenter.set(name, [cx, cy]);
+	  this.symHalf.set(name, [half, half]);
+	  this.symSpan.set(name, half*2);
+	}
+  }
+  /* ── 滤镜烘焙 ─────────────────────────────────────────────────────────
+	 [补细节] 原先只有"预览 A 面"会应用 Blur/Glow 滤镜, 而写进 AMPROJ 的
+	 素材图是未滤镜的裸图: 于是带 GlowFilter(#E1BB77 金色光晕)的火花特效
+	 (元件 1, 主时间线共 15 处实例)转换后变成硬边黄叶且光晕整片丢失。
+	 这里把实例上的 Blur/Glow/DropShadow/亮度/透明度烘焙进一张带外扩留白
+	 的 PNG, 并把 size 同步放大, 保证留白不裁掉光晕。 */
+  _fxKey(elem){
+	let s = '';
+	for (const f of (this.doFilters && elem.filters ? elem.filters : []))
+	  s += `${f.kind}:${f.bx||0}:${f.by||0}:${f.dist||0}:${f.ang||0}:${(f.color||[0,0,0]).join('/')}:${f.strength||1}:${f.alpha!=null?f.alpha:1};`;
+	if (elem.brightness) s += 'b' + elem.brightness;
+	if (elem.alpha !== 1) s += 'a' + elem.alpha;
+	return s;
+  }
+  _hasFx(elem){
+	return !!((this.doFilters && elem.filters && elem.filters.length)) || elem.alpha !== 1 || elem.brightness;
+  }
+  _symMeta(name, fxElem){
+	if (!this.buildSymbolPng(name)) return null;
+	const [cx, cy] = this.symCenter.get(name) || [0,0];
+	const [hw, hh] = this.symHalf.get(name) || [1,1];
+	if (!fxElem || !this._hasFx(fxElem)) return { png: this.symPng.get(name), cx, cy, hw, hh };
+	const key = name + '#' + this._fxKey(fxElem);
+	if (this.fxPng.has(key)){ const v = this.fxPng.get(key); return { png: v.png, cx, cy, hw: v.hw, hh: v.hh }; }
+	const base = this.symCanvas.get(name);
+	const view = this.symSpan.get(name) || (hw*2);
+	let blur = 0, glow = null, shadow = null;
+	for (const f of (fxElem.filters || [])){
+	  if (f.kind === 'blur') blur = Math.max(blur, Math.max(f.bx||0, f.by||0));
+	  else if (f.kind === 'glow') glow = f;
+	  else if (f.kind === 'shadow') shadow = f;
+	}
+	blur *= FXTUNE.blurK;
+	const glowR = glow ? (glow.bx||0) * FXTUNE.glowBlurK : 0;
+	let pad = blur*3 + 4;
+	if (glow) pad = Math.max(pad, glowR*3 + 4);
+	if (shadow) pad = Math.max(pad, Math.abs(shadow.dist||0) + (shadow.bx||0)*3 + 4);
+	pad = Math.min(pad, Math.max(view, 512));
+	const pxPerLocal = base.width / view;
+	const padPx = Math.ceil(pad * pxPerLocal);
+	const w = base.width + padPx*2;
+	const cv = newCanvas(w, w), c = cv.getContext('2d');
+	c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high';
+	if (fxElem.alpha !== 1) c.globalAlpha = fxElem.alpha;
+	const parts = [];
+	if (blur > 0) parts.push(`blur(${(blur*pxPerLocal).toFixed(2)}px)`);
+	if (fxElem.brightness) parts.push(`brightness(${(1+fxElem.brightness).toFixed(3)})`);
+	c.filter = parts.length ? parts.join(' ') : 'none';
+	if (glow){
+	  c.shadowColor = rgbaStr(glow.color, Math.min(1, (glow.alpha!=null?glow.alpha:1)*Math.max(1,glow.strength)*FXTUNE.glowAlphaK));
+	  c.shadowBlur = Math.max(1, glowR*pxPerLocal);
+	} else if (shadow){
+	  c.shadowColor = rgbaStr(shadow.color, Math.min(1, (shadow.alpha!=null?shadow.alpha:1)*Math.max(1,shadow.strength)));
+	  c.shadowBlur = Math.max(1, (shadow.bx||0)*pxPerLocal);
+	  const a = -(shadow.ang||45) * Math.PI/180;
+	  c.shadowOffsetX = Math.cos(a) * (shadow.dist||0) * pxPerLocal;
+	  c.shadowOffsetY = Math.sin(a) * (shadow.dist||0) * pxPerLocal;
+	}
+	c.drawImage(base, padPx, padPx);
+	const fn = `fx_${safeName(name)}_${sha1Hex(enc.encode(key)).slice(0,10)}.png`;
+	this.pngs.set(fn, canvasPng(cv));
+	const k = w / base.width;
+	const val = { png: fn, hw: hw*k, hh: hh*k };
+	this.fxPng.set(key, val);
+	return { png: fn, cx, cy, hw: val.hw, hh: val.hh };
+  }
+  /* 一个元件实例最终使用的素材图(含滤镜烘焙) */
+  _elemPng(elem, inner){
+	const name = elem.libName;
+	const sym = this.doc.symbols.get(name);
+	if (!sym || !sym.timeline) return null;
+	if (sym.duration > 1){
+	  const png = this.framePng.get(name + '|' + inner) || this.symPng.get(name);
+	  if (!png) return null;
+	  const [hw, hh] = this.symHalf.get(name) || [1,1];
+	  return { png, hw, hh };
+	}
+	const m = this._symMeta(name, elem);
+	return m ? { png: m.png, hw: m.hw, hh: m.hh } : null;
+  }
+  _shapeOf(elem){
+	const sym = this.doc.symbols.get(elem.libName);
+	const [cx, cy] = this.symCenter.get(elem.libName) || [0,0];
+	const [hw, hh] = this.symHalf.get(elem.libName) || [1,1];
+	const p = matApply(elem.mat, cx, cy);
+	const [rot, sx, sy, kx, ky] = trsFromFineDecompose(elem.mat);
+	return { px:p[0], py:p[1], rot: rot*180/Math.PI, sx, sy, kx, ky, hw, hh };
+  }
+  _kfFromElem(elem, tAbs, t0){
+	const s = this._shapeOf(elem);
+	return { t: tAbs, loc:[s.px,s.py], scl:[s.sx,s.sy], rot:s.rot, skew:[s.kx,s.ky], ease:null };
+  }
+  build(){
+	const doc = this.doc, main = doc.main;
+	if (!main) throw new Error('FLA 主时间线缺失');
+	const fps = doc.fps, totalFrames = timelineFrames(main);
+	const totalMs = totalFrames / fps * 1000;
+	const shapes = [];
+	const n = main.layers.length;
+	for (let i=0;i<n;i++){
+	  const layer = main.layers[n-1-i];
+	  if (!layer.visible || layer.layerType === 'guide' || layer.layerType === 'folder') continue;
+	  if (!layer.frames.some(f => f.elements.length)) continue;
+	  for (const s of this.buildLayer(layer, totalFrames, fps, totalMs)) shapes.push(s);
+	}
+	return { shapes, totalFrames, totalMs, fps };
+  }
+  buildLayer(layer, totalFrames, fps, totalMs){
+	const keyFrames = layer.frames.filter(f => f.elements.length).sort((a,b)=>a.index-b.index);
+	if (!keyFrames.length) return [];
+	const visFrame0 = keyFrames[0].index;
+	const lastKf = keyFrames[keyFrames.length-1];
+	const visFrame1 = lastKf.index + Math.max(1, lastKf.duration);
+	const visT0 = visFrame0 / fps * 1000;
+	const visT1 = Math.min(totalMs, visFrame1 / fps * 1000);
+	/* 含位图实例的图层（逆向转换产物）单独走位图路径 */
+	if (keyFrames.some(f => f.elements.some(e => e.bitmap)))
+	  return this._bitmapLayer(layer, keyFrames, fps, visT0, visT1);
+	let allStatic = true;
+	for (const f of keyFrames){
+	  for (const e of f.elements){
+		if (!e.isSymbol){ allStatic = false; break; }
+		const sym = this.doc.symbols.get(e.libName);
+		if (!sym || sym.duration > 1){ allStatic = false; break; }
+	  }
+	  if (!allStatic) break;
+	}
+	if (allStatic && keyFrames.length === 1) return this._oneShapeFromFrame(layer, keyFrames[0], visT0, visT1, fps);
+	if (allStatic && keyFrames.length > 1) return this._oneShapeKeyframed(layer, keyFrames, visT0, visT1, fps);
+	return this._slicedShapes(layer, keyFrames, totalFrames, fps, visT0, visT1);
+  }
+  _oneShapeFromFrame(layer, f, t0, t1, fps){
+	const outs = [];
+	for (const e of f.elements){
+	  if (e.isSymbol){
+		const m = this._symMeta(e.libName, e);
+		if (!m) continue;
+		const s = this._shapeOf(e);
+		outs.push({ label: layer.name, png: m.png, startMs: t0, endMs: t1, halfW: m.hw, halfH: m.hh,
+					kfs: [{ t:0, loc:[s.px,s.py], scl:[s.sx,s.sy], rot:s.rot, skew:[s.kx,s.ky], ease:null }] });
+	  } else if (e.shape){
+		const rr = this._rasterShapeToPng(e.shape, 'shape_' + (outs.length));
+		if (!rr) continue;
+		const p = matApply(e.mat, rr.cx, rr.cy);
+		const [rot, sx, sy, kx, ky] = trsFromFineDecompose(e.mat);
+		outs.push({ label: layer.name, png: rr.fn, startMs: t0, endMs: t1, halfW: rr.half, halfH: rr.half,
+					kfs: [{ t:0, loc:[p[0],p[1]], scl:[sx,sy], rot: rot*180/Math.PI, skew:[kx,ky], ease:null }] });
+	  }
+	}
+	return outs;
+  }
+  _oneShapeKeyframed(layer, keyFrames, visT0, visT1, fps){
+	/* 分组键含"滤镜签名": 同一元件在不同关键帧上滤镜/透明度可能不同
+	   (如火花 元件 1: 首帧 alpha=0.6 淡入 + 后续帧 alpha=1), 需拆成独立素材。 */
+	const groups = new Map();
+	for (const f of keyFrames){
+	  for (const e of f.elements){
+		let g = groups.get(e.libName);
+		if (!g) g = groups.set(e.libName, new Map()).get(e.libName);
+		const fk = this._fxKey(e);
+		if (!g.has(fk)) g.set(fk, { fx: e, frames: [] });
+		g.get(fk).frames.push(f);
+	  }
+	}
+	const outs = [];
+	for (const [name, byFx] of groups){
+	  for (const [fk, g] of byFx){
+		const m = this._symMeta(name, g.fx);
+		if (!m) continue;
+		g.frames.sort((a,b)=>a.index-b.index);
+		const frFirst = Math.round(visT0/1000*fps);
+		const frLast = Math.max(frFirst, Math.round(visT1/1000*fps) - 1);
+		outs.push({ label: layer.name, png: m.png, startMs: visT0, endMs: visT1, halfW: m.hw, halfH: m.hh,
+					kfs: this._sampledKfs(layer, frFirst, frLast, name, m.cx, m.cy, fps, fk) });
+	  }
+	}
+	return outs;
+  }
+  _sampledKfs(layer, frFirst, frLast, name, cx, cy, fps, fxKey){
+	const samples = [];
+	for (let fr=frFirst; fr<=frLast; fr++){
+	  let mat = null;
+	  for (const [e, m] of layerItemsAt(layer, fr)){
+		if (e.isSymbol && (!name || e.libName === name) && this._fxKey(e) === (fxKey || '')){ mat = m; break; }
+	  }
+	  if (!mat) continue;
+	  const p = matApply(mat, cx, cy);
+	  const [rot, sx, sy, kx, ky] = trsFromFineDecompose(mat);
+	  const cur = [p[0], p[1], rot*180/Math.PI, sx, sy, kx, ky];
+	  samples.push({ t: fr/fps*1000, cur, kf: { t: fr/fps*1000, loc:[p[0],p[1]], scl:[sx,sy], rot: rot*180/Math.PI, skew:[kx,ky], ease:null } });
+	}
+	const diff = (a,b) => { let m = 0; for (let i=0;i<a.length;i++) m = Math.max(m, Math.abs(a[i]-b[i])); return m > 1e-7; };
+	const out = [];
+	for (let i=0;i<samples.length;i++){
+	  const firstOfRun = (i===0) || diff(samples[i].cur, samples[i-1].cur);
+	  const lastOfRun = (i===samples.length-1) || diff(samples[i].cur, samples[i+1].cur);
+	  if (firstOfRun || lastOfRun) out.push(samples[i].kf);
+	}
+	return out;
+  }
+  /* ── 动画符号层的拆解 ─────────────────────────────────────────────────
+	 [核心] 主时间线上排着若干「标签符号」实例(label/idle、label/walk…)。
+	 标签符号内部是「一层一个部件 sprite」的结构, 每个部件在自己的关键帧上
+	 逐帧改变 loc/rot/scl。正确产物是:
+		每个部件 = 一条 shape, 从头到尾连续存在, shape 内部用关键帧驱动
+		位置/旋转/缩放 —— 而不是把整只僵尸逐帧烘焙成一张张全幅大图。
+	 旧实现正是后者(316 帧 → 316 张全幅图/37MB), 这里改为前者。 */
+  _slicedShapes(layer, keyFrames, totalFrames, fps, visT0, visT1){
+	const outs = [];
+	const diff = (a,b) => { let m = 0; for (let i=0;i<a.length;i++) m = Math.max(m, Math.abs(a[i]-b[i])); return m > 1e-7; };
+	for (const f of keyFrames){
+	  const instDur = Math.max(1, f.duration), frStart = f.index;
+	  for (const el of f.elements){
+		if (!el.isSymbol || el.bitmap) continue;
+		const sym = this.doc.symbols.get(el.libName);
+		if (!sym || !sym.timeline){ continue; }
+		const symDur = Math.max(1, sym.duration);
+		let emitted = 0;
+		/* XFL 的 DOMLayer 顺序是"最上层在前", AMPROJ 的 shape 顺序是"先写先垫底",
+		   因此必须反序遍历, 否则部件前后遮挡整个翻过来。 */
+		const innerLayers = sym.timeline.layers;
+		for (let li=innerLayers.length-1; li>=0; li--){
+		  const inner = innerLayers[li];
+		  if (!inner.visible || inner.layerType === 'guide' || inner.layerType === 'folder') continue;
+		  const partNames = [];
+		  for (const g of inner.frames) for (const e of g.elements){
+			if (e.bitmap) continue;
+			if (e.isSymbol && partNames.indexOf(e.libName) < 0) partNames.push(e.libName);
+		  }
+		  for (const partName of partNames){
+			const partSym = this.doc.symbols.get(partName);
+			if (!partSym || !partSym.timeline) continue;
+			/* 部件自身还是逐帧动画 -> 交回逐帧路径(本工程无此情况, 仅为保险) */
+			if (partSym.duration > 1){ continue; }
+			const m = this._symMeta(partName, el);
+			if (!m) continue;
+			const samples = [];
+			for (let k=0; k<instDur; k++){
+			  const fr = frStart + k;
+			  const inF = k % symDur;
+			  const hit = layerItemsAt(inner, inF).find(([e]) => e.libName === partName);
+			  if (!hit) continue;
+			  /* 部件局部 -> 舞台: 外层实例矩阵 ∘ 部件矩阵 */
+			  const mat = matMul(el.mat, hit[0].mat);
+			  const p = matApply(mat, m.cx, m.cy);
+			  const [rot, sx, sy, kx, ky] = trsFromFineDecompose(mat);
+			  samples.push({ t: fr/fps*1000, cur:[p[0],p[1],rot,sx,sy,kx,ky],
+				kf:{ t: fr/fps*1000, loc:[p[0],p[1]], scl:[sx,sy], rot: rot*180/Math.PI, skew:[kx,ky], ease:null } });
+			}
+			if (!samples.length) continue;
+			const kfs = [];
+			for (let i=0;i<samples.length;i++){
+			  const firstOfRun = (i===0) || diff(samples[i].cur, samples[i-1].cur);
+			  const lastOfRun  = (i===samples.length-1) || diff(samples[i].cur, samples[i+1].cur);
+			  if (firstOfRun || lastOfRun) kfs.push(samples[i].kf);
+			}
+			outs.push({ label: partName.split('/').pop(), png: m.png,
+						startMs: samples[0].t, endMs: samples[samples.length-1].t + 1000/fps,
+						halfW: m.hw, halfH: m.hh, kfs });
+			emitted++;
+		  }
+		}
+		/* 保底：符号内部拆不出部件(如纯矢量补间层), 维持整体逐帧光栅化 */
+		if (!emitted) for (const o of this._bakeSymbolRuns(el, sym, frStart, instDur, fps)) outs.push(o);
+	  }
+	}
+	return outs;
+  }
+  _bakeSymbolRuns(el, sym, frStart, instDur, fps){
+	if (sym.duration > 1) this.buildSymbolFrames(el.libName, sym);
+	else this.buildSymbolPng(el.libName);
+	const seq = [];
+	for (let k=0; k<instDur; k++){
+	  const fr = frStart + k, inner = k % Math.max(1, sym.duration);
+	  const r = this._elemPng(el, inner);
+	  if (!r) continue;
+	  seq.push({ png: r.png, hw: r.hw, hh: r.hh, fr, mat: el.mat });
+	}
+	const outs = [];
+	let i = 0;
+	while (i < seq.length){
+	  let j = i;
+	  while (j+1 < seq.length && seq[j+1].png === seq[i].png && seq[j+1].fr === seq[j].fr + 1) j++;
+	  const [cx, cy] = this.symCenter.get(el.libName) || [0,0];
+	  const t0 = seq[i].fr/fps*1000, t1 = (seq[j].fr+1)/fps*1000;
+	  const so = { label: el.libName.split('/').pop(), png: seq[i].png, startMs: t0, endMs: t1,
+				   halfW: seq[i].hw, halfH: seq[i].hh, kfs: [] };
+	  for (const it of [seq[i], seq[j]]){
+		const p = matApply(it.mat, cx, cy);
+		const [rot, sx, sy, kx, ky] = trsFromFineDecompose(it.mat);
+		so.kfs.push({ t: it.fr/fps*1000, loc:[p[0],p[1]], scl:[sx,sy], rot: rot*180/Math.PI, skew:[kx,ky], ease:null });
+	  }
+	  outs.push(so);
+	  i = j + 1;
+	}
+	return outs;
+  }
+  _rasterShapeToPng(shape, tag){
+	const rr = rasterizeShape(shape, 1, 2048);
+	if (!rr) return null;
+	const cx = rr.minX + rr.w*0.5, cy = rr.minY + rr.h*0.5;
+	let half = Math.max(rr.w, rr.h)*0.5 + 1;
+	const px = Math.ceil(Math.min(4096, Math.max(16, half*4)));
+	const sq = newCanvas(px, px), ctx = sq.getContext('2d');
+	ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+	const s = px / (half*2);
+	ctx.scale(s, s); ctx.translate(-(cx-half), -(cy-half));
+	ctx.drawImage(rr.canvas, rr.minX, rr.minY, rr.w, rr.h);
+	const fn = tag + '.png';
+	this.pngs.set(fn, canvasPng(sq));
+	return { fn, cx, cy, half };
+  }
+  writeAmproj(title){
+	const doc = this.doc, main = doc.main;
+	const totalFrames = timelineFrames(main);
+	const totalMs = totalFrames / doc.fps * 1000;
+	const { shapes } = this.build();
+	const W = doc.width, H = doc.height;
+	const used = new Set(shapes.map(s => s.png));
+	const pngs = new Map();
+	for (const [k,v] of this.pngs) if (used.has(k)) pngs.set(k, v);
+	const L = [];
+	L.push("<?xml version='1.0' encoding='UTF-8' ?>");
+	L.push('<!-- 由 FLA⇄AMPROJ 网页转换器 从 Adobe Animate 工程转换而来 -->');
+	L.push(`<scene title="${esc(title || 'converted')}" width="${W}" height="${H}" exportWidth="${W}" exportHeight="${H}" precompose="dynamicResolution" bgcolor="${doc.bg}" totalTime="${Math.round(totalMs)}" fps="${doc.fps}" retime="freeze" retimeAdaptFPS="false">`);
+	for (const fn of [...pngs.keys()].sort()){
+	  const data = pngs.get(fn);
+	  const sig = sha1Hex(data);
+	  const [iw, ih] = pngSize(data);
+	  L.push(`  <media uri="amproj:${fn}" filename="${esc(fn)}" title="${esc(fn)}" type="image/png" duration="0" size="${data.length}" sig="${sig}" orientation="0" width="${iw}" height="${ih}" />`);
+	}
+	let sid = 100;
+	for (const s of shapes){
+	  sid++;
+	  const t0 = Math.floor(s.startMs + 1e-6);
+	  let t1 = Math.floor(s.endMs - 1e-6);
+	  if (t1 <= t0) t1 = t0 + 1;
+	  L.push(`  <shape id="${sid}" label="${esc(s.label)}" startTime="${t0}" endTime="${t1}" fillType="media" fillImage="amproj:${esc(s.png)}" mediaFillMode="fill" s=".rect">`);
+	  L.push('    <transform lockAspectRatio="false">');
+	  const span = Math.max(1, s.endMs - s.startMs);
+	  const kfs = s.kfs.slice().sort((a,b)=>a.t-b.t);
+	  const tn = t => (t - s.startMs) / span;
+	  const ea = e => e ? ` e="cubicBezier ${fmt(e[0])} ${fmt(e[1])} ${fmt(e[2])} ${fmt(e[3])}"` : '';
+	  L.push('      <location>');
+	  for (const k of kfs) L.push(`        <kf t="${fmt(tn(k.t))}" v="${fmt(k.loc[0])},${fmt(k.loc[1])},0.000000"${ea(k.ease)} />`);
+	  L.push('      </location>');
+	  L.push('      <scale>');
+	  for (const k of kfs) L.push(`        <kf t="${fmt(tn(k.t))}" v="${fmt(k.scl[0])},${fmt(k.scl[1])}"${ea(k.ease)} />`);
+	  L.push('      </scale>');
+	  L.push('      <rotation>');
+	  let prev = null;
+	  for (const k of kfs){
+		let v = k.rot;
+		if (prev !== null){
+		  while (v - prev > 180) v -= 360;
+		  while (v - prev < -180) v += 360;
+		}
+		prev = v;
+		L.push(`        <kf t="${fmt(tn(k.t))}" v="${fmt(v)}"${ea(k.ease)} />`);
+	  }
+	  L.push('      </rotation>');
+	  if (kfs.some(k => Math.abs(k.skew[0]) > 1e-7 || Math.abs(k.skew[1]) > 1e-7)){
+		L.push('      <skew>');
+		for (const k of kfs) L.push(`        <kf t="${fmt(tn(k.t))}" v="${fmt(k.skew[0])},${fmt(k.skew[1])}" />`);
+		L.push('      </skew>');
+	  }
+	  L.push('    </transform>');
+	  L.push(`    <property name="size" type="vec2" value="${fmt(s.halfW)},${fmt(s.halfH)}" />`);
+	  L.push('  </shape>');
+	}
+	L.push('</scene>');
+	const xmlText = L.join('\n') + '\n';
+	const xmlName = 'converted-from-fla.xml';
+	const manifest = [...pngs.keys()].sort().map(fn => `${sha1Hex(pngs.get(fn))}:${fn}`).join('\n');
+	const entries = [];
+	for (const fn of [...pngs.keys()].sort()) entries.push({ name: fn, data: pngs.get(fn) });
+	entries.push({ name: xmlName, data: enc.encode(xmlText) });
+	entries.push({ name: 'manifest.txt', data: enc.encode(manifest) });
+	return { bytes: zipStore(entries), xml: xmlText, shapes, totalFrames, totalMs, pngCount: pngs.size, W, H };
+  }
+}
+/* ══════════════════════════════════════════════════════════════════════════
+   9 · AMPROJ 解析 / 渲染 / 逆向转换 AM → FLA
+   ══════════════════════════════════════════════════════════════════════════ */
+function cubicBezierY(u, p){
+  const x1=p[0], y1=p[1], x2=p[2], y2=p[3];
+  const cx = 3*x1, bx = 3*(x2-x1)-cx, ax = 1-cx-bx;
+  const cy = 3*y1, by = 3*(y2-y1)-cy, ay = 1-cy-by;
+  let t = u;
+  for (let i=0;i<8;i++){
+	const x = ((ax*t + bx)*t + cx)*t - u;
+	if (Math.abs(x) < 1e-6) break;
+	const d = (3*ax*t + 2*bx)*t + cx;
+	if (Math.abs(d) < 1e-6) break;
+	t = Math.min(1, Math.max(0, t - x/d));
+  }
+  return ((ay*t + by)*t + cy)*t;
+}
+function parseTrack(parent, name){
+  const el = ch(parent, name);
+  const kfs = [];
+  if (el) for (const kf of chs(el, 'kf')){
+	const v = at(kf,'v','').split(',').map(s => parseFloat(s));
+	const eStr = at(kf,'e','');
+	let ease = null;
+	if (eStr.indexOf('cubicBezier') === 0){
+	  const p = eStr.trim().split(/\s+/).slice(1).map(Number);
+	  if (p.length >= 4 && p.every(x => isFinite(x))) ease = p.slice(0,4);
+	}
+	kfs.push({ t: atF(kf,'t',0), v, ease });
+  }
+  /* [坑8 · 静态轨道] AM 的变换轨道支持「元素级静态值」写法:
+	 <scale value="0.184862,0.184862"/>（无任何 kf 子元素）。
+	 旧实现只读 kf 子元素, 静态轨道被当成默认值(缩放1/旋转0),
+	 导致带静态缩放的素材(如双枪 0.1849 / 0.32)按 1.0 渲染 —— 元件放大 3~5 倍,
+	 且该异常随 AM→FLA→AM 往返一直保留。 */
+  if (el && !kfs.length){
+	const sv = at(el, 'value', '');
+	if (sv !== '') kfs.push({ t: 0, v: sv.split(',').map(s => parseFloat(s)), ease: null });
+  }
+  kfs.sort((a,b) => a.t - b.t);
+  return { kfs };
+}
+function trackAt(track, u, def){
+  const kfs = track.kfs;
+  if (!kfs.length) return def.slice();
+  if (u <= kfs[0].t) return kfs[0].v.slice();
+  const last = kfs[kfs.length-1];
+  if (u >= last.t) return last.v.slice();
+  for (let i=1;i<kfs.length;i++){
+	const a = kfs[i-1], b = kfs[i];
+	if (a.t <= u && u <= b.t){
+	  let uu = (u - a.t) / Math.max(b.t - a.t, 1e-9);
+	  if (a.ease) uu = cubicBezierY(uu, a.ease);
+	  const n = Math.min(a.v.length, b.v.length), out = [];
+	  for (let j=0;j<n;j++) out[j] = a.v[j] + (b.v[j]-a.v[j])*uu;
+	  return out;
+	}
+  }
+  return last.v.slice();
+}
+function parseAmproj(files){
+  let xmlBytes = null;
+  for (const prefer of ['converted-from-fla.xml', 'project.xml']){
+	if (files.has(prefer)){ xmlBytes = files.get(prefer); break; }
+  }
+  if (!xmlBytes) for (const [k,v] of files) if (k.toLowerCase().endsWith('.xml')){ xmlBytes = v; break; }
+  if (!xmlBytes) throw new Error('amproj 内找不到工程 XML');
+  const root = parseXml(xmlBytes).documentElement;
+  const model = {
+	title: at(root,'title',''), width: atI(root,'width',390), height: atI(root,'height',390),
+	fps: atF(root,'fps',30) || 30, totalTime: atF(root,'totalTime',0), bgcolor: at(root,'bgcolor','#000000'),
+	shapes: [], media: new Map(), textures: new Map(), xmlBytes,
+  };
+  for (const m of chs(root,'media')){
+	let fn = at(m,'filename','');
+	if (!fn) fn = at(m,'uri','').replace('amproj:','');
+	let bytes = files.get(fn);
+	if (!bytes){ const b = fn.split('/').pop(); bytes = files.get(b) || files.get(decodeURIComponent(fn)); }
+	if (bytes) model.media.set(fn, bytes);
+  }
+  for (const sh of chs(root,'shape')){
+	const tr = ch(sh,'transform');
+	const sz = ch(sh,'property') && at(ch(sh,'property'),'name','') === 'size' ? ch(sh,'property') : null;
+	let sizeEl = null;
+	for (const p of chs(sh,'property')) if (at(p,'name','') === 'size') sizeEl = p;
+	let hw = 100, hh = 100;
+	if (sizeEl){ const sv = at(sizeEl,'value','').split(',').map(Number); if (sv.length >= 2){ hw = sv[0]; hh = sv[1]; } }
+	if (!tr) continue;
+	model.shapes.push({
+	  id: atI(sh,'id',0), label: at(sh,'label',''), img: at(sh,'fillImage','').replace('amproj:',''),
+	  t0: atF(sh,'startTime',0), t1: atF(sh,'endTime', model.totalTime),
+	  halfW: hw, halfH: hh,
+	  loc: parseTrack(tr,'location'), scl: parseTrack(tr,'scale'),
+	  rot: parseTrack(tr,'rotation'), skw: parseTrack(tr,'skew'),
+	});
+  }
+  let maxEnd = 0;
+  for (const s of model.shapes) maxEnd = Math.max(maxEnd, s.t1);
+  if (!model.totalTime) model.totalTime = maxEnd;
+  return model;
+}
+/* 把 amproj 的一帧画到 ctx（坐标=画布绝对像素，与转换器一致） */
+function renderAmFrame(ctx, model, tMs){
+  for (const sh of model.shapes){
+	if (tMs < sh.t0 - 1e-6 || tMs > sh.t1 + 1e-6) continue;
+	const tex = model.textures.get(sh.img);
+	if (!tex) continue;
+	const span = Math.max(1, sh.t1 - sh.t0);
+	const u = (tMs - sh.t0) / span;
+	const loc = trackAt(sh.loc, u, [0,0,0]);
+	const scl = trackAt(sh.scl, u, [1,1]);
+	const rot = trackAt(sh.rot, u, [0]);
+	const skw = trackAt(sh.skw, u, [0,0]);
+	const iw = tex.width, ih = tex.height;
+	const rw = sh.halfW*2, rh = sh.halfH*2;
+	const fit = Math.max(rw/iw, rh/ih);
+	const cw = rw/fit, chh = rh/fit;
+	const sx = (iw - cw)*0.5, sy = (ih - chh)*0.5;
+	const m = composeTrs(rot[0]*Math.PI/180, scl[0], scl[1], skw[0], skw[1], loc[0], loc[1]);
+	ctx.save();
+	ctx.transform(m[0],m[1],m[2],m[3],m[4],m[5]);
+	ctx.drawImage(tex, sx, sy, cw, chh, -rw*0.5, -rh*0.5, rw, rh);
+	ctx.restore();
+  }
+}
+async function decodeAmTextures(model){
+  for (const [fn, bytes] of model.media){
+	try {
+	  const blob = new Blob([bytes], { type: 'image/png' });
+	  model.textures.set(fn, await createImageBitmap(blob));
+	} catch(e){ log('  素材解码失败 ' + fn, 'w'); }
+  }
+}
+/* ── 逆向：AMPROJ → FLA(XFL) ── */
+function am2fla(model){
+  const fps = model.fps || 30;
+  const W = model.width, H = model.height;
+  const mediaByFile = new Map();     // key -> 裁剪后的素材
+  for (const sh of model.shapes){
+	if (!model.media.has(sh.img)) continue;
+	const srcBytes = model.media.get(sh.img);
+	const [sw, shh] = pngSize(srcBytes);
+	if (!sw) continue;
+	const RW = sh.halfW*2, RH = sh.halfH*2;
+	/* [关键] AM 的 mediaFillMode="fill" 是「等比放大到完全覆盖 + 居中裁切」(cover):
+	   素材被放进 size 矩形(2*halfW × 2*halfH)里, 比例不符时两边被裁掉。
+	   而 FLA 的位图实例**不能裁切**, 若直接把整张原图等比放大, 实例外框就成了
+	   整张方图(远大于 size 矩形), 元件尺寸整个偏大。
+	   所以先把素材按可见区域裁出来, 之后实例外框 = AM 的 size 矩形, 尺寸才一致。
+	   [坑8 · 亚像素对齐] AM 的裁切原点是分数 (sxExact/syExact), 裁剪图只能取整;
+	   若实例矩阵再用 RW/cw 的近似比例, 内容会整体错位 ~1px(轮廓差异 ~2%)。
+	   这里裁剪原点四舍五入到最接近的整数像素, 并让矩阵沿用**同一个 cover 比例 k**
+	   把裁剪图映射回舞台 —— 每个源像素都落在 AM 本该放它的位置(误差≤边缘半像素)。 */
+	const k = Math.max(RW/sw, RH/shh);
+	const cw = Math.min(sw, Math.max(1, Math.round(RW/k)));
+	const chh = Math.min(shh, Math.max(1, Math.round(RH/k)));
+	const sxExact = (sw - RW/k) / 2, syExact = (shh - RH/k) / 2;
+	const sx = Math.round(sxExact), sy = Math.round(syExact);
+	const key = sh.img + '|' + cw + ',' + chh + ',' + sx + ',' + sy;
+	sh._mk = key;
+	/* 实例矩阵用**同一个 cover 比例 k** 把裁剪图映射回舞台:
+	   裁剪图第 p 列/行恰好落在 AM 本该放它的位置（见上方 [坑8 · 亚像素对齐]）。
+	   [注意] 必须在去重 continue **之前**赋值 —— 多个 shape 共用同一张裁剪图时,
+	   后面的 shape 会提前 continue, 但每个 shape 仍需自己的 _B 实例矩阵。 */
+	sh._B = [k, 0, 0, k, (sx - sxExact)*k - RW*0.5, (sy - syExact)*k - RH*0.5];
+	if (mediaByFile.has(key)) continue;
+	const bmp = model.textures.get(sh.img);
+	let bytes = srcBytes;
+	if (bmp && (cw !== sw || chh !== shh)){
+	  const cv = newCanvas(cw, chh), cctx = cv.getContext('2d');
+	  cctx.imageSmoothingEnabled = true; cctx.imageSmoothingQuality = 'high';
+	  cctx.drawImage(bmp, sx, sy, cw, chh, 0, 0, cw, chh);
+	  bytes = canvasPng(cv);
+	}
+	let nm = (sh.img.split('/').pop() || sh.img).replace(/\.png$/i, '');
+	/* [第二种 FLA] 位图素材按 Animate 的库结构落盘:
+	   name = "media/<base>"(库项名), 实体文件 LIBRARY/media/<base>.png,
+	   DOMBitmapItem 的 href / bitmapDataHRef 都指向 media/<base>.png。 */
+	const base = 'bm_' + safeName(nm) + '_' + sha1Hex(bytes).slice(0,6);
+	mediaByFile.set(key, { name: 'media/' + base, file: base + '.png', bytes, iw: cw, ih: chh });
+  }
+  let totalFrames = Math.max(1, Math.round(model.totalTime/1000*fps));
+  const layerXml = [];
+  const usedLayers = new Map();
+  let maxEndFrame = 0;
+  for (const sh of model.shapes){
+	const med = mediaByFile.get(sh._mk);
+	if (!med) continue;
+	const t0 = sh.t0, t1 = Math.max(sh.t0 + 1, sh.t1);
+	const f0 = Math.max(0, Math.floor(t0/1000*fps));
+	const f1 = Math.ceil(t1/1000*fps);
+	maxEndFrame = Math.max(maxEndFrame, f1);
+	/* 素材已裁到 AM 可见区域, 用第一轮算好的精确 cover 映射矩阵（sh._B）。 */
+	const B = sh._B;
+	/* 逐帧烘焙矩阵 */
+	const runFrames = [];
+	for (let fr=f0; fr<f1; fr++){
+	  const tms = fr/fps*1000;
+	  const u = (tms - t0) / Math.max(1, t1 - t0);
+	  const loc = trackAt(sh.loc, u, [0,0,0]);
+	  const scl = trackAt(sh.scl, u, [1,1]);
+	  const rot = trackAt(sh.rot, u, [0]);
+	  const skw = trackAt(sh.skw, u, [0,0]);
+	  const A = composeTrs(rot[0]*Math.PI/180, scl[0], scl[1], skw[0], skw[1], loc[0], loc[1]);
+	  runFrames.push(matMul(A, B));
+	}
+	/* 合并连续相同矩阵 */
+	const runs = [];
+	for (const m of runFrames){
+	  const last = runs[runs.length-1];
+	  if (last && last.m.every((v,i) => Math.abs(v - m[i]) < 1e-9)) last.d++;
+	  else runs.push({ m, d: 1 });
+	}
+	const name = sh.label || ('layer_' + sh.id);
+	let uniq = name, gi = 1;
+	while (usedLayers.has(uniq)) uniq = name + '_' + (gi++);
+	usedLayers.set(uniq, 1);
+	const parts = ['        <DOMLayer name="' + esc(uniq) + '" color="#4FFF4F" current="false">',
+				   '          <frames>'];
+	let idx = f0;
+	/* [坑9 · 尾残影] 内容结束后若只留「普通帧(9728)+空 elements」的空白段:
+	   ① 部分导入器把它解释为「延续上一关键帧内容」→ label 播完后最后一帧姿势
+	     原地停留成残影（原始 FLA 每层内容都铺满全时间线, 从不触发此坑, 故只有
+	     转换产物会残影）; ② 一些播放器按「最后一个含元素帧」取帧、无视空白段,
+	     同样残影。修复: 全部内容帧/空白帧都用 keyMode="14688"（关键帧/空白关键帧,
+	     空白关键帧=显式清空内容）; 并在内容末尾补一帧 1e-4 缩放的「终止帧」
+	     （视觉不可见）, 让任何取帧逻辑都只能取到空内容。 */
+	if (f0 > 0) parts.push(`            <DOMFrame index="0" keyMode="14688" duration="${f0}"><elements/></DOMFrame>`);
+	for (const r of runs){
+	  parts.push(`            <DOMFrame index="${idx}" keyMode="14688" duration="${r.d}">`);
+	  parts.push('              <elements>');
+	  parts.push(`                <DOMBitmapInstance libraryItemName="${esc(med.name)}">`);
+	  parts.push('                  <matrix>');
+	  parts.push(`                    <Matrix a="${fmt(r.m[0])}" b="${fmt(r.m[1])}" c="${fmt(r.m[2])}" d="${fmt(r.m[3])}" tx="${fmt(r.m[4])}" ty="${fmt(r.m[5])}"/>`);
+	  parts.push('                  </matrix>');
+	  parts.push('                </DOMBitmapInstance>');
+	  parts.push('              </elements>');
+	  parts.push('            </DOMFrame>');
+	  idx += r.d;
+	}
+	if (idx < totalFrames && runs.length){
+	  /* 终止帧：复制最后一个矩阵但缩放 ×1e-4（亚像素级, 任何播放器都画不出来） */
+	  const lm = runs[runs.length-1].m;
+	  parts.push(`            <DOMFrame index="${idx}" keyMode="14688" duration="1">`);
+	  parts.push('              <elements>');
+	  parts.push(`                <DOMBitmapInstance libraryItemName="${esc(med.name)}">`);
+	  parts.push('                  <matrix>');
+	  parts.push(`                    <Matrix a="${fmt(lm[0]*1e-4)}" b="${fmt(lm[1]*1e-4)}" c="${fmt(lm[2]*1e-4)}" d="${fmt(lm[3]*1e-4)}" tx="${fmt(lm[4])}" ty="${fmt(lm[5])}"/>`);
+	  parts.push('                  </matrix>');
+	  parts.push('                </DOMBitmapInstance>');
+	  parts.push('              </elements>');
+	  parts.push('            </DOMFrame>');
+	  idx += 1;
+	}
+	if (idx < totalFrames) parts.push(`            <DOMFrame index="${idx}" keyMode="14688" duration="${totalFrames-idx}"><elements/></DOMFrame>`);
+	parts.push('          </frames>');
+	parts.push('        </DOMLayer>');
+	layerXml.push(parts.join('\n'));
+  }
+  totalFrames = Math.max(totalFrames, maxEndFrame);
+  /* ── DOMDocument.xml ── */
+  const D = [];
+  D.push("<?xml version='1.0' encoding='UTF-8' ?>");
+  D.push('<!-- 由 FLA⇄AMPROJ 网页转换器 从 Alight Motion 工程逆向转换而来 -->');
+  /* 文档头带上 Animate 标准 XFL 属性（xflVersion/creatorInfo/版本号/灭点）,
+	 提升严格导入器的兼容性; 真实来源已在上方注释声明。 */
+  D.push('<DOMDocument xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://ns.adobe.com/xfl/2008/"');
+  D.push('  xflVersion="2.971" creatorInfo="Adobe Animate" platform="Windows" versionInfo="Saved by Animate Windows 20.0 build 17400" majorVersion="20" buildNumber="17400"');
+  D.push(`  width="${W}" height="${H}" frameRate="${fps}" backgroundColor="${model.bgcolor || '#FFFFFF'}" currentTimeline="1" vanishingPoint3DX="${Math.round(W/2)}" vanishingPoint3DY="${Math.round(H/2)}">`);
+  D.push('  <folders>');
+  D.push('    <DOMFolderItem name="media" itemID="c0nv0000-00000001" isExpanded="true"/>');
+  D.push('  </folders>');
+  /* 段落顺序与真实 Animate 导出一致: folders → media → symbols → timelines */
+  D.push('  <media>');
+  let item = 0;
+  const orderedMedia = [...mediaByFile.values()];
+  for (const m of orderedMedia){
+	item++;
+	/* 与第二种 FLA 的 DOMBitmapItem 字段对齐: href/bitmapDataHRef 指向
+	   media/<file>, 并补上 frameRight/frameBottom(twip, 1px=20twip)。 */
+	const href = 'media/' + m.file;
+	D.push(`    <DOMBitmapItem name="${esc(m.name)}" itemID="${String(item).padStart(8,'0')}" href="${esc(href)}" bitmapDataHRef="${esc(href)}" sourceExternalFilepath="./LIBRARY/${esc(href)}" sourceLastImported="0" externalFileSize="${m.bytes.length}" originalCompressionType="lossless" frameRight="${Math.round(m.iw*20)}" frameBottom="${Math.round(m.ih*20)}" allowSmoothing="true" useImportedJPEGData="false" compressionType="lossless" quality="100"/>`);
+  }
+  D.push('  </media>');
+  D.push('  <symbols/>');
+  D.push('  <timelines>');
+  D.push('    <DOMTimeline name="场景 1">');
+  D.push('      <layers>');
+  D.push(layerXml.reverse().join('\n'));
+  D.push('      </layers>');
+  D.push('    </DOMTimeline>');
+  D.push('  </timelines>');
+  D.push('</DOMDocument>');
+  const entries = [
+	{ name: 'mimetype', data: enc.encode('application/vnd.adobe.xfl') },
+	{ name: 'DOMDocument.xml', data: enc.encode(D.join('\n') + '\n') },
+  ];
+  /* 位图实体按第二种 FLA 的库路径 LIBRARY/media/ 存放 */
+  for (const m of orderedMedia) entries.push({ name: 'LIBRARY/media/' + m.file, data: m.bytes });
+  return { bytes: zipStore(entries), xml: D.join('\n'), layers: layerXml.length, media: orderedMedia.length, totalFrames, W, H, fps };
+}
+/* ══════════════════════════════════════════════════════════════════════════
+   10 · 界面逻辑：模式切换 / 转换 / 预览 / 往返自测 / 下载
+   ══════════════════════════════════════════════════════════════════════════ */
+let MODE = 'fla2am';
+let SRC = null;            // { name, bytes }
+let OUT = null;            // { name, bytes, kind }
+let PV  = null;            // 预览状态
+let PLAYING = false;
+
+function setMode(m){
+  MODE = m;
+  for (const b of $('modeSeg').children) b.classList.toggle('on', b.dataset.mode === m);
+  $('modeHint').textContent = m === 'fla2am'
+	? '读入 Adobe Animate 工程(.fla/.xfl)，自动识别两种 FLA 格式（第一种纯矢量 / 第二种位图素材），输出 Alight Motion 工程(.amproj)'
+	: '读入 Alight Motion 工程(.amproj)，输出 Adobe Animate 工程(.fla)（第二种格式：LIBRARY/media 位图素材）';
+  $('fileLbl').innerHTML = (m === 'fla2am' ? '点击选择 .fla / .xfl（两种格式自动识别）' : '点击选择 .amproj')
+	+ '<br><span class="hint">文件不会上传，全部在本机浏览器里处理</span>';
+  $('statLine').textContent = '';
+  OUT = null; PV = null; $('dlBtn').disabled = true;
+}
+for (const b of $('modeSeg').children) b.onclick = () => setMode(b.dataset.mode);
+
+$('ss').oninput = () => { $('ssVal').textContent = $('ss').value; };
+$('fileIn').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  SRC = { name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) };
+  $('fileLbl').innerHTML = '已选择：<b>' + esc(f.name) + '</b><br><span class="hint">'
+	+ (SRC.bytes.length/1024).toFixed(0) + ' KB</span>';
+  $('goBtn').disabled = false; $('selfTestBtn').disabled = false;
+};
+$('urlBtn').onclick = async () => {
+  const u = $('urlIn').value.trim(); if (!u) return;
+  try {
+	log('载入 ' + u + ' …');
+	const r = await fetch(u); if (!r.ok) throw new Error('HTTP ' + r.status);
+	const buf = new Uint8Array(await r.arrayBuffer());
+	SRC = { name: u.split('/').pop() || 'input', bytes: buf };
+	$('fileLbl').innerHTML = '已载入：<b>' + esc(SRC.name) + '</b><br><span class="hint">'
+	  + (buf.length/1024).toFixed(0) + ' KB</span>';
+	$('goBtn').disabled = false; $('selfTestBtn').disabled = false;
+	log('已载入 ' + (buf.length/1024).toFixed(0) + ' KB', 'ok');
+  } catch(e){ log('载入失败: ' + e.message, 'e'); }
+};
+$('goBtn').onclick = async () => { try { await runConvert(); } catch(e){ log('错误: ' + (e.stack||e.message), 'e'); } };
+$('selfTestBtn').onclick = async () => { try { await selfTest(); } catch(e){ log('错误: ' + (e.stack||e.message), 'e'); } };
+$('dlBtn').onclick = () => {
+  if (!OUT) return;
+  const blob = new Blob([OUT.bytes], { type: 'application/octet-stream' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = OUT.name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  log('已下载 ' + OUT.name, 'ok');
+};
+
+const baseName = n => n.replace(/\.(fla|xfl|amproj|zip)$/i, '');
+function makePreviewStateA(){ }
+
+async function runConvert(){
+  if (!SRC) return;
+  logClear();
+  log('模式: ' + (MODE === 'fla2am' ? 'FLA → AM' : 'AM → FLA'));
+  log('解压 ' + SRC.name + ' …');
+  const files = await unzip(SRC.bytes);
+  log('  条目数: ' + files.size, 'ok');
+  if (MODE === 'fla2am'){
+	const doc = loadDoc(files);
+	const fmt = flaFormatOf(doc);
+	log('  FLA 格式：' + fmt.name + '（自动识别）', 'ok');
+	log('  FLA: ' + doc.width + 'x' + doc.height + ' @' + doc.fps + 'fps, 元件 '
+		+ doc.symbols.size + ' 个, 主图层 ' + (doc.main ? doc.main.layers.length : 0)
+		+ (fmt.bitmapCount ? ', 位图素材 ' + fmt.bitmapCount + ' 张' : ''), 'ok');
+	if (doc.bitmapItems.size) await decodeFlaBitmaps(doc);
+	const ss = parseInt($('ss').value, 10) || 2;
+	const doFilters = $('doFilters').checked;
+	const t0 = performance.now();
+	const conv = new Fla2Am(doc, ss, { doFilters });
+	const res = conv.writeAmproj(baseName(SRC.name));
+	const ms = performance.now() - t0;
+	OUT = { name: baseName(SRC.name) + '.amproj', bytes: res.bytes, kind: 'amproj' };
+	log('  输出 ' + res.shapes.length + ' 个 shape / ' + res.pngCount + ' 张 PNG, '
+		+ (res.bytes.length/1024).toFixed(0) + ' KB，耗时 ' + ms.toFixed(0) + 'ms', 'ok');
+	const amFiles = await unzip(res.bytes);
+	const model = parseAmproj(amFiles);
+	await decodeAmTextures(model);
+	PV = { mode:'fla2am', W:doc.width, H:doc.height, fps:doc.fps, doc, model,
+		   totalFrames: Math.max(1, Math.round(res.totalMs/1000*doc.fps)), bgA: doc.bg, bgB: model.bgcolor };
+	$('info').innerHTML = kv('画布', doc.width + ' × ' + doc.height)
+	  + kv('帧率', doc.fps + ' fps') + kv('总帧数', PV.totalFrames)
+	  + kv('FLA 格式', '第' + (fmt.code === 2 ? '二' : '一') + '种')
+	  + kv('元件数', doc.symbols.size) + kv('输出 shape', res.shapes.length)
+	  + kv('素材 PNG', res.pngCount);
+	$('tA').textContent = '原始 FLA'; $('tB').textContent = '转换后 AMPROJ';
+  } else {
+	const model = parseAmproj(files);
+	await decodeAmTextures(model);
+	log('  AM: ' + model.width + 'x' + model.height + ' @' + model.fps + 'fps, shape '
+		+ model.shapes.length + ' 个, 素材 ' + model.media.size + ', 时长 '
+		+ model.totalTime.toFixed(0) + 'ms', 'ok');
+	const t0 = performance.now();
+	const res = am2fla(model);
+	const ms = performance.now() - t0;
+	OUT = { name: baseName(SRC.name) + '.fla', bytes: res.bytes, kind: 'fla' };
+	log('  输出 ' + res.layers + ' 图层 / ' + res.media + ' 位图, '
+		+ (res.bytes.length/1024).toFixed(0) + ' KB，耗时 ' + ms.toFixed(0) + 'ms', 'ok');
+	const flaFiles = await unzip(res.bytes);
+	const doc = loadDoc(flaFiles);
+	await decodeFlaBitmaps(doc);
+	PV = { mode:'am2fla', W:model.width, H:model.height, fps:model.fps, doc, model,
+		   totalFrames: Math.max(1, res.totalFrames), bgA: model.bgcolor, bgB: doc.bg };
+	$('info').innerHTML = kv('画布', model.width + ' × ' + model.height)
+	  + kv('帧率', model.fps + ' fps') + kv('总帧数', PV.totalFrames)
+	  + kv('AM shape', model.shapes.length) + kv('输出图层', res.layers)
+	  + kv('位图素材', res.media);
+	$('tA').textContent = '原始 AMPROJ'; $('tB').textContent = '转换后 FLA';
+  }
+  const fr = $('frame'); fr.max = String(PV.totalFrames - 1); fr.value = '0';
+  $('infoCard').style.display = '';
+  $('dlBtn').disabled = false;
+  $('statLine').textContent = '完成：' + OUT.name;
+  paintPreview(0);
+}
+function kv(k, v){ return '<div class="kv"><span>' + esc(k) + '</span><span>' + esc(String(v)) + '</span></div>'; }
+
+function drawSide(ctx, side, frameIdx){
+  const st = PV;
+  const tMs = frameIdx / st.fps * 1000;
+  const bg = (side === 'A') ? st.bgA : st.bgB;
+  if (bg){ ctx.fillStyle = bg; ctx.fillRect(0, 0, st.W, st.H); }
+  if (side === 'A'){
+	if (st.mode === 'fla2am') renderTimeline(ctx, st.doc.main, frameIdx, st.doc, 0);
+	else renderAmFrame(ctx, st.model, tMs);
+  } else {
+	if (st.mode === 'fla2am') renderAmFrame(ctx, st.model, tMs);
+	else renderTimeline(ctx, st.doc.main, frameIdx, st.doc, 0);
+  }
+}
+function putScaled(dst, src){
+  const ctx = dst.getContext('2d');
+  ctx.clearRect(0, 0, dst.width, dst.height);
+  const s = Math.min(dst.width/src.width, dst.height/src.height);
+  const dw = src.width*s, dh = src.height*s;
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(src, (dst.width-dw)/2, (dst.height-dh)/2, dw, dh);
+}
+function diffCanvases(a, b){
+  const ca = a.getContext('2d').getImageData(0, 0, a.width, a.height);
+  const cb = b.getContext('2d').getImageData(0, 0, b.width, b.height);
+  const out = newCanvas(a.width, a.height);
+  const oc = out.getContext('2d'), od = oc.createImageData(a.width, a.height);
+  let bad = 0;
+  for (let i=0;i<ca.data.length;i+=4){
+	const d = Math.max(Math.abs(ca.data[i]-cb.data[i]), Math.abs(ca.data[i+1]-cb.data[i+1]),
+					   Math.abs(ca.data[i+2]-cb.data[i+2]), Math.abs(ca.data[i+3]-cb.data[i+3]));
+	if (d > 40){ bad++; od.data[i]=255; od.data[i+1]=70; od.data[i+2]=70; od.data[i+3]=255; }
+	else { od.data[i+3]=0; }
+  }
+  oc.putImageData(od, 0, 0);
+  return { canvas: out, pct: 100*bad/(a.width*a.height) };
+}
+function paintPreview(idx){
+  if (!PV) return;
+  idx = Math.max(0, Math.min(idx, PV.totalFrames - 1));
+  $('frame').value = String(idx);
+  $('frameLbl').textContent = '帧 ' + idx + ' / ' + (PV.totalFrames - 1)
+	+ '  (' + (idx/PV.fps*1000).toFixed(0) + 'ms)';
+  const offA = newCanvas(PV.W, PV.H), offB = newCanvas(PV.W, PV.H);
+  drawSide(offA.getContext('2d'), 'A', idx);
+  drawSide(offB.getContext('2d'), 'B', idx);
+  putScaled($('cvA'), offA); putScaled($('cvB'), offB);
+  const d = diffCanvases(offA, offB);
+  putScaled($('cvD'), d.canvas);
+  $('tD').textContent = '差异（红=不一致像素，' + d.pct.toFixed(2) + '%）';
+}
+$('frame').oninput = () => paintPreview(parseInt($('frame').value, 10));
+$('playBtn').onclick = () => {
+  PLAYING = !PLAYING;
+  $('playBtn').textContent = PLAYING ? '⏸' : '▶';
+  const step = () => {
+	if (!PLAYING || !PV) return;
+	let f = parseInt($('frame').value, 10) + 1;
+	if (f >= PV.totalFrames) f = 0;
+	paintPreview(f);
+	setTimeout(step, 1000/PV.fps);
+  };
+  if (PLAYING) step();
+};
+
+/* 往返自测：源 →(A)→ 中间 →(B)→ 回到源格式，逐帧比对 */
+async function selfTest(){
+  if (!SRC) return;
+  logClear();
+  log('往返自测开始…', 'ok');
+  const files = await unzip(SRC.bytes);
+  const sampleFrames = 12;
+  if (MODE === 'fla2am'){
+	const doc0 = loadDoc(files); if (doc0.bitmapItems.size) await decodeFlaBitmaps(doc0);
+	const conv = new Fla2Am(doc0, 2, { doFilters: $('doFilters').checked });
+	const r1 = conv.writeAmproj(baseName(SRC.name));
+	const files1 = await unzip(r1.bytes);
+	const model = parseAmproj(files1); await decodeAmTextures(model);
+	const r2 = am2fla(model);
+	const files2 = await unzip(r2.bytes);
+	const doc1 = loadDoc(files2); await decodeFlaBitmaps(doc1);
+	const fps = doc0.fps, total = timelineFrames(doc0.main);
+	const errs = compareFla(doc0, doc1, fps, total, sampleFrames);
+	report(errs, 'FLA→AM→FLA');
+  } else {
+	const model0 = parseAmproj(files); await decodeAmTextures(model0);
+	const r1 = am2fla(model0);
+	const files1 = await unzip(r1.bytes);
+	const doc = loadDoc(files1); await decodeFlaBitmaps(doc);
+	const conv = new Fla2Am(doc, 2);
+	const r2 = conv.writeAmproj(baseName(SRC.name));
+	const files2 = await unzip(r2.bytes);
+	const model1 = parseAmproj(files2); await decodeAmTextures(model1);
+	const fps = model0.fps, total = Math.max(1, Math.round(model0.totalTime/1000*fps));
+	const errs = compareAm(model0, model1, fps, total, sampleFrames);
+	report(errs, 'AM→FLA→AM');
+  }
+}
+function report(errs, label){
+  const avg = errs.reduce((s,e)=>s+e.pct,0)/Math.max(1,errs.length);
+  const worst = errs.reduce((a,b)=>b.pct>a.pct?b:a, errs[0] || {pct:0});
+  log('往返 ' + label + '：采样 ' + errs.length + ' 帧', 'ok');
+  log('  平均不一致率 ' + avg.toFixed(2) + '%，最差 ' + worst.pct.toFixed(2)
+	  + '% @帧' + worst.frame, avg < 2 ? 'ok' : 'w');
+  log(avg < 3 ? '  ✓ 往返后图形基本一致（可正常打开/播放）'
+			  : '  ⚠ 存在可见偏差，可调 ss 或检查细节', avg < 3 ? 'ok' : 'w');
+}
+function compareFla(docA, docB, fps, total, n){
+  const errs = [];
+  for (let i=0;i<n;i++){
+	const fr = Math.round(i * (total-1) / Math.max(1, n-1));
+	const a = newCanvas(docA.width, docA.height), b = newCanvas(docB.width, docB.height);
+	const ca = a.getContext('2d'), cb = b.getContext('2d');
+	ca.fillStyle = docA.bg; ca.fillRect(0,0,a.width,a.height);
+	cb.fillStyle = docB.bg; cb.fillRect(0,0,b.width,b.height);
+	renderTimeline(ca, docA.main, fr, docA, 0);
+	renderTimeline(cb, docB.main, fr, docB, 0);
+	errs.push({ frame: fr, pct: diffCanvases(a, b).pct });
+  }
+  return errs;
+}
+function compareAm(modelA, modelB, fps, total, n){
+  const errs = [];
+  for (let i=0;i<n;i++){
+	const fr = Math.round(i * (total-1) / Math.max(1, n-1));
+	const tms = fr/fps*1000;
+	const a = newCanvas(modelA.width, modelA.height), b = newCanvas(modelB.width, modelB.height);
+	const ca = a.getContext('2d'), cb = b.getContext('2d');
+	ca.fillStyle = modelA.bgcolor; ca.fillRect(0,0,a.width,a.height);
+	cb.fillStyle = modelB.bgcolor; cb.fillRect(0,0,b.width,b.height);
+	renderAmFrame(ca, modelA, tms);
+	renderAmFrame(cb, modelB, tms);
+	errs.push({ frame: fr, pct: diffCanvases(a, b).pct });
+  }
+  return errs;
+}
+setMode('fla2am');
+log('就绪。选择 .fla 或 .amproj 后点「转换」。', 'ok');
+</script>
+</body>
+</html>
