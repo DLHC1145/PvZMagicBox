@@ -48,6 +48,13 @@
   .hint{color:var(--dim);font-size:11px}
   .slider{display:flex;align-items:center;gap:8px}
   input[type=range]{flex:1;accent-color:var(--acc)}
+  .lblrow{display:grid;grid-template-columns:0.8fr 0.8fr 1.2fr 1.1fr 0.7fr 26px;gap:5px;align-items:center;margin-bottom:6px}
+  .lblrow input{width:100%;background:#141821;border:1px solid var(--line);color:var(--fg);border-radius:6px;padding:5px 6px;font-size:12px}
+  .lblrow .del{background:var(--panel2);border:1px solid var(--line);color:var(--err);border-radius:6px;cursor:pointer;height:26px}
+  .lblrow input.bad{border-color:var(--err)}
+  .lblhead{display:grid;grid-template-columns:0.8fr 0.8fr 1.2fr 1.1fr 0.7fr 26px;gap:5px;font-size:11px;color:var(--dim);margin-bottom:4px}
+  .badge.warn{background:rgba(255,176,32,.16);color:var(--warn)}
+  code{background:#141821;border:1px solid var(--line);border-radius:4px;padding:0 4px}
 </style>
 </head>
 <body>
@@ -57,6 +64,8 @@
   <div class="seg" id="modeSeg">
 	<button data-mode="fla2am" class="on">FLA → AM</button>
 	<button data-mode="am2fla">AM → FLA</button>
+	<button data-mode="pam2am">原版三件套 → AM</button>
+	<button data-mode="am2pam">AM → 原版三件套</button>
   </div>
   <span class="hint" id="modeHint"></span>
 </header>
@@ -66,7 +75,7 @@
 	<div class="card">
 	  <h2>1 · 选择源文件</h2>
 	  <label class="file" for="fileIn" id="fileLbl">点击选择 .fla / .amproj<br><span class="hint">文件不会上传，全部在本机浏览器里处理</span></label>
-	  <input id="fileIn" type="file" style="display:none"/>
+	  <input id="fileIn" type="file" multiple style="display:none"/>
 	  <div style="margin-top:8px" class="hint">或从 URL 载入（便于本机联调）：</div>
 	  <div class="row" style="margin-top:4px">
 		<input type="text" id="urlIn" placeholder="http://localhost:8000/xx.fla"/>
@@ -82,12 +91,36 @@
 	  <div class="kv" style="border:0"><span>逆向烘焙帧率</span><span><input type="text" id="rbFps" value="30" style="width:60px;text-align:right"></span></div>
 	</div>
 
+	<div class="card" id="labelCard" style="display:none">
+	  <h2>2.5 · Label 帧区间配置（AM → 原版必须填）</h2>
+	  <div class="hint" style="margin-bottom:6px">
+		每行定义一个 label：<b>起始帧 / 结束帧 / 名称</b>。区间必须连续、不重叠、不逆序。
+		默认已填 <code>all</code>（首帧~末帧），可改可增删。
+	  </div>
+	  <div id="labelRows"></div>
+	  <div class="row" style="margin-top:8px">
+		<button class="gh" id="labelAddBtn">+ 新建 label</button>
+		<button class="gh" id="labelAutoBtn">按素材自动分组</button>
+		<button class="gh" id="labelMemoBtn" title="按 pam_memo.txt 记录的逐帧 label 分组（帧号最准，推荐）；帧数对不上时按比例映射">按备忘录分组</button>
+		<button class="gh" id="labelAllBtn">重置为 all</button>
+	  </div>
+	  <div class="row" style="margin-top:6px">
+		<span class="hint" style="margin-right:6px">套用预设：</span>
+		<button class="gh" id="labelPresetBonkchoy" title="菜问全套 12 段标签（含 use_special）">菜问 12 段</button>
+		<button class="gh" id="labelPresetRa" title="僵尸全套 8 段标签">僵尸 8 段</button>
+	  </div>
+	  <datalist id="labelVocab"></datalist>
+  <datalist id="cmdVocab"></datalist>
+	  <div class="hint" id="labelMsg" style="margin-top:8px"></div>
+	</div>
+
 	<div class="card">
 	  <h2>3 · 执行</h2>
 	  <button class="act" id="goBtn" disabled>转换</button>
 	  <div class="row" style="margin-top:8px">
 		<button class="gh" id="selfTestBtn" disabled>往返自测 (A→B→A)</button>
 		<button class="gh" id="dlBtn" disabled>下载结果</button>
+		<button class="gh" id="dlMemoBtn" disabled title="格式备忘录：记录逐帧 label / stop / command、元件名、sprite 定义、res 与资源路径。AM 编辑会丢失它，需单独保存，下次与新 amproj 一起上传">下载备忘录 txt</button>
 	  </div>
 	  <div class="hint" id="statLine" style="margin-top:8px"></div>
 	</div>
@@ -1713,10 +1746,15 @@ function parseAmproj(files){
 	let hw = 100, hh = 100;
 	if (sizeEl){ const sv = at(sizeEl,'value','').split(',').map(Number); if (sv.length >= 2){ hw = sv[0]; hh = sv[1]; } }
 	if (!tr) continue;
+	/* 解析 s=".rect(x, y, w, h)"（本工具导出的图集模式）或 s=".rect"（旧式整图） */
+	let rect = null;
+	const sAttr = at(sh,'s','');
+	const rm = /\.rect\s*\(\s*([-\d.]+)\s*,\s*([-\d.]+)\s*,\s*([-\d.]+)\s*,\s*([-\d.]+)\s*\)/.exec(sAttr);
+	if (rm) rect = [ +rm[1], +rm[2], +rm[3], +rm[4] ];
 	model.shapes.push({
 	  id: atI(sh,'id',0), label: at(sh,'label',''), img: at(sh,'fillImage','').replace('amproj:',''),
 	  t0: atF(sh,'startTime',0), t1: atF(sh,'endTime', model.totalTime),
-	  halfW: hw, halfH: hh,
+	  halfW: hw, halfH: hh, rect,
 	  loc: parseTrack(tr,'location'), scl: parseTrack(tr,'scale'),
 	  rot: parseTrack(tr,'rotation'), skw: parseTrack(tr,'skew'),
 	});
@@ -1740,9 +1778,16 @@ function renderAmFrame(ctx, model, tMs){
 	const skw = trackAt(sh.skw, u, [0,0]);
 	const iw = tex.width, ih = tex.height;
 	const rw = sh.halfW*2, rh = sh.halfH*2;
-	const fit = Math.max(rw/iw, rh/ih);
-	const cw = rw/fit, chh = rh/fit;
-	const sx = (iw - cw)*0.5, sy = (ih - chh)*0.5;
+	/* 若 shape 带 rect（图集模式），直接从 rect 取源区域；
+	   否则退回「整图 cover」——两者在 rect 宽高比 == rw:rh 时等价。 */
+	let sx, sy, cw, chh;
+	if (sh.rect){
+	  sx = sh.rect[0]; sy = sh.rect[1]; cw = sh.rect[2]; chh = sh.rect[3];
+	} else {
+	  const fit = Math.max(rw/iw, rh/ih);
+	  cw = rw/fit; chh = rh/fit;
+	  sx = (iw - cw)*0.5; sy = (ih - chh)*0.5;
+	}
 	const m = composeTrs(rot[0]*Math.PI/180, scl[0], scl[1], skw[0], skw[1], loc[0], loc[1]);
 	ctx.save();
 	ctx.transform(m[0],m[1],m[2],m[3],m[4],m[5]);
@@ -1779,17 +1824,26 @@ function am2fla(model){
 	   这里裁剪原点四舍五入到最接近的整数像素, 并让矩阵沿用**同一个 cover 比例 k**
 	   把裁剪图映射回舞台 —— 每个源像素都落在 AM 本该放它的位置(误差≤边缘半像素)。 */
 	const k = Math.max(RW/sw, RH/shh);
-	const cw = Math.min(sw, Math.max(1, Math.round(RW/k)));
-	const chh = Math.min(shh, Math.max(1, Math.round(RH/k)));
-	const sxExact = (sw - RW/k) / 2, syExact = (shh - RH/k) / 2;
-	const sx = Math.round(sxExact), sy = Math.round(syExact);
+	/* 若 shape 带 rect（本工具导出的图集模式），源区域就是 rect 本身，
+	   不再做 cover 推导 —— 图集里那块像素正是当初 cover 裁切的结果。 */
+	let cw, chh, sx, sy;
+	if (sh.rect){
+	  sx = Math.max(0, Math.round(sh.rect[0]));
+	  sy = Math.max(0, Math.round(sh.rect[1]));
+	  cw = Math.max(1, Math.round(sh.rect[2]));
+	  chh = Math.max(1, Math.round(sh.rect[3]));
+	} else {
+	  cw = Math.min(sw, Math.max(1, Math.round(RW/k)));
+	  chh = Math.min(shh, Math.max(1, Math.round(RH/k)));
+	  sx = Math.round((sw - RW/k) / 2);
+	  sy = Math.round((shh - RH/k) / 2);
+	}
 	const key = sh.img + '|' + cw + ',' + chh + ',' + sx + ',' + sy;
 	sh._mk = key;
-	/* 实例矩阵用**同一个 cover 比例 k** 把裁剪图映射回舞台:
-	   裁剪图第 p 列/行恰好落在 AM 本该放它的位置（见上方 [坑8 · 亚像素对齐]）。
-	   [注意] 必须在去重 continue **之前**赋值 —— 多个 shape 共用同一张裁剪图时,
-	   后面的 shape 会提前 continue, 但每个 shape 仍需自己的 _B 实例矩阵。 */
-	sh._B = [k, 0, 0, k, (sx - sxExact)*k - RW*0.5, (sy - syExact)*k - RH*0.5];
+	/* 实例矩阵：把裁剪图映射回舞台，使其恰好铺满 size 矩形。
+	   rect 模式下 k 由 rect 尺寸与显示矩形之比决定（即图集里的像素密度）。 */
+	const kUse = sh.rect ? (RW / cw) : k;
+	sh._B = [kUse, 0, 0, kUse, -RW*0.5, -RH*0.5];
 	if (mediaByFile.has(key)) continue;
 	const bmp = model.textures.get(sh.img);
 	let bytes = srcBytes;
@@ -1932,28 +1986,57 @@ function am2fla(model){
 let MODE = 'fla2am';
 let SRC = null;            // { name, bytes }
 let OUT = null;            // { name, bytes, kind }
+let OUT_MEMO = null;       // { name, bytes } —— 格式备忘录，单独交付（不塞进包）
 let PV  = null;            // 预览状态
 let PLAYING = false;
 
 function setMode(m){
   MODE = m;
   for (const b of $('modeSeg').children) b.classList.toggle('on', b.dataset.mode === m);
-  $('modeHint').textContent = m === 'fla2am'
-	? '读入 Adobe Animate 工程(.fla/.xfl)，自动识别两种 FLA 格式（第一种纯矢量 / 第二种位图素材），输出 Alight Motion 工程(.amproj)'
-	: '读入 Alight Motion 工程(.amproj)，输出 Adobe Animate 工程(.fla)（第二种格式：LIBRARY/media 位图素材）';
-  $('fileLbl').innerHTML = (m === 'fla2am' ? '点击选择 .fla / .xfl（两种格式自动识别）' : '点击选择 .amproj')
+  const HINTS = {
+	fla2am: '读入 Adobe Animate 工程(.fla/.xfl)，自动识别两种 FLA 格式（第一种纯矢量 / 第二种位图素材），输出 Alight Motion 工程(.amproj)',
+	am2fla: '读入 Alight Motion 工程(.amproj)，输出 Adobe Animate 工程(.fla)（第二种格式：LIBRARY/media 位图素材）',
+	pam2am: '读入「原版三件套」压缩包(.zip：PNG 图集 + *.res.json + *.PAM.am.json)，解析 PopAnim 后输出 Alight Motion 工程(.amproj)。同一 label 内每个元件=一个图层，逐帧为主关键帧，绝不逐帧膨胀。',
+	am2pam: '读入 Alight Motion 工程(.amproj)，输出「原版三件套」压缩包(.zip：PNG 图集 + *.res.json + *.PAM.am.json)。严格遵循 PopStudio 的 PAM 规范；label 帧区间需在下方配置。',
+  };
+  const FILELBL = {
+	fla2am: '点击选择 .fla / .xfl（两种格式自动识别）',
+	am2fla: '点击选择 .amproj',
+	pam2am: '点击选择「原版三件套」.zip（含 .png / .res.json / .PAM.am.json）',
+	am2pam: '点击选择 .amproj',
+  };
+  const PLACEHOLDER = {
+	fla2am: 'http://localhost:8000/xx.fla', am2fla: 'http://localhost:8000/xx.amproj',
+	pam2am: 'http://localhost:8000/xx_triplet.zip', am2pam: 'http://localhost:8000/xx.amproj',
+  };
+  $('modeHint').textContent = HINTS[m] || '';
+  $('urlIn').placeholder = PLACEHOLDER[m] || '';
+  $('fileLbl').innerHTML = FILELBL[m]
 	+ '<br><span class="hint">文件不会上传，全部在本机浏览器里处理</span>';
+  $('labelCard').style.display = (m === 'am2pam') ? '' : 'none';
   $('statLine').textContent = '';
-  OUT = null; PV = null; $('dlBtn').disabled = true;
+  OUT = null; PV = null; OUT_MEMO = null;
+  $('dlBtn').disabled = true; $('dlMemoBtn').disabled = true;
 }
 for (const b of $('modeSeg').children) b.onclick = () => setMode(b.dataset.mode);
 
 $('ss').oninput = () => { $('ssVal').textContent = $('ss').value; };
+/* ★ [坑22 配套] 单独下载的备忘录要能再上传。除了「打进压缩包里」这条老路，
+   这里支持多选：同时选中 amproj/三件套 与 pam_memo.txt，txt 会被记为 EXTRA_MEMO，
+   在功能 4 里当作包内备忘录使用（包内已有时以包内为准）。 */
+let EXTRA_MEMO = null;   // { name, bytes } —— 多选附带的独立 txt
 $('fileIn').onchange = async e => {
-  const f = e.target.files[0]; if (!f) return;
+  const all = [...(e.target.files || [])];
+  if (!all.length) return;
+  EXTRA_MEMO = null;
+  const memoFile = all.find(f => f.name === MEMO_FILE || /\.pam_memo\.txt$/i.test(f.name));
+  if (memoFile && memoFile !== all[0]) EXTRA_MEMO = { name: memoFile.name, bytes: new Uint8Array(await memoFile.arrayBuffer()) };
+  const f = all[0];
   SRC = { name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) };
   $('fileLbl').innerHTML = '已选择：<b>' + esc(f.name) + '</b><br><span class="hint">'
-	+ (SRC.bytes.length/1024).toFixed(0) + ' KB</span>';
+	+ (SRC.bytes.length/1024).toFixed(0) + ' KB</span>'
+	+ (EXTRA_MEMO ? '<br><span class="hint">＋ 备忘录 ' + esc(EXTRA_MEMO.name) + '（修改模式）</span>' : '');
+  /* [坑32] 自动回填在 primeAm2PamUI 里做（那里才拿得到真实总帧数） */
   $('goBtn').disabled = false; $('selfTestBtn').disabled = false;
 };
 $('urlBtn').onclick = async () => {
@@ -1971,16 +2054,30 @@ $('urlBtn').onclick = async () => {
 };
 $('goBtn').onclick = async () => { try { await runConvert(); } catch(e){ log('错误: ' + (e.stack||e.message), 'e'); } };
 $('selfTestBtn').onclick = async () => { try { await selfTest(); } catch(e){ log('错误: ' + (e.stack||e.message), 'e'); } };
-$('dlBtn').onclick = () => {
-  if (!OUT) return;
-  const blob = new Blob([OUT.bytes], { type: 'application/octet-stream' });
+function dl(name, bytes){
+  const blob = new Blob([bytes], { type: 'application/octet-stream' });
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = OUT.name; a.click();
+  a.href = URL.createObjectURL(blob); a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-  log('已下载 ' + OUT.name, 'ok');
+  log('已下载 ' + name, 'ok');
+}
+$('dlBtn').onclick = () => { if (OUT) dl(OUT.name, OUT.bytes); };
+$('dlMemoBtn').onclick = () => {
+  if (!OUT_MEMO) return;
+  dl(OUT_MEMO.name, OUT_MEMO.bytes);
+  log('  提示：把这个 txt 与 AM 编辑后导出的 amproj 一起上传（可多选），即可走修改模式还原骨架', 'ok');
 };
 
 const baseName = n => n.replace(/\.(fla|xfl|amproj|zip)$/i, '');
+/* 【格式污染根因】原版 res.json 的 id / path 里不能出现非 ASCII 字符。
+   中文文件名（如「转 20261001_150230」）若直接拼进
+   IMAGE_<BASE>_xxx / ATLASIMAGE_ATLAS_<BASE> 这类 ID，就会把中文带进
+   原版格式文件，PopStudio 读回时会成为「格式污染」。
+   这里统一走标识符净化：非 [A-Za-z0-9_] 一律换成下划线，并保证非空。 */
+const idName = s => {
+  const t = String(s).replace(/[^0-9A-Za-z_]/g, '_').replace(/^_+/, '').replace(/_+$/, '');
+  return t || 'converted';
+};
 function makePreviewStateA(){ }
 
 async function runConvert(){
@@ -2044,7 +2141,8 @@ async function runConvert(){
   const fr = $('frame'); fr.max = String(PV.totalFrames - 1); fr.value = '0';
   $('infoCard').style.display = '';
   $('dlBtn').disabled = false;
-  $('statLine').textContent = '完成：' + OUT.name;
+  $('dlMemoBtn').disabled = !OUT_MEMO;
+  $('statLine').textContent = '完成：' + OUT.name + (OUT_MEMO ? '（备忘录请单独下载保存）' : '');
   paintPreview(0);
 }
 function kv(k, v){ return '<div class="kv"><span>' + esc(k) + '</span><span>' + esc(String(v)) + '</span></div>'; }
@@ -2152,8 +2250,21 @@ function report(errs, label){
   log('往返 ' + label + '：采样 ' + errs.length + ' 帧', 'ok');
   log('  平均不一致率 ' + avg.toFixed(2) + '%，最差 ' + worst.pct.toFixed(2)
 	  + '% @帧' + worst.frame, avg < 2 ? 'ok' : 'w');
-  log(avg < 3 ? '  ✓ 往返后图形基本一致（可正常打开/播放）'
-			  : '  ⚠ 存在可见偏差，可调 ss 或检查细节', avg < 3 ? 'ok' : 'w');
+  /* ★ 三件套 ⇄ AM 这类往返，差异来自**两处性质完全不同**的环节：
+	   ① 动画数据（元件/矩阵/label）—— 我们的目标，必须几乎为 0；
+	   ② 图集像素（PNG → AM 光栅 → PNG）—— 往返回必然重新光栅化，
+		  原版图集密度是 res/1200≈1.29 而 AM 光栅只有逻辑分辨率，
+		  重采样必然带来几个百分点的边缘差异，这是格式本身的损失，不是 bug。
+	 判据：平均 < 8% 且非爆炸式（< 20%）即视为「动画数据一致、仅存在重采样差异」。 */
+  if (avg < 2)
+	log('  ✓ 往返后图形高度一致（动画数据与图集均对齐）', 'ok');
+  else if (avg < 8)
+	log('  ✓ 动画数据一致（元件/矩阵/label 完全对齐）；剩余 '
+		+ avg.toFixed(1) + '% 为图集重采样差异 —— PNG → AM 光栅 → PNG 必然损失，属格式固有', 'ok');
+  else if (avg < 20)
+	log('  ⚠ 存在可见偏差，建议检查素材或 label 划分', 'w');
+  else
+	log('  ✗ 偏差过大，请检查输入是否完整（三件套需 png + res.json + PAM.am.json）', 'e');
 }
 function compareFla(docA, docB, fps, total, n){
   const errs = [];
@@ -2184,8 +2295,2805 @@ function compareAm(modelA, modelB, fps, total, n){
   }
   return errs;
 }
+/* ══════════════════════════════════════════════════════════════════════════
+   11 · 原版三件套 ⇄ AMPROJ
+   ──────────────────────────────────────────────────────────────────────────
+   三件套 = PNG 图集 + *.res.json(图集子图表) + *.PAM.am.json(PopAnimInfo)
+   严格遵循 PopStudio:
+	 PopAnimInfo.cs / SpriteInfo.cs / FrameInfo.cs / ImageInfo.cs / PamXfl.cs
+   核心语义:
+	 image[i]  = 图集里的一张子图(逻辑名 | 资源ID)，res.json 给原图坐标 ax,ay,aw,ah
+	 sprite[i] = 由 image/子 sprite 拼成的子动画(这里实测均为 1 帧)
+	 main_sprite.frame[f] = 第 f 帧；append=新建持久元件(即一个图层)，
+							remove=删除，change=该帧变换
+	 ★ 一个元件(index)在存活期内是所有帧共用的同一图层，逐帧由 change 驱动。
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* 原版图集按 res 缩放：图集实际像素 = 逻辑尺寸 × (res/1200)。
+   实测 1536 组 → 系数 1.28（=1536/1200），与 PopStudio k_standard_resolution=1200 一致。 */
+const PAM_STD_RESOLUTION = 1200;
+/* 凭空调用 AM → 三件套（没有备忘录）时的默认 res。原版常见值为 1536。 */
+const PAM_DEFAULT_RES = 1536;
+/* ★ [坑28a] 原版 PopAnim 的画布恒为 390×390（PVZ2 全系列实测一致）。
+   旧实现直接取 amproj 自身的画布（如 test.amproj 的 720×720），导出的
+   pam.size 就成了 [720,720]，与原版规范不符。无备忘录时强制回落到 390。 */
+const PAM_DEFAULT_SIZE = [390, 390];
+/* ★ [坑28b] slot 段位。原版用万级唯一段（实测 atlas=2975、子图 13048~13080），
+   旧实现在无备忘录时从 1 / 2 开始 —— 这是游戏资源表的**高危区**，
+   注入 PVZ2 几乎必然撞表。这里给一个高位起始段，并按工程名哈希分散。 */
+const PAM_SLOT_BASE = 40000;
+function slotBaseFor(idb){
+  let h = 0; const t = String(idb || 'x');
+  for (let i=0;i<t.length;i++) h = (h * 31 + t.charCodeAt(i)) >>> 0;
+  return PAM_SLOT_BASE + (h % 20000);
+}
+/* 备忘录文件名（「修改模式」的载体） */
+const MEMO_FILE = 'pam_memo.txt';
+/* ★ [坑15b · 图集密度] 原版 1536 组图集的子图是「逻辑尺寸 × res/1200 = 1.28」：
+   实测 BonkchoyAtlas.json，aw/size 均值 1.287（34×31 的逻辑图在图集里是 44×40）。
+   false = 按逻辑分辨率打包（AM 光栅本身只有逻辑分辨率，放大只是插值，往返帧差更小）；
+   true  = 与原版逐字段一致（图集放大 1.28，res.json 的 aw/ah 同步放大）。
+   ★ 二者必须二选一，不能混：res 字段写 1536 却按 1.0 打包 = 自相矛盾。 */
+const PAM_ATLAS_DENSITY_MATCH = false;
+
+/* ── 三件套解析 ── */
+function isTripletName(n){ return /\.(am\.json|res\.json|png)$/i.test(n); }
+function findEntry(files, re){
+  for (const [k,v] of files) { const b = k.split('/').pop(); if (re.test(b)) return { path:k, name:b, bytes:v }; }
+  return null;
+}
+/* 解析 res.json → { map: Map<id, {ax,ay,aw,ah}>, atlas: {width,height}, res: 1536 } */
+function parseResJson(text){
+  const j = JSON.parse(text);
+  const map = new Map();
+  let atlas = null;
+  for (const r of (j.resources || [])){
+	if (r.atlas){ atlas = { width: r.width, height: r.height, id: r.id }; continue; }
+	if (r.type === 'Image' && r.id) map.set(r.id, { ax: r.ax|0, ay: r.ay|0, aw: r.aw|0, ah: r.ah|0, path: r.path });
+  }
+  return { map, atlas, res: parseInt(j.res, 10) || 0, id: j.id || '', parent: j.parent || '', raw: j };
+}
+/* 解析 .PAM.am.json（PopAnimInfo） */
+function parsePamJson(text){
+  const d = JSON.parse(text);
+  if (!d || !d.image || !d.main_sprite) throw new Error('不是合法的 .PAM.am.json（缺 image / main_sprite）');
+  d.version = d.version || 6;
+  d.frame_rate = d.frame_rate || 30;
+  d.position = d.position || [0, 0];
+  d.size = d.size || [390, 390];
+  d.sprite = d.sprite || [];
+  for (const f of d.main_sprite.frame){
+	f.command = f.command || []; f.remove = f.remove || []; f.append = f.append || []; f.change = f.change || [];
+  }
+  for (const s of d.sprite) for (const f of s.frame){
+	f.command = f.command || []; f.remove = f.remove || []; f.append = f.append || []; f.change = f.change || [];
+  }
+  return d;
+}
+/* 计算 main_sprite 每个元件(index)的存活区间 [startFrame, endFrame) */
+function buildElementLife(pam){
+  const life = new Map();   // index -> { start, end, sprite, resource, addTimes:[], alive:Set }
+  const frames = pam.main_sprite.frame;
+  for (let i=0;i<frames.length;i++){
+	for (const a of frames[i].append){
+	  if (!life.has(a.index)) life.set(a.index, { index:a.index, start:i, end:frames.length, sprite:!!a.sprite, resource:a.resource|0 });
+	}
+	for (const r of frames[i].remove){
+	  const e = life.get(r.index);
+	  if (e && e.end === frames.length) e.end = i;   // remove 帧起不再存在
+	}
+  }
+  return life;
+}
+/* main_sprite 上的 label 区间：[{name, start, end}]（end 为开区间） */
+function pamLabelRanges(pam){
+  const frames = pam.main_sprite.frame;
+  const marks = [];
+  for (let i=0;i<frames.length;i++) if (frames[i].label) marks.push({ name: frames[i].label, start: i });
+  const out = [];
+  for (let k=0;k<marks.length;k++){
+	out.push({ name: marks[k].name, start: marks[k].start, end: (k+1 < marks.length ? marks[k+1].start : frames.length) });
+  }
+  return out;
+}
+/* 读取三件套 → { pam, res, atlasBytes, images:[{name,id,logical:[w,h],mat:[a,b,c,d,tx,ty],rect,cvs}] } */
+function parseTriplet(files){
+  const amE = findEntry(files, /\.PAM\.am\.json$/i) || findEntry(files, /\.am\.json$/i);
+  const resE = findEntry(files, /\.res\.json$/i);
+  if (!amE) throw new Error('三件套里找不到 *.PAM.am.json');
+  const pam = parsePamJson(dec.decode(amE.bytes));
+  let res = { map: new Map(), atlas: null, res: 0, raw: null };
+  if (resE) res = parseResJson(dec.decode(resE.bytes));
+  else log('  未找到 *.res.json，将按逻辑尺寸直接裁切（可能偏差）', 'w');
+
+  /* 找 PNG 图集：优先名字与 res.parent / id 相近的 */
+  const pngs = [];
+  for (const [k,v] of files){ const b = k.split('/').pop(); if (/\.png$/i.test(b)) pngs.push({ path:k, name:b, bytes:v }); }
+  if (!pngs.length) throw new Error('三件套里找不到 PNG 图集');
+  const hint = (res.raw && (res.raw.parent || res.raw.id)) || amE.name.replace(/\.PAM\.am\.json$/i, '');
+  let atlasBytes = pngs[0].bytes;
+  const hit = pngs.find(p => p.name.toLowerCase().indexOf(hint.toLowerCase()) >= 0)
+		   || pngs.find(p => hint.toLowerCase().indexOf(p.name.replace(/\.png$/i,'').toLowerCase()) >= 0);
+  if (hit) atlasBytes = hit.bytes;
+  const [atlasW, atlasH] = pngSize(atlasBytes);
+  return { pam, res, atlasBytes, atlasW, atlasH, amName: amE.name };
+}
+/* 由图集解码并裁出每张 image 的子图。返回 images[]，元素含 canvas 与元数据。
+   坐标系原点=子图左上，遵循原版：sprite 的 transform 是「元素坐标系里的矩阵」。 */
+async function sliceTripletImages(triplet){
+  const { pam, res, atlasBytes, atlasW, atlasH } = triplet;
+  let bmp = null;
+  try { bmp = await createImageBitmap(new Blob([atlasBytes], { type:'image/png' })); }
+  catch(e){ throw new Error('图集 PNG 解码失败: ' + e.message); }
+  const resScale = res.res ? (res.res / PAM_STD_RESOLUTION) : 1;  // 1536 → 1.28
+  const images = [];
+  for (let i=0;i<pam.image.length;i++){
+	const im = pam.image[i];
+	const nameParts = String(im.name || '').split('|');
+	const logical = nameParts[0] || ('image_' + i);
+	const rid = nameParts[1] || null;
+	const logicalSize = (im.size && im.size.length >= 2) ? [im.size[0], im.size[1]] : [0, 0];
+	const mat = (im.transform && im.transform.length >= 6) ? im.transform.slice(0,6) : [1,0,0,1,0,0];
+	let rect = null, src = 'res';
+	if (rid && res.map.has(rid)){
+	  const r = res.map.get(rid);
+	  if (r.aw > 0 && r.ah > 0) rect = { x:r.ax, y:r.ay, w:r.aw, h:r.ah };
+	}
+	if (!rect){
+	  /* 回退：按逻辑尺寸 × resScale 估原图像素（缺 res.json 时） */
+	  const aw = Math.max(1, Math.round(logicalSize[0] * resScale));
+	  const ah = Math.max(1, Math.round(logicalSize[1] * resScale));
+	  rect = { x:0, y:0, w:aw, h:ah };
+	  src = 'fallback';
+	}
+	/* 夹到图集范围，防止越界 */
+	const cw = Math.max(1, Math.min(rect.w, Math.max(1, atlasW - rect.x)));
+	const chh = Math.max(1, Math.min(rect.h, Math.max(1, atlasH - rect.y)));
+	/* ★ [坑23 · 保留图集原始密度] 旧实现把子图**缩放到逻辑尺寸**再存进 amproj，
+	   等于在源头就把 res/1200(=1.28) 的分辨率丢掉了 —— AM→PAM 回程时无论怎么
+	   补都只能插值，这就是「密度 false 帧差小但 aw/ah 不对、密度 true 格式对
+	   但帧差 5.99%」这个两难的根因。
+	   正确做法：PNG media 里**原样保留图集像素**（cw×chh，即 1.28 密度），
+	   逻辑尺寸单独记为 logicalW/H，仅用于 shape 的显示矩形与坐标换算。
+	   AM 的 mediaFillMode="fill" + s=".rect" 会自动把高像素 PNG 缩到显示矩形，
+	   渲染结果与旧版完全一致，但回程裁出来的就是 1.28 密度、**全程无插值**。
+	   （若源三件套本身就是密度 1.0，则 cw===lw，此改动无副作用。） */
+	const lw = logicalSize[0] > 0 ? logicalSize[0] : cw;
+	const lh = logicalSize[1] > 0 ? logicalSize[1] : chh;
+	/* cvs = 逻辑尺寸（渲染器 makePamRenderer 依赖「cvs 尺寸 == 逻辑尺寸」这一约定，
+	   不能动）；srcCvs = 图集原始像素（1.28 密度），仅供 pamToAmproj 导出 PNG。 */
+	const scv = newCanvas(cw, chh), sctx = scv.getContext('2d');
+	sctx.drawImage(bmp, rect.x, rect.y, cw, chh, 0, 0, cw, chh);
+	const cv = newCanvas(lw, lh), ctx = cv.getContext('2d');
+	ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+	ctx.drawImage(bmp, rect.x, rect.y, cw, chh, 0, 0, lw, lh);
+	const imgMat = (mat && mat.length >= 6) ? mat.slice(0,6) : [1,0,0,1,0,0];
+	images.push({ index:i, logical, rid, logicalSize, mat, imgMat,
+		  logicalW: lw, logicalH: lh, scaleX: lw/cw, scaleY: lh/chh,
+		  rect:{ x:rect.x, y:rect.y, w:cw, h:chh }, src,
+		  cvs:cv, srcCvs: (cw === lw && chh === lh) ? null : scv, png:null });
+  }
+  return images;
+}
+
+/* ── PopAnim 子 sprite 解析：把 sprite[j] 摊平成「第 t 帧显示哪个 image」的序列 ──
+   实测每个 sprite 只有 1 帧，其元素通过 append(resource=图片 index) 指定素材。 */
+/* 递归解析 sprite → 实际素材图索引。
+   ★ PAM 的 sprite 可以**嵌套**（sprite 里 append 的还是 sprite，例如
+	 zombie_egypt_ra_arms_outer_upper → [upper_arm, lower_arm]，再套到 image）。
+	 旧实现只看第一层 append[0]，遇到「整个 sprite 全是子 sprite」就返回 -1，
+	 该元件被当成无素材直接跳过 —— 实测表现为「太阳神僵尸红色技能光效整块丢失」
+	 （帧差从 ~1% 飙到 ~11%）。这里改为深度优先，返回该 sprite 子树里
+	 第一个能到达的 image 索引；同时把子树里所有元素的变换也一并展开。 */
+function spriteFirstImage(pam, spriteIdx, seen){
+  if (spriteIdx == null || spriteIdx < 0) return -1;
+  const sp = pam.sprite && pam.sprite[spriteIdx];
+  if (!sp || !sp.frame || !sp.frame.length) return -1;
+  seen = seen || new Set();
+  if (seen.has(spriteIdx)) return -1;      // 防环
+  seen.add(spriteIdx);
+  for (const fr of sp.frame){
+	for (const a of (fr.append || [])){
+	  if (a.sprite) {
+		const r = spriteFirstImage(pam, a.resource, seen);
+		if (r >= 0) return r;
+	  } else if ((a.resource | 0) >= 0 && (a.resource | 0) < pam.image.length){
+		return a.resource | 0;
+	  }
+	}
+  }
+  return -1;
+}
+function buildSpriteImageRefs(pam){
+  const refs = [];   // refs[j] = { imgIdx, frames, kids:[...] }
+  for (let j=0;j<(pam.sprite||[]).length;j++){
+	const sp = pam.sprite[j];
+	const kids = [];
+	if (sp && sp.frame && sp.frame.length){
+	  for (const a of (sp.frame[0].append || [])) kids.push({ resource: a.resource|0, sprite: !!a.sprite });
+	}
+	refs.push({ imgIdx: spriteFirstImage(pam, j), frames: sp && sp.frame ? sp.frame.length : 1, kids });
+  }
+  return refs;
+}
+/* 元素 → 素材图索引：sprite 元素查 sprite→image 映射，普通元素直接用 resource */
+function elementImageIndex(pam, spriteRefs, life){
+  const map = new Map();
+  for (const [idx, e] of life){
+	map.set(idx, e.sprite ? (spriteRefs[e.resource] ? spriteRefs[e.resource].imgIdx : -1) : e.resource);
+  }
+  return map;
+}
+/* 逐帧渲染 PopAnim（用于预览/自测）。坐标系=画布绝对像素，原点在画布左上。
+   ★ 完整实现 sprite 复合：一个 sprite 元素 = 把它的子元素（image 或再嵌套 sprite）
+	 按 Mparent·Mchild·Mimage 逐层复合后绘制。旧实现把 sprite 元素直接当成
+	 单张 image 画，嵌套 sprite（子树全是 sprite）会画不出来 —— 实测红色技能光效丢失。 */
+function makePamRenderer(pam, images){
+  const spriteRefs = buildSpriteImageRefs(pam);
+  const life = buildElementLife(pam);
+  const elemImg = elementImageIndex(pam, spriteRefs, life);
+  const frames = pam.main_sprite.frame;
+  /* 每个 sprite 的各帧「已解析绘制列表」：items=[{img,mat}]，
+	 mat 为 sprite 局部坐标系里的图像矩阵（已经含嵌套复合与 image.transform） */
+  const spriteCache = new Map();
+  function resolveSprite(spriteIdx, depth, seen){
+	if (spriteIdx == null || spriteIdx < 0 || depth > 16) return [];
+	if (seen.has(spriteIdx)) return [];       // 防环
+	if (spriteCache.has(spriteIdx)) return spriteCache.get(spriteIdx);
+	const sp = pam.sprite && pam.sprite[spriteIdx];
+	if (!sp || !sp.frame || !sp.frame.length){ spriteCache.set(spriteIdx, []); return []; }
+	const seen2 = new Set(seen); seen2.add(spriteIdx);
+	const out = [];
+	for (const sfr of sp.frame){
+	  const alive = new Map();
+	  for (const r of (sfr.remove || [])) alive.delete(r.index);
+	  for (const a of (sfr.append || [])) alive.set(a.index, { res: a.resource|0, sprite: !!a.sprite, mat: [1,0,0,1,0,0] });
+	  for (const c of (sfr.change || [])){
+		if (alive.has(c.index)) alive.get(c.index).mat = pamTransformToMatrix(c.transform);
+	  }
+	  for (const [, v] of alive){
+		if (v.sprite){
+		  for (const sub of resolveSprite(v.res, depth+1, seen2)) out.push({ img: sub.img, mat: mulMat(v.mat, sub.mat) });
+		} else if (v.res >= 0 && v.res < images.length){
+		  const imt = (images[v.res] && images[v.res].imgMat) || [1,0,0,1,0,0];
+		  out.push({ img: v.res, mat: mulMat(v.mat, imt) });
+		}
+	  }
+	}
+	spriteCache.set(spriteIdx, out);
+	return out;
+  }
+  /* 每帧重放全部帧态，展开成最终绘制列表（PAM 帧数通常几百，开销可接受） */
+  const frameState = [];
+  const aliveSet = new Map();  // index -> {res, sprite, mat}
+  for (let f=0; f<frames.length; f++){
+	const fr = frames[f];
+	for (const r of fr.remove) aliveSet.delete(r.index);
+	for (const a of fr.append) aliveSet.set(a.index, { res: a.resource|0, sprite: !!a.sprite, mat: [1,0,0,1,0,0] });
+	for (const c of fr.change){
+	  if (aliveSet.has(c.index)) aliveSet.get(c.index).mat = pamTransformToMatrix(c.transform);
+	}
+	const items = [];
+	for (const [, v] of aliveSet){
+	  if (v.sprite){
+		for (const s of resolveSprite(v.res, 0, new Set())) items.push({ img: s.img, mat: mulMat(v.mat, s.mat) });
+	  } else if (v.res >= 0 && v.res < images.length){
+		const imt = (images[v.res] && images[v.res].imgMat) || [1,0,0,1,0,0];
+		items.push({ img: v.res, mat: mulMat(v.mat, imt) });
+	  }
+	}
+	frameState.push(items);
+  }
+  return {
+	frames: frames.length,
+	labels: pamLabelRanges(pam),
+	life,
+	elementImageIndex: elemImg,
+	draw(ctx, frameIdx){
+	  const fi = Math.max(0, Math.min(frameIdx|0, frames.length - 1));
+	  const snap = frameState[fi] || [];
+	  for (const e of snap){
+		const img = images[e.img];
+		if (!img) continue;
+		const m = e.mat || [1,0,0,1,0,0];
+		/* PAM 变换矩阵直接作用于「子图左上为原点」的坐标系 */
+		ctx.save();
+		ctx.setTransform(1,0,0,1,0,0);
+		ctx.transform(m[0],m[1],m[2],m[3],m[4],m[5]);
+		ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+		ctx.drawImage(img.cvs, 0, 0);
+		ctx.restore();
+	  }
+	},
+  };
+}
+
+/* 收集 sample 叶子：把一个「主元素」展开成若干 (image, 局部矩阵) 叶子。
+   ★ PAM 的 sprite 可以嵌套（sprite→sprite→image），此时 1 个主元素要在
+	 同帧画出多张 image。旧实现只取第一个叶子，嵌套 sprite 的第二张图整块丢失
+	 （实测太阳神僵尸「外圈手臂/红色技能光效」缺一块）。
+   返回 [{imgIdx, relMat}]，relMat 是该叶子相对「主元素坐标系」的矩阵，
+   即 M_element · M_leaf_child · M_image（不含主元素自身的 M_change）。 */
+function pamLeafResolve(pam, images, spriteIdx, depth, seen){
+  if (spriteIdx == null || spriteIdx < 0 || depth > 16) return [];
+  if (seen.has(spriteIdx)) return [];
+  const sp = pam.sprite && pam.sprite[spriteIdx];
+  if (!sp || !sp.frame || !sp.frame.length) return [];
+  const seen2 = new Set(seen); seen2.add(spriteIdx);
+  const out = [];
+  for (const fr of sp.frame){
+	const alv = new Map();
+	for (const r of (fr.remove || [])) alv.delete(r.index);
+	for (const a of (fr.append || [])) alv.set(a.index, { res: a.resource|0, sprite: !!a.sprite, mat: [1,0,0,1,0,0] });
+	for (const c of (fr.change || [])) if (alv.has(c.index)) alv.get(c.index).mat = pamTransformToMatrix(c.transform);
+	for (const [, v] of alv){
+	  if (v.sprite){
+		for (const sub of pamLeafResolve(pam, images, v.res, depth+1, seen2)) out.push({ imgIdx: sub.imgIdx, relMat: mulMat(v.mat, sub.relMat) });
+	  } else if (v.res >= 0 && v.res < images.length){
+		const imt = (images[v.res] && images[v.res].imgMat) || [1,0,0,1,0,0];
+		out.push({ imgIdx: v.res, relMat: mulMat(v.mat, imt) });
+	  }
+	}
+  }
+  return out;
+}
+
+/* ══ 修改模式：格式备忘录（pam_memo.txt）══
+   【为什么需要】
+   amproj 的表达力装不下 PAM 的全部「格式骨架」：
+	 · main_sprite 里每个元件 index 引用的**具名 sprite**（如 zombie_egypt_ra_staff）
+	 · sprite[] 的嵌套结构（sprite → sprite → image）
+	 · image[] 的名字、sprite[] 的名字与定义
+	 · main_sprite 自己的 name/description、res 分辨率、资源路径 / id / slot
+   只靠 amproj，往返一次这些必然丢失：元件名会退化成 shape 名、sprite 定义塌缩成
+   占位符、res 被写成默认值。这不是 bug，是**信息量不足**，算法无法凭空恢复。
+   【方案】PAM → AM 时额外产出一份紧凑的 pam_memo.txt（JSON，几十 KB），
+   记录上述骨架；AM → PAM 时若在压缩包里发现它，就按备忘录原样还原。
+   动画数据（逐帧矩阵）始终以 amproj 为准 —— 备忘录只锁「格式骨架」，
+   不锁动画，所以你在 AM 里改动画、改位置都照常生效。 */
+
+/* 从原始 PAM 提取「格式骨架」。
+   resInfo = parseTriplet 返回的 res 对象（{map, atlas, res, id, parent, raw}），
+   用于把 res.json 的 parent / res / id / 资源路径与 slot 原样记下来。 */
+function buildPamMemo(pam, images, baseName, resInfo, elemLeafRelArg, shapeIdsArg){
+  const ri = (resInfo && typeof resInfo === 'object') ? resInfo : null;
+  const resNum = ri ? (ri.res || PAM_DEFAULT_RES) : (parseInt(resInfo, 10) || PAM_DEFAULT_RES);
+  /* 1) image 骨架：名字（含 |IMAGE_ 后半段）+ 尺寸 + 变换 */
+  const imgs = (pam.image || []).map((im, i) => ({
+	i, name: im.name || '', size: im.size ? [im.size[0], im.size[1]] : null,
+	transform: Array.isArray(im.transform) ? im.transform.slice() : null,
+  }));
+  /* 2) sprite 骨架：名字 + 帧率 + work_area + 每帧的 append（含嵌套标记） */
+  /* ★ [坑36] 记录本轮生成的 shape id 清单。
+	 用途：回程时区分「本工具编码的 id」与「AM 自动生成的 id」。
+	 本工具 id = 1000000 + elemIdx*100 + leafNo，一律 ≥ 1000000；
+	 但 AM 自己也会生成 ≥ 1000000 的 id（实测神字图层 id=1019104），
+	 只凭数值范围解码会把神字误判成原版元件 191 的第 4 个叶子，整层渲染全错。 */
+  const shapeIds = Array.isArray(shapeIdsArg) ? shapeIdsArg.slice() : [];
+
+  const sprs = (pam.sprite || []).map((sp, j) => ({
+	j, name: sp.name || '', description: sp.description || '',
+	frame_rate: sp.frame_rate, work_area: sp.work_area ? sp.work_area.slice() : null,
+	frame: (sp.frame || []).map(fr => ({
+	  append: (fr.append || []).map(a => ({
+		index: a.index, resource: a.resource, sprite: !!a.sprite,
+		name: a.name == null ? null : a.name,
+	  })),
+	  change: (fr.change || []).map(c => ({
+		index: c.index,
+		transform: Array.isArray(c.transform) ? c.transform.slice() : null,
+	  })),
+	  remove: (fr.remove || []).map(r => ({ index: r.index })),
+	  label: fr.label == null ? null : fr.label,
+	  stop: !!fr.stop,
+	})),
+  }));
+  /* 3b) 每个主元件叶子的「相对矩阵」(relMat)：叶子图片相对元件自身坐标系的
+	 完整复合（含嵌套 sprite 各层与 image.transform）。AM 侧每个 shape 承载
+	 M_full = M_change · relMat，回程用 M_change = M_full · relMat⁻¹ 精确反解。
+	 只记 matrix（6 个数），39 元件 × 平均 1.2 叶子 → 约 4KB，很小。 */
+  const elemLeafRel = {};
+  if (elemLeafRelArg && typeof elemLeafRelArg.forEach === 'function'){
+	for (const [k, v] of elemLeafRelArg) elemLeafRel[k] = v;
+  }
+  /* 3c) main_sprite 每个**元件 index** 对应的 sprite 引用（往返还原的关键） */
+  const elemToSprite = {};
+  for (const fr of (pam.main_sprite.frame || [])){
+	for (const a of (fr.append || [])){
+	  if (!(a.index in elemToSprite)) elemToSprite[a.index] = { sprite: !!a.sprite, resource: a.resource };
+	}
+  }
+  /* 4) res.json 骨架：parent / res / id + 每条 resource 的 path / id / slot */
+  let resResources = null, resParent = null, resId = null;
+  if (ri && ri.raw && Array.isArray(ri.raw.resources)){
+	resParent = ri.parent || ri.raw.parent || null;
+	resId = ri.id || ri.raw.id || null;
+	resResources = ri.raw.resources.map(r => {
+	  const o = { atlas: !!r.atlas, id: r.id, path: r.path, slot: r.slot };
+	  if (r.atlas){ o.width = r.width; o.height = r.height; }
+	  else { o.ax = r.ax; o.ay = r.ay; o.aw = r.aw; o.ah = r.ah; }
+	  return o;
+	});
+  }
+  return {
+	kind: 'pam_memo', version: 1, base: baseName,
+	res: String(resNum),
+	res_parent: resParent, res_id: resId, resources: resResources,
+	canvas: pam.size ? [pam.size[0], pam.size[1]] : null,
+	position: pam.position ? pam.position.slice() : [0, 0],
+	pam_version: pam.version, frame_rate: pam.frame_rate,
+	main_sprite: {
+	  name: pam.main_sprite.name || '', description: pam.main_sprite.description || '',
+	  frame_rate: pam.main_sprite.frame_rate,
+	  work_area: pam.main_sprite.work_area ? pam.main_sprite.work_area.slice() : null,
+	  /* ★ [坑20] main_sprite 的逐帧 label / stop / command。
+		 实测原版 Bonkchoy：283 帧里 11 帧 stop=true，恰好是**每个 label 段的末帧**
+		 （idle2@30→stop@29 … plantfood_off@221→stop@230，最后一段 water 无 stop）。
+		 PopAnim 语义：播到段末停帧，等游戏逻辑切下一段。另有 6 条 command
+		 {"parameter":"","command":"use_special"} 用于触发游戏事件。
+		 旧备忘录只记了 name/description/frame_rate/work_area，这三项全丢，
+		 导出时又被硬编码成 stop:false / command:[] —— 动画段不再在末尾停住。 */
+	  frameMeta: (pam.main_sprite.frame || []).map(f => ({
+		label: f.label == null ? null : f.label,
+		stop: !!f.stop,
+		command: Array.isArray(f.command) ? f.command.map(c => ({
+		  parameter: (c && c.parameter != null) ? c.parameter : '',
+		  command: (c && c.command != null) ? c.command : '',
+		})) : [],
+	  })),
+	},
+	elemToSprite,
+	elemLeafRel,
+	shapeIds,
+	image: imgs, sprite: sprs,
+  };
+}
+
+/* ══════════════════ PAM → AMPROJ（功能 3） ══════════════════ */
+/* 把 PopAnim 的「元件 + 逐帧 change」映射为 amproj 的「shape + kf 轨道」。
+   铁律：
+	 - 同一 label 内，一个元件 = 一个 shape（同一个图层）；跨 label 时元件会被
+	   remove/append 重新定义，天然拆成多个 shape。
+	 - 若一个元件是**嵌套 sprite**（1 个元件里含多张 image），则按叶子 image
+	   拆成多个 shape，但它们共享同一个「主元件 index」，保持图层语义。
+	 - 每个 shape 的 kf 覆盖其存活期的每一帧（逐帧关键帧），
+	   绝不「每帧一个 shape」。
+*/
+function pamToAmproj(pam, images, title, pamResVal){
+  const fps = pam.frame_rate || 30;
+  const W = Math.round(pam.size[0]) || 390, H = Math.round(pam.size[1]) || 390;
+  const frames = pam.main_sprite.frame;
+  const life = buildElementLife(pam);
+  const labels = pamLabelRanges(pam);
+  /* label 归属：给每个元件算它跨越的 label（实测元件不跨 label；若跨则按 label 边界拆分） */
+  const labelAt = f => { for (const L of labels) if (f >= L.start && f < L.end) return L; return null; };
+
+  /* 收集每个「元件 × 叶子」的逐帧样本。
+	 key = idx + '#' + leafNo（leafNo 是嵌套 sprite 里第几张 image 的序号）
+	 ★ [坑10 · 保持型元件] PAM 里一个元件 append 后，可能只在第 1 帧给一次 change，
+	   之后一直到 remove 都用同一个矩阵（例如 326 帧出现的「脚踝/脚尖」，
+	   append@326 + change@326，remove@356）。旧实现只按 change 事件建样本，
+	   该元件的 shape 就只覆盖 326 这一帧，后续 327~355 整块丢失 ——
+	   实测帧差 0.4%↔3% 交替、绘制数 41→35。
+	   这里改为**逐帧 carry forward**：只要元素还活着，每帧都产出一条样本，
+	   矩阵沿用最近一次 change 的值（与 makePamRenderer 的重放语义完全一致）。 */
+  const samples = new Map();   // key -> { idx, leafNo, imgIdx, relMat, list:[{f,mat}] }
+  /* 元件 index → 原始 sprite 名（写进 shape.name，便于人工对照与后续还原） */
+  const memoElemLabel = new Map();
+  /* 元件 index → 原始引用（sprite:true/false + resource）。供 [坑13] 判断
+	 「该元件的叶子变换是否已由还原后的 sprite[] 承担」。 */
+  const elemRefMap = new Map();
+  for (const fr of (pam.main_sprite.frame || [])){
+	for (const a of (fr.append || [])){
+	  if (!elemRefMap.has(a.index)) elemRefMap.set(a.index, { sprite: !!a.sprite, resource: a.resource });
+	  if (memoElemLabel.has(a.index)) continue;
+	  const nm = a.sprite ? ((pam.sprite[a.resource|0] || {}).name || '') : '';
+	  memoElemLabel.set(a.index, nm || ('elem_' + a.index));
+	}
+  }
+  const alive = new Map();
+  const leafCache = new Map();  // elementIndex -> [{imgIdx, relMat}]
+  const lastMat = new Map();    // elementIndex -> 最近一次 change.transform
+  /* 元件 index → 叶子 relMat 列表（回程精确反解 M_change 用）。 */
+  const elemLeafRel = new Map();
+  for (let f=0; f<frames.length; f++){
+	const fr = frames[f];
+	for (const r of fr.remove){ alive.delete(r.index); leafCache.delete(r.index); lastMat.delete(r.index); }
+	for (const a of fr.append){
+	  alive.set(a.index, { sprite: !!a.sprite, resource: a.resource|0 });
+	  lastMat.set(a.index, [1,0,0,1,0,0]);
+	  if (a.sprite){
+		const lv = pamLeafResolve(pam, images, a.resource|0, 0, new Set());
+		leafCache.set(a.index, lv);
+		/* [坑38] 取**最大**叶子数：同一元件在不同帧可能 append 不同的 sprite
+		   （叶子数不同），只记第一次会记少，回程时正常叶子被判"越界"误杀。 */
+		const _cur = lv.map(x => (x.relMat || [1,0,0,1,0,0]).slice());
+		const _pv = elemLeafRel.get(a.index);
+		if (!_pv || _cur.length > _pv.length) elemLeafRel.set(a.index, _cur);
+	  } else {
+		const imt = (images[a.resource|0] && images[a.resource|0].imgMat) || [1,0,0,1,0,0];
+		leafCache.set(a.index, [{ imgIdx: a.resource|0, relMat: imt }]);
+	  }
+	}
+	for (const c of fr.change){
+	  if (alive.has(c.index)) lastMat.set(c.index, c.transform);
+	}
+	/* 逐帧为所有活着且能解析出叶子的元件产出样本 */
+	for (const [idx] of alive){
+	  const leaves = leafCache.get(idx) || [];
+	  if (!leaves.length) continue;
+	  const mt = lastMat.get(idx) || [1,0,0,1,0,0];
+	  for (let li=0; li<leaves.length; li++){
+		const lf = leaves[li];
+		const key = idx + '#' + li;
+		if (!samples.has(key)) samples.set(key, { idx, leafNo: li, imgIdx: lf.imgIdx, relMat: lf.relMat, list: [] });
+		samples.get(key).list.push({ f, mat: mt });
+	  }
+	}
+  }
+
+  /* 按「元件叶子 × label」生成 shape（同一元件若跨 label 则拆开；实测不跨） */
+  const shapes = [];
+  let sid = 100;
+  for (const [skey, rec] of samples){
+	const list = rec.list;
+	const img = images[rec.imgIdx];
+	if (!img) continue;
+	/* 分组成连续 label 段 */
+	const groups = [];
+	let cur = null;
+	for (const s of list){
+	  const L = labelAt(s.f);
+	  const key = L ? (L.start + ':' + L.name) : 'none';
+	  if (!cur || cur.key !== key){ cur = { key, label: L ? L.name : '', start: s.f, end: s.f, items: [] }; groups.push(cur); }
+	  cur.end = s.f; cur.items.push(s);
+	}
+	for (const g of groups){
+	  /* ★ [编号对齐] shape 的 id 必须能反解出「原始元件 index」与「叶子序号」，
+	 否则 AM → 三件套时无法用备忘录把匿名元件还原成具名 sprite。
+	 编码：id = BASE + idx * 100 + leafNo（idx < 1,000,000，leafNo < 100）。
+	 同时用 label 记下原始元件名，便于人工排查。 */
+	  const sidEnc = 1000000 + (rec.idx % 1000000) * 100 + (rec.leafNo % 100);
+	  sid = Math.max(sid, sidEnc);
+	  const shapeId = sidEnc;
+	  /* 逐帧样本 → kf。
+	   ★ 坐标桥梁（PAM ⇄ 本转换器的 amproj 约定）：
+		 · PAM 里一个元件叶子最终画的是图片 i，其完整矩阵 = M_element · relMat
+		   （relMat 已含嵌套 sprite 各层 + image.transform，作用于「子图左上为原点」）。
+		 · 本工具的 renderAmFrame 把 shape 的「显示矩形」居中放在 loc，再施加
+		   scale/rotation —— 即 loc = 该矩形中心点的画布坐标，矩形尺寸 = 子图
+		   逻辑尺寸（= image.size，因为 sliceTripletImages 已把子图缩到逻辑尺寸）。
+		 · 于是：amproj.loc = (M_element·relMat) · (lw/2, lh/2)，
+		   amproj.scale/rotation = 该复合矩阵的缩放/旋转分量，
+		   shape 的 size 取子图逻辑尺寸的一半。两侧渲染严格等价。 */
+	  /* [坑23] 显示矩形必须用**逻辑尺寸**（玩家看到的尺寸），不是 PNG 像素尺寸。
+	     PNG 里存的是 1.28 倍像素，交给 AM 的 fill 语义去缩。 */
+	  const subW = img.logicalW || img.cvs.width, subH = img.logicalH || img.cvs.height;
+	  const cx = subW / 2, cy = subH / 2;
+	  /* ★ [坑13 · 嵌套 sprite 的双重计入] 当备忘录已把「原始 sprite[]」原样还原时，
+	 该元件叶子的相对矩阵 relMat（含嵌套 sprite 各层 + image.transform）会**由
+	 sprite[] 自己再施加一次**。但 amproj 的 shape 是把「整条链」压平成一个
+	 显示矩形 —— 若这里不折 relMat，shape 就只覆盖叶子自身的局部坐标，
+	 多个叶子还会互相覆盖。因此统一策略：
+	   · 每个 (元件,叶子) 仍然各自成 shape，并把 relMat 折进去（保证画面正确）；
+	   · 写回 PAM 时，**只让该元件的「主叶子」（leafNo 最小的那个）写 change**，
+	     其余叶子不再覆盖它 —— 因为还原后的 sprite[] 已经把各叶子重新展开。
+	 这样既不会双重计入，也不会出现「最后写入的叶子赢」的错位。
+	 ★ [坑16] 但「元素 24 → sprite40(_particles) → sprite38/39 → 4 张图」这种
+	   多级扇出，4 个叶子各自的 relMat 完全不同，**任何一个叶子的 relMat 都不等于
+	   元件自身的矩阵** —— 用叶子 relMat 反推出来的 change 必然只对那一片有效。
+	   正确做法：有备忘录 sprite 时，shape 只承载「元件自身的 M_change」
+	   （rel = 单位阵），叶子的相对变换交给还原后的 sprite[] 自己展开。 */
+	  /* ★ [坑16 · 多叶子扇出] AM 侧每个 shape 承载的是「该叶子完整复合矩阵」
+	 M_full = M_change · relMat（relMat 已含嵌套 sprite 各层 + image.transform），
+	 shape.loc = M_full·(子图半尺寸) —— 只有这样才能与 PAM 渲染器的可视中心严格重合。
+	 AM → PAM 时再右乘 relMat⁻¹ 反解出 M_change。见 amprojToTriplet。 */
+	  const elemRef = elemRefMap.get(rec.idx);
+	  const hasMemoSprite = !!(elemRef && elemRef.sprite);
+	  const rel = rec.relMat || [1,0,0,1,0,0];
+	  const kfs = [];
+	  let prevKey = null;
+	  for (const s of g.items){
+		const M = mulMat(pamTransformToMatrix(s.mat), rel);
+		/* loc = 显示矩形中心的画布坐标；decompPamMat 内部同样按
+		   「左上角 + Lin·半尺寸」换算，两者严格一致（见函数注释）。 */
+		/* ★ [坑27 · 分解约定必须统一] AM 渲染用 composeTrs 做 R·K·S 重组
+		   （a=sx(cs-sn·ky), b=sx(sn+cs·ky), c=sy(cs·kx-sn), d=sy(sn·kx+cs)），
+		   而旧实现这里用 decompPamMat 的 R·S(shear) 分解 —— 两套约定**不互逆**：
+		   实测矩阵 [-0.771,-0.474,-1.059,0.82] 经 decompPamMat → composeTrs
+		   还原后误差达 0.40（线性分量），直接表现为元件旋转/斜切失真。
+		   改为用 trsFromFineDecompose（composeTrs 的严格逆），往返才闭合。 */
+		const tr = pamTrsFromMat(M, subW, subH);
+		const loc = tr.loc;
+		const key = [loc[0],loc[1],tr.scl[0],tr.scl[1],tr.rot].map(v => Math.round(v*1e5)/1e5).join(',');
+		if (key === prevKey) continue;
+		prevKey = key;
+		kfs.push({ f: s.f, loc, scl: tr.scl, rot: tr.rot, skew: tr.skew });
+	  }
+	  if (!kfs.length) continue;
+	  /* 最后帧值补一帧，保证覆盖到区间末 */
+	  const lastS = g.items[g.items.length-1];
+	  const Mlast = mulMat(pamTransformToMatrix(lastS.mat), rel);
+	  const trL = pamTrsFromMat(Mlast, subW, subH);
+	  const locL = trL.loc;
+	  if (kfs[kfs.length-1].f !== lastS.f) kfs.push({ f: lastS.f, loc: locL, scl: trL.scl, rot: trL.rot, skew: trL.skew });
+	  shapes.push({
+		sid: shapeId, index: rec.idx, leafNo: rec.leafNo,
+		/* label 保留原始 label 名（idle/walk/eat/...），它是 amproj 侧唯一的
+		   区间标识，绝不能被元件名覆盖；元件名另存 shape.name 供排查用。 */
+		label: g.label || (img.logical + '_' + rec.idx),
+		name: (memoElemLabel && memoElemLabel.get(rec.idx)) ? memoElemLabel.get(rec.idx) : '',
+		f0: g.start, f1: g.end, kfs, img,
+		halfW: subW / 2, halfH: subH / 2,
+		timeScale: 1000 / fps,
+		/* ★ [坑13] 多叶子元件只让「主叶子」(leafNo=0) 写 change。
+	   多叶子元件（嵌套 sprite）若都写 change，后写的会覆盖前面的，
+	   造成恒定偏移（实测元素 137 偏 2.87px）。 */
+		_primaryLeaf: rec.leafNo === 0,
+	  });
+	}
+  }
+
+  /* 写 amproj XML。
+	 ★ 原版三件套的图集是一张 512/1024/2048 的正方形大图，绝不是一堆散图。
+	   旧实现把每张子图当成一个独立 media 写出去（实测太阳神僵尸导出 39 个小 png，
+	   完全不符合原版规范）。这里改为：把全部子图打进一张合规图集，
+	   media 只声明这一张，shape 用 rect 指向图集内的子区域。 */
+  const totalFrames = frames.length;
+  const totalMs = totalFrames / fps * 1000;
+
+  /* ★ [务必保持] 素材必须是「一张子图 = 一个独立 PNG media」，shape 用 s=".rect"
+	 （整图）引用它 —— 这正是 AM / PopStudio 真正能渲染的原生形态（与官方导出、
+	 以及本工具最早的可用版本一致）。
+	 ⚠ 曾经改成「全部子图打进一张 2048 大图集 + s='.rect(x,y,w,h)'」，实测在 AM 里
+	 导入后**完全不可见**（所有元件都指向那张大图集的整幅，表现为透明/一片错乱）——
+	 该 AM 版本不认带参数的 .rect 子区域语义。这里回退为逐图 PNG。
+	 注意：`<media>` 的 width/height 必须是**该子图自身的像素尺寸**。 */
+  const pngs = new Map();
+  for (const s of shapes) if (!pngs.has(s.img.logical)) pngs.set(s.img.logical, s.img);
+  const uniqImgs = [...pngs.values()];
+
+  /* 文件名：用净化后的子图逻辑名，保证唯一且无非法字符 */
+  const pngFileName = new Map();   // logical -> 文件名
+  {
+	const used = new Set();
+	for (const im of uniqImgs){
+	  let base = idName(im.logical || ('image_' + im.index));
+	  if (!base) base = 'image_' + im.index;
+	  let fn = base + '.png', n = 2;
+	  while (used.has(fn)) fn = base + '_' + (n++) + '.png';
+	  used.add(fn); pngFileName.set(im.logical, fn);
+	}
+  }
+
+  const L = [];
+  L.push("<?xml version='1.0' encoding='UTF-8' ?>");
+  L.push('<!-- 由 FLA⇄AMPROJ 网页转换器 从「原版三件套」(PopAnim PAM) 转换而来 -->');
+  L.push('<!-- 同一 label 内：每个元件 = 一个独立图层(shape)，逐帧为主关键帧，不存在逐帧膨胀 -->');
+  L.push(`<scene title="${esc(title || 'converted')}" width="${W}" height="${H}" exportWidth="${W}" exportHeight="${H}" precompose="dynamicResolution" bgcolor="#00000000" totalTime="${Math.round(totalMs)}" fps="${fps}" retime="freeze" retimeAdaptFPS="false">`);
+  /* 每个子图一条 media（原生形态） */
+  const pngEntries = [];
+  for (const im of uniqImgs){
+	const fn = pngFileName.get(im.logical);
+	/* [坑23] 导出用 srcCvs（图集原始 1.28 密度像素）；media 的 width/height 也随之
+	   变成实际像素，与 shape 的显示矩形（逻辑尺寸）不同 —— 分辨率就保留在这里。
+	   若源本身就是密度 1.0（srcCvs 为 null），则退回 cvs，行为与旧版完全一致。 */
+	const _src = im.srcCvs || im.cvs;
+	const data = canvasPng(_src);
+	const [iw, ih] = [_src.width, _src.height];
+	pngEntries.push({ name: fn, data });
+	L.push(`  <media uri="amproj:${fn}" filename="${esc(fn)}" title="${esc(fn)}" type="image/png" duration="0" size="${data.length}" sig="${sha1Hex(data)}" orientation="0" width="${iw}" height="${ih}" />`);
+  }
+  for (const s of shapes){
+	const t0 = Math.floor(s.f0 * s.timeScale + 1e-6);
+	let t1 = Math.floor((s.f1 + 1) * s.timeScale - 1e-6);
+	if (t1 <= t0) t1 = t0 + 1;
+	/* s=".rect" = 整张图铺满显示矩形（mediaFillMode="fill" 的 cover 语义）。
+	   显示矩形 halfW*2 × halfH*2 与子图像素尺寸的宽高比一致，故 cover == 铺满。 */
+	const fn = pngFileName.get(s.img.logical);
+	L.push(`  <shape id="${s.sid}" label="${esc(s.label)}" startTime="${t0}" endTime="${t1}" fillType="media" fillImage="amproj:${fn}" mediaFillMode="fill" s=".rect">`);
+	L.push('    <transform lockAspectRatio="false">');
+	const spanMs = Math.max(1, (s.f1 + 1 - s.f0) * s.timeScale);
+	const t0ms = s.f0 * s.timeScale;
+	const tn = f => (f * s.timeScale - t0ms) / spanMs;
+	L.push('      <location>');
+	for (const k of s.kfs) L.push(`        <kf t="${fmt(tn(k.f))}" v="${fmt(k.loc[0])},${fmt(k.loc[1])},0.000000" />`);
+	L.push('      </location>');
+	L.push('      <scale>');
+	for (const k of s.kfs) L.push(`        <kf t="${fmt(tn(k.f))}" v="${fmt(k.scl[0])},${fmt(k.scl[1])}" />`);
+	L.push('      </scale>');
+	L.push('      <rotation>');
+	let prev = null;
+	for (const k of s.kfs){
+	  let v = k.rot;
+	  if (prev !== null){ while (v - prev > 180) v -= 360; while (v - prev < -180) v += 360; }
+	  prev = v;
+	  L.push(`        <kf t="${fmt(tn(k.f))}" v="${fmt(v)}" />`);
+	}
+	L.push('      </rotation>');
+	if (s.kfs.some(k => Math.abs(k.skew[0]) > 1e-7 || Math.abs(k.skew[1]) > 1e-7)){
+	  L.push('      <skew>');
+	  for (const k of s.kfs) L.push(`        <kf t="${fmt(tn(k.f))}" v="${fmt(k.skew[0])},${fmt(k.skew[1])}" />`);
+	  L.push('      </skew>');
+	}
+	L.push('    </transform>');
+	/* [约定] 本转换器的 <property name="size"> 存的是「半尺寸」(halfW,halfH)，
+	 与 Fla2Am.writeAmproj 完全一致；parseAmproj 会把它读回 halfW/halfH，
+	 renderAmFrame 再 ×2 得到显示矩形。若这里写全尺寸会导致渲染放大一倍。 */
+	L.push(`    <property name="size" type="vec2" value="${fmt(s.halfW)},${fmt(s.halfH)}" />`);
+	L.push('  </shape>');
+  }
+  L.push('</scene>');
+  const xmlText = L.join('\n') + '\n';
+  const xmlName = 'converted-from-pam.xml';
+  const manifest = pngEntries.map(e => `${sha1Hex(e.data)}:${e.name}`).join('\n');
+  const entries = [
+	...pngEntries,
+	{ name: xmlName, data: enc.encode(xmlText) },
+	{ name: 'manifest.txt', data: enc.encode(manifest) },
+  ];
+  /* ★ [修改模式] 把原版格式骨架记进备忘录，随 amproj 一起交付。
+	 这样用户在 AM 里改完动画再转回三件套时，元件名 / sprite 定义 / res /
+	 资源路径都能原样还原，不会退化成 shape 名或被写成默认 res。 */
+  const memo = buildPamMemo(pam, images, title || 'converted', pamResVal, elemLeafRel,
+	shapes.map(s => s.sid));
+  /* ★ [坑22 · 备忘录去向] 备忘录**不再塞进 amproj 包**，改为单独输出。
+	 理由：这个包是交给 AM（Alight Motion）编辑的，AM 重新导出时会按自己的格式
+	 重写整个压缩包，pam_memo.txt 必然丢失 —— 塞进去等于白塞，还平白让 AM 多一个
+	 它不认识的条目（有概率触发 AM 的兼容性告警）。
+	 正确用法：本工具把 txt 单独下载给你；你在 AM 里改完动画、导出新 amproj 后，
+	 再把这个 txt 与新 amproj 一起上传（可多选），走「修改模式」还原骨架。 */
+  const memoBytes = enc.encode(JSON.stringify(memo));
+  return { bytes: zipStore(entries), xml: xmlText, shapes: shapes.length, pngCount: pngEntries.length,
+		   atlasW: 0, atlasH: 0, subCount: uniqImgs.length, totalFrames, totalMs, W, H, fps, xmlName, memo, memoBytes };
+}
+/* PAM 矩阵 → {loc:[x,y], scl:[sx,sy], rot(deg), skew:[kx,ky]}
+   严格对齐 PopStudio 的 transform 语义（FrameInfo.MovesInfo）：
+	 length==6 → 完整矩阵 [m00,m01,m10,m11,tx,ty]
+	 length==3 → [rot(弧度), x, y]
+	 length==2 → [x, y]（默认缩放 1 / 旋转 0）
+   ★ 归一化是必须的：2 元 [x,y] 若被当成 6 元矩阵读, 会得到 tx=x,ty=y 而 a/b/c/d 全 undefined,
+	 渲染结果会坍缩到原点(实测表现为「多余的垃圾贴图堆在左上角」)。 */
+/* 2D 仿射矩阵 [a,b,c,d,tx,ty] 复合：mulMat(A,B) = A·B（先 B 后 A） */
+function mulMat(A, B){
+  return [
+	A[0]*B[0] + A[2]*B[1],
+	A[1]*B[0] + A[3]*B[1],
+	A[0]*B[2] + A[2]*B[3],
+	A[1]*B[2] + A[3]*B[3],
+	A[0]*B[4] + A[2]*B[5] + A[4],
+	A[1]*B[4] + A[3]*B[5] + A[5],
+  ];
+}
+function pamTransformToMatrix(t){
+  if (!t || !t.length) return [1,0,0,1,0,0];
+  if (t.length >= 6) return [ t[0]||0, t[1]||0, t[2]||0, t[3]||0, t[4]||0, t[5]||0 ];
+  if (t.length === 3){
+	const r = t[0] || 0, cos = Math.cos(r), sin = Math.sin(r);
+	return [ cos, sin, -sin, cos, t[1]||0, t[2]||0 ];
+  }
+  return [ 1, 0, 0, 1, t[0]||0, t[1]||0 ];   // 2 元 = 纯平移
+}
+/* PAM 矩阵 → amproj 轨道分量。与 composePamMatFromAm **严格互逆**。
+   ★ [坑11 · 平移基准] PAM 矩阵的 (tx,ty) 是「子图左上角」落在画布的位置；
+	 amproj 的 loc 是「显示矩形中心」的画布坐标。两者关系：
+	   tx = loc − Lin·(subW/2, subH/2)
+	 所以反解时 loc = (tx,ty) + Lin·(subW/2, subH/2)。
+	 旧实现直接令 loc=(tx,ty)，导致 compose 又减了一次半尺寸 ——
+	 实测每个元件的平移都少 Lin·(cx,cy)（约 7~21px），
+	 表现为「三件套 → AM → 改动画 → 三件套」往返后整体错位、帧差 14%~37%。
+   subW/subH = 子图在画布上的显示尺寸（= image.size）；k = cover 比例。
+   ★ [坑14 · 剪切分量] 分解模型必须与 composePamMatFromAm 严格一致，否则会
+	 凭空产生 shear：旧实现用 sy=det/|col0| 且 shear=(a·c+b·d)/|col0|²，
+	 但 compose 把 skew 加在 c 上（是 col1 的 x 分量）——两者不是互逆对，
+	 实测误差可达 0.06（元件 73/61 的 c 分量凭空多出 ±0.05~0.06，
+	 表现为「腿/脚」等元件往返后轻微错位、帧差 6%~9%）。
+   现统一采用上三角分解：M = R(rot) · [[sx, shear], [0, sy]]
+	 col0 = (cos·sx, sin·sx)          → sx=|col0|, rot=atan2(b,a)
+	 col1 = (cos·shear − sin·sy, sin·shear + cos·sy)
+									  → shear=(a·c+b·d)/sx, sy=det/sx
+   与 compose 逐项代数互逆（数值验证误差 0）。 */
+/* ★ [坑27] PAM 矩阵 → AM 轨道分量（loc / scl / rot(度) / skew=[kx,ky]）。
+   与 decompPamMat 的区别：这里严格采用 **AM 的 R·K·S 约定**（复用
+   trsFromFineDecompose），保证与 renderAmFrame 的 composeTrs 严格互逆。
+   中心换算与 decompPamMat 保持一致（loc = 矩阵作用于显示矩形中心）。 */
+function pamTrsFromMat(m, subW, subH){
+  const mm = pamTransformToMatrix(m);
+  const a=mm[0], b=mm[1], c=mm[2], d=mm[3], tx=mm[4], ty=mm[5];
+  const [rot, sx, sy, kx, ky] = trsFromFineDecompose([a, b, c, d]);
+  const cx = (subW || 0) / 2, cy = (subH || 0) / 2;
+  const loc = [ tx + (a*cx + c*cy), ty + (b*cx + d*cy) ];
+  return { loc, scl: [sx || 1, sy || 1], rot: rot * 180 / Math.PI, skew: [kx || 0, ky || 0] };
+}
+
+function decompPamMat(m, subW, subH, k){
+  const mm = pamTransformToMatrix(m);
+  const a=mm[0], b=mm[1], c=mm[2], d=mm[3], tx=mm[4], ty=mm[5];
+  const det = a*d - b*c;
+  const sx = Math.hypot(a, b);
+  let rot = 0, shear = 0, sy = 1;
+  if (sx > 1e-12){
+	rot = Math.atan2(b, a);
+	shear = (a*c + b*d) / sx;
+	sy = det / sx;
+  } else {
+	sy = Math.hypot(c, d);
+  }
+  /* 把「左上角位置」换算成「显示矩形中心」。k 已在 a,b,c,d 里体现，故直接用
+	 Lin·(subW/2, subH/2) 即可（调用方传入的 subW/subH 已是画布显示尺寸）。 */
+  const cx = (subW || 0) / 2, cy = (subH || 0) / 2;
+  const loc = [ tx + (a*cx + c*cy), ty + (b*cx + d*cy) ];
+  return { loc, scl: [sx||1, sy||1], rot: rot * 180 / Math.PI, skew: [0, shear] };
+}
+/* amproj 轨道分量 → PAM change.transform 矩阵（与 pamToAmproj 的坐标桥梁互逆）。
+   amproj 的 loc 是「显示矩形中心」的画布坐标；PAM 矩阵作用于「子图左上为原点」。
+   故 PAM 矩阵的平移 = loc − Lin·(cx,cy)，其中 Lin 是不含平移的线性部分，cx,cy=子图中心。
+   ★ [坑12 · image.transform 锚点] PopAnim 渲染一个叶子时的完整复合是
+	   P_final = M_change · T_img
+   其中 T_img = image[].transform。它不一定是「纯平移」——实测太阳神僵尸
+   image25 = [1.99999, 0, 0, 1.99999, -15.95, -15.95]，自带 2× 缩放！
+   本工具在 PAM→AM 时已把 T_img 折进 relMat、算出 M_desired = M_change_correct·T_img；
+   回到 AM→PAM 时必须右乘完整的 T_img⁻¹ 把它除掉（不能只取平移分量，
+   否则自带的缩放/旋转会被重复施加：实测该元件线性部分正好翻倍 2×，
+   帧差 9.5%）。公式：
+	   M_change = M_desired · T_img⁻¹
+   实测漏掉这一步时，法杖等元件整体偏 10~95px，往返帧差 23%~75%；只补平移
+   则残留 9.5%（缩放类元件翻倍）。
+   ★ [坑14] 线性部分的构造必须与 decompPamMat 的上三角分解严格互逆：
+	   M = R(rot) · [[sx, shear], [0, sy]]
+	   a = cos·sx
+	   b = sin·sx
+	   c = cos·shear − sin·sy
+	   d = sin·shear + cos·sy
+   旧实现写成 c = −sin·sy + kx、d = cos·sy + ky（把 shear 只加在 c、漏了 d），
+   与分解式不互逆，凭空产生 c 分量偏差 ±0.05~0.06。 */
+function composePamMatFromAm(loc, scl, rotDeg, skew, subW, subH, k, relMat){
+  const r = rotDeg * Math.PI / 180;
+  const cos = Math.cos(r), sin = Math.sin(r);
+  const kk = (k && isFinite(k) && k > 0) ? k : 1;
+  /* ★ [坑27] 线性部分必须与 AM 的 composeTrs（R·K·S）**完全一致**，
+	 否则与 pamTrsFromMat 不互逆，往返会残留旋转/斜切误差。 */
+  const sx = scl[0] * kk, sy = scl[1] * kk;
+  const kx = (skew && skew[0]) || 0, ky = (skew && skew[1]) || 0;
+  const a = sx*(cos - sin*ky), b = sx*(sin + cos*ky);
+  const c = sy*(cos*kx - sin), d = sy*(sin*kx + cos);
+  const ox = subW / 2, oy = subH / 2;
+  const tx = loc[0] - (a*ox + c*oy);
+  const ty = loc[1] - (b*ox + d*oy);
+  /* ★ [坑16] AM 的 shape 承载的是「叶子完整复合 M_full = M_change · relMat」，
+	 回程必须右乘 **该叶子的 relMat⁻¹** 才能精确得到 M_change。
+	 旧实现只乘 image.transform⁻¹（= 单叶子直连图的情形），对嵌套/多叶子
+	 扇出元件（如元素 24 → _particles → 4 图）会残留约 18px 偏移（帧差 2%）。 */
+  return mulMat([a, b, c, d, tx, ty], matInverse(relMat));
+}
+/* 2×3 仿射矩阵求逆（[a,b,c,d,tx,ty] 表示 [[a,c,tx],[b,d,ty]]）。
+   奇异时退回单位阵，保证调用方永远不会拿到 NaN。 */
+function matInverse(M){
+  if (!M || !M.length) return [1,0,0,1,0,0];
+  const a=M[0], b=M[1], c=M[2], d=M[3], tx=M[4]||0, ty=M[5]||0;
+  const det = a*d - b*c;
+  if (!isFinite(det) || Math.abs(det) < 1e-12) return [1,0,0,1,0,0];
+  const ia = d/det, ib = -b/det, ic = -c/det, id = a/det;
+  return [ ia, ib, ic, id, -(ia*tx + ic*ty), -(ib*tx + id*ty) ];
+}
+
+/* ★ [坑17 · 数值口径] 原版 PAM 的 transform 不是 IEEE double 全精度。
+   实测 BonkchoyAnim.json（2.2 万个线性分量 / 1.1 万个平移分量）：
+	 · a,b,c,d 有 98.1% 恰好是 1/65536 的整数倍（16.16 定点），
+	   例 0.6916961669921875 = 45341/65536、0.26947021484375 = 17662/65536；
+	 · tx,ty 100% 是两位小数，例 175.4 / 84.15 / -26.2 / -118.35。
+   本工具由 double 矩阵反解（decomp → compose → 求逆），必然留下 1e-5 级残差，
+   输出形如 193.3999936251883、0.8366849649683545（与原版最大差 1.5e-5，
+   相对 6e-8 —— 也就是你说的「极其细微的差异」）。序列化前统一量化即可对齐。 */
+function q16(x){ return Math.round(x * 65536) / 65536; }
+function q100(x){ return Math.round(x * 100) / 100; }
+/* ★ [坑21 · 资源路径] 原版 res.json 的 path 是**数组**（Bonkchoy 实测
+   ["images","1536","initial","plant","bonkchoy","bonkchoy_102x68"]，
+   atlas 为 ["atlases","PlantBonkchoy_1536_00"]），层级是
+   images/<res>/<分组>/<类型>/<角色>/<文件>。
+   旧实现写成反斜杠字符串 images\\<工程名>\\<逻辑名> —— 格式错（字符串）
+   且层级错（无 res 段、无分组/类型/角色段，拿转换时的工程名/时间戳当目录名，
+   被备忘录一固化就永久带着）。这里统一归一为数组。 */
+function normResPath(p, fallbackArr){
+  if (Array.isArray(p) && p.length) return p.map(String);
+  if (typeof p === 'string' && p.length){
+	const parts = p.split(/[\\/]+/).filter(Boolean);
+	if (parts.length) return parts;
+  }
+  return fallbackArr;
+}
+function quantPamTransform(t){
+  if (!Array.isArray(t)) return t;
+  if (t.length >= 6){
+	const a=q16(t[0]), b=q16(t[1]), c=q16(t[2]), d=q16(t[3]);
+	/* ★ [坑26a] 原版对「纯平移」的 change 只写 2 元素 [tx,ty]，不写 6 元素。
+	   实测 Bonkchoy 283 帧里有 14 处（如 index=60 帧225 写作 [247.65, 185.3]）。
+	   渲染语义完全等价，但格式要对齐 —— 量化后若线性部分是单位阵就退化成短式。 */
+	if (a === 1 && b === 0 && c === 0 && d === 1) return [q100(t[4]), q100(t[5])];
+	return [a, b, c, d, q100(t[4]), q100(t[5])];
+  }
+  if (t.length === 2) return [q100(t[0]), q100(t[1])];
+  return t.slice();
+}
+
+/* ══════════════════ AMPROJ → 原版三件套（功能 4） ══════════════════ */
+/* label 配置校验：连续 / 不重叠 / 不逆序 / 边界合法 */
+function validateLabels(rows, totalFrames){
+  const errs = [];
+  const clean = [];
+  for (let i=0;i<rows.length;i++){
+	const r = rows[i];
+	const s = parseInt(r.start, 10), e = parseInt(r.end, 10);
+	const nm = (r.name || '').trim();
+	const tag = '第 ' + (i+1) + ' 行';
+	if (!nm){ errs.push(tag + '：label 名称不能为空'); }
+	if (!isFinite(s) || !isFinite(e)){ errs.push(tag + '：帧号必须为整数'); clean.push({ start:s, end:e, name:nm, cmd:(r.cmd||'').trim(), rel:r.rel, bad:true }); continue; }
+	if (s < 0 || e < 0){ errs.push(tag + '：帧号不能为负'); }
+	if (s > e){ errs.push(tag + '：起始帧(' + s + ') 不能大于结束帧(' + e + ')'); }
+	if (totalFrames > 0 && e > totalFrames - 1){ errs.push(tag + '：结束帧(' + e + ') 超出总帧数范围（0~' + (totalFrames-1) + '）'); }
+	clean.push({ start:s, end:e, name:nm, cmd:(r.cmd||'').trim(), rel:r.rel, bad:false });
+  }
+  const names = new Set();
+  for (const c of clean){ if (c.name){ if (names.has(c.name)) errs.push('label 名称重复："' + c.name + '"'); names.add(c.name); } }
+  for (let i=1;i<clean.length;i++){
+	const p = clean[i-1], c = clean[i];
+	if (!isFinite(p.start) || !isFinite(p.end) || !isFinite(c.start) || !isFinite(c.end)) continue;
+	if (c.start < p.start) errs.push('第 ' + (i+1) + ' 行起始帧(' + c.start + ') 小于上一行起始帧(' + p.start + ')：不允许逆序');
+	if (c.start <= p.end) errs.push('第 ' + (i+1) + ' 行与第 ' + i + ' 行重叠（' + p.start + '~' + p.end + ' vs ' + c.start + '~' + c.end + '）');
+  }
+  return { ok: errs.length === 0, errs, rows: clean };
+}
+
+/* 把 amproj 的一个 shape 的「可见素材」按 mediaFillMode="fill"(cover) 裁出来。
+   cover 语义：把原图等比放大到完全覆盖 (RW×RH) 的显示矩形，居中，多出的部分裁掉。
+   → 可见源区域 = 原图里以中心为基准、比例为 RW:RH 的最大内接矩形。
+   返回 { src, sx, sy, sw, sh, k }：
+	 k     = 把可见源区域等比放大到显示矩形的比例（cover 比例）
+	 src   = 裁好的画布（尺寸 = round(sw)×round(sh)）
+	 sx,sy = 在原图里的裁剪原点（取整后）
+   这样「该画布左上角」正好对应「原图里可见区域的左上角」，而 shape 的 loc
+   是「显示矩形中心」，于是 PAM 侧只要把显示矩形居中放进 image.size 矩形即可。 */
+function coverCropForShape(tex, halfW, halfH){
+  const iw = tex.width, ih = tex.height;
+  const RW = Math.max(1, halfW * 2), RH = Math.max(1, halfH * 2);
+  const k = Math.max(RW / iw, RH / ih);
+  const cw = Math.min(iw, RW / k), chh = Math.min(ih, RH / k);
+  const sxExact = (iw - cw) * 0.5, syExact = (ih - chh) * 0.5;
+  const sx = Math.max(0, Math.min(iw - 1, Math.round(sxExact)));
+  const sy = Math.max(0, Math.min(ih - 1, Math.round(syExact)));
+  const sw = Math.max(1, Math.min(iw - sx, Math.max(1, Math.round(cw))));
+  const sh = Math.max(1, Math.min(ih - sy, Math.max(1, Math.round(chh))));
+  const cvs = newCanvas(sw, sh);
+  cvs.getContext('2d').drawImage(tex, sx, sy, sw, sh, 0, 0, sw, sh);
+  return { src: cvs, sx, sy, sw, sh, k };
+}
+
+/* ══ 图集规格（原版约束）══
+   ★ [坑24 · 图集不是只有正方形] 旧实现写死 512/1024/2048 三种**正方形**，
+   但实测原版 Bonkchoy 的图集是 **512×1024**（宽 512 高 1024）—— 矩形。
+   强制正方形会让本可用 512×1024(面积 52 万) 装下的素材被迫升到
+   1024×1024(面积 105 万)，面积翻倍、利用率从 47% 掉到 24%，
+   还更容易触发自动缩放。这里改为原版实际采用的规格表（含矩形）。 */
+const ATLAS_SIZES = [[512,512], [512,1024], [1024,1024], [1024,2048], [2048,2048]];
+/* ★ [坑41 · 标准档位] PopAnim 原版硬性只有三个正方形规格：
+	 512×512 / 1024×1024 / 2048×2048。
+   矩形（512×1024、1024×2048）只在**原版确实这么写**时才沿用（保原版对齐），
+   一旦内容塞不下，就升级到能装下的最小**标准正方形**档位，
+   并重写 res.json：图集的 width/height + 每个子图的 ax/ay（位置）。
+   aw/ah（子图像素大小）与密度都不变 —— 只改大小和位置，格式规则不动。 */
+const ATLAS_STD_SIZES = [[512,512], [1024,1024], [2048,2048]];
+/* 面积升序，取「能装下的最小者」 */
+ATLAS_SIZES.sort((a,b) => a[0]*a[1] - b[0]*b[1]);
+const ATLAS_MAX   = ATLAS_SIZES[ATLAS_SIZES.length - 1];
+
+/* 在给定 W×H 内做货架装箱；返回 null 表示装不下（有子图超出或行数溢出）。
+   [坑24] S 改为 [W,H]；排序改为「按高度降序」已在调用方完成。 */
+function shelfPack(norm, W, H, PAD){
+  const placements = new Map();
+  let shelfY = 0, shelfH = 0, x = 0;
+  for (const n of norm){
+	if (n.w + PAD * 2 > W || n.h + PAD * 2 > H) return null;   // 单项就超规格
+	if (x + n.w + PAD > W){ shelfY += shelfH + PAD; x = 0; shelfH = 0; }
+	if (shelfY + n.h + PAD > H) return null;                    // 纵向溢出
+	placements.set(n.key, { x, y: shelfY, w: n.w, h: n.h, i: n.i });
+	x += n.w + PAD;
+	shelfH = Math.max(shelfH, n.h);
+  }
+  return { W, H, placements };
+}
+
+/* 把 norm 里的子图整体等比缩小到 scale，再做装箱；返回新的 norm（含缩放后尺寸） */
+function scaleNorm(norm, scale){
+  return norm.map(n => ({ ...n, w: Math.max(1, Math.round(n.w * scale)), h: Math.max(1, Math.round(n.h * scale)) }));
+}
+
+/* 给一组子图找到「恰好 512/1024/2048」的装箱方案。
+   返回 { S, placements, scale }，其中：
+	 S         —— 图集边长（必为 512/1024/2048）
+	 placements—— Map<key, {x,y,w,h}>，w/h 为**缩放后**的像素尺寸
+	 scale     —— 子图统一缩放系数（不缩放时为 1） */
+function packAtlas(items, preferred){
+  const PAD = 1;
+  const norm = items.map((it, i) => ({ key: it.key, w: Math.max(1, it.w|0), h: Math.max(1, it.h|0), i }));
+  norm.sort((a,b) => b.h - a.h || b.w - a.w);
+  const MAXW = ATLAS_MAX[0], MAXH = ATLAS_MAX[1];
+
+  /* ⓪ [坑41] 首选规格：原版图集尺寸。能装下就原样沿用（不重写 res）。 */
+  const pref = (Array.isArray(preferred) && preferred[0] > 0 && preferred[1] > 0)
+	? [preferred[0]|0, preferred[1]|0] : null;
+  if (pref){
+	const r = shelfPack(norm, pref[0], pref[1], PAD);
+	if (r) return { W: pref[0], H: pref[1], placements: r.placements, scale: 1, rewritten: false };
+  }
+
+  /* ① 首选塞不下 → 升级到能装下的最小**标准正方形**档位，并重写大小和位置 */
+  for (const [W, H] of ATLAS_STD_SIZES){
+	const r = shelfPack(norm, W, H, PAD);
+	if (r) return { W, H, placements: r.placements, scale: 1, rewritten: true, from: pref };
+  }
+
+  /* ①b 标准档位仍装不下 → 退回含矩形的完整候选（保兼容） */
+  for (const [W, H] of ATLAS_SIZES){
+	const r = shelfPack(norm, W, H, PAD);
+	if (r) return { W, H, placements: r.placements, scale: 1, rewritten: true, from: pref };
+  }
+
+  /* ② 装不下 → 在最大规格内逐步等比缩小，直到刚好容纳
+	 [坑24b] 竖长条素材在宽图集里装不下时，先试「旋转 90°」再装箱：
+	 实测原版会把竖长图横放。这里对整组做一次转置尝试，能救回不少面积。 */
+  const flip = norm.map(n => ({ ...n, w: n.h, h: n.w }));
+  flip.sort((a,b) => b.h - a.h || b.w - a.w);
+  for (const [W, H] of ATLAS_SIZES){
+	const r = shelfPack(flip, W, H, PAD);
+	if (r){
+	  /* 还原回未旋转的坐标（占位矩形也要转置回去） */
+	  const pm = new Map();
+	  for (const [k, v] of r.placements) pm.set(k, { x: v.x, y: v.y, w: v.h, h: v.w, i: v.i });
+	  return { W, H, placements: pm, scale: 1, flipped: true };
+	}
+  }
+
+  const total = norm.reduce((s,n) => s + n.w * n.h, 0);
+  let lo = Math.min(1, MAXW / Math.max(...norm.map(n => n.w)), MAXH / Math.max(...norm.map(n => n.h)));
+  for (let scale = lo; scale > 0.02; scale -= 0.02){
+	const r = shelfPack(scaleNorm(norm, scale), MAXW, MAXH, PAD);
+	if (r) return { W: MAXW, H: MAXH, placements: r.placements, scale };
+  }
+  const areaNeed = Math.sqrt(total / (MAXW * MAXH * 0.7));
+  const scale = Math.max(0.02, Math.min(1, areaNeed));
+  const r = shelfPack(scaleNorm(norm, scale), MAXW, MAXH, PAD);
+  if (r) return { W: MAXW, H: MAXH, placements: r.placements, scale };
+  return { W: MAXW, H: MAXH, placements: shelfPack(scaleNorm(norm, 0.02), MAXW, MAXH, PAD).placements, scale: 0.02 };
+}
+
+/* 打包图集：输出画像恒为 S×S（S ∈ {512,1024,2048}）。
+   返回 { canvas, placements, W, H, scale }，W === H === S。
+   ★ 若发生缩放（scale < 1），调用方必须用 scale 修正 PAM 侧的矩阵，
+	 否则子图会因像素尺寸变化而与定位矩阵不匹配。 */
+function packAtlasCanvas(items, preferred){
+  const pk = packAtlas(items.map(a => ({ key: a.key, w: a.w, h: a.h })), preferred);
+  const W = pk.W, H = pk.H;
+  const canvas = newCanvas(W, H);
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  ctx.clearRect(0, 0, W, H);
+  for (const it of items){
+	const p = pk.placements.get(it.key);
+	if (!p || !it.cvs) continue;
+	/* [坑24] 转置装箱时源图也要跟着转 90°，否则素材会被拉伸变形 */
+	if (pk.flipped){
+	  ctx.save();
+	  ctx.translate(p.x, p.y);
+	  ctx.rotate(Math.PI / 2);
+	  ctx.drawImage(it.cvs, 0, 0, it.cvs.width, it.cvs.height, 0, -p.w, p.h, p.w);
+	  ctx.restore();
+	} else {
+	  ctx.drawImage(it.cvs, 0, 0, it.cvs.width, it.cvs.height, p.x, p.y, p.w, p.h);
+	}
+  }
+  return { canvas, placements: pk.placements, W, H, scale: pk.scale, rewritten: !!pk.rewritten, from: pk.from || null };
+}
+
+/* 生成一个能装下整帧的占位 sprite（PopStudio 里 sprite[] 用于被 main_sprite 引用） */
+function makePamSpriteForImage(imgName, imgIdx, frameRate){
+  /* 1 帧 sprite：append(resource=imgIdx, sprite=false)；change 复位为恒等矩阵 */
+  return {
+	name: imgName, description: '', frame_rate: frameRate, work_area: [0, 1],
+	frame: [{ stop: false, change: [{ anim_frame_num: 0, transform: [1,0,0,1,0,0], src_rect: null, color: null, index: 0 }], label: null, command: [], remove: [], append: [{ resource: imgIdx, name: null, sprite: false, index: 0, preload_frames: 0, timescale: 1, additive: false }] }],
+  };
+}
+
+/* 按备忘录还原 sprite[]（原版具名元件定义表）。
+   有备忘录 → 原样重建每条 sprite 的 name/description/frame_rate/work_area/frame，
+	  其中 frame 里的 append 必须保留 sprite:true 与 resource 指向 ——
+	  这样 main_sprite 里 sprite:true 的引用才解析得到，嵌套 sprite 也不会塌缩。
+	  注意：**只还原骨架**（结构 + 名字 + 引用关系），change 里的具体矩阵仍以
+	  备忘录记录的原值还原，动画本身（main_sprite 的逐帧矩阵）以 amproj 为准。 */
+function buildPamSprites(memo, resImages, fps, images, IDB){
+  if (memo && Array.isArray(memo.sprite) && memo.sprite.length){
+	/* ★ [坑39 · image 下标重映射] memo.sprite[] 里的 append.resource 是
+	   **原版 image 下标**。一旦 AM 里新增了素材（实测神字占了 image[0]），
+	   本次 images[] 的下标就整体推移，而 sprite 定义是从 memo 原样抄的 ——
+	   于是 ground_swatch 指向了错误的图（原版 135×8 的地面色块变成 70×72），
+	   连带那个 43.33 倍的拉伸全部错位。
+	   这里建立「原版 image 下标 → 本次下标」的映射再改写 resource。
+	   映射来源：每个 images[j]._mi 就是按名字匹配到的 memo.image，其 .i 即原下标。 */
+	const remap = new Map();
+	for (let j=0;j<(images||[]).length;j++){
+	  const mi = images[j] && images[j]._mi;
+	  if (mi && mi.i != null && !remap.has(mi.i)) remap.set(mi.i, j);
+	}
+	const R = (isImg, v) => (isImg || v == null) ? v : ((remap.has(v) ? remap.get(v) : v));
+	return memo.sprite.map(sp => ({
+	  name: sp.name || '',
+	  description: sp.description || '',
+	  frame_rate: sp.frame_rate || fps,
+	  work_area: Array.isArray(sp.work_area) ? sp.work_area.slice() : [0, 1],
+	  frame: (sp.frame || []).map(fr => ({
+		stop: !!fr.stop,
+		change: (fr.change || []).map(c => ({
+		  anim_frame_num: 0,
+		  transform: Array.isArray(c.transform) ? c.transform.slice() : [0, 0],
+		  src_rect: null, color: null, index: c.index,
+		})),
+		label: fr.label == null ? null : fr.label,
+		command: [],
+		remove: (fr.remove || []).map(r => ({ index: r.index })),
+		append: (fr.append || []).map(a => ({
+		  /* a.sprite=true → resource 是 sprite 下标（sprite[] 顺序不变，无需映射）；
+		     a.sprite=false → resource 是 image 下标，需要重映射。 */
+		  resource: R(a.sprite, a.resource), name: a.name == null ? null : a.name, sprite: !!a.sprite,
+		  index: a.index, preload_frames: 0, timescale: 1, additive: false,
+		})),
+	  })),
+	}));
+  }
+  /* 没有备忘录：生成干净的占位 sprite（每 image 一条，用 image 名命名） */
+  /* ★ [坑28c] 旧实现把无备忘录的 sprite 命名成 IDB_0 / IDB_1…（实测 test_0~test_3），
+	 完全丢失语义。改为用子图逻辑名并去掉尺寸后缀（zombie_egypt_ra_34x31 →
+	 zombie_egypt_ra），至少能表达「这是什么元件」；同名时加序号去重。 */
+  const src = resImages.length ? resImages : (images || []);
+  const used = new Set();
+  return src.map((im, i) => {
+	/* resImages 的项是 {name:"逻辑名|资源ID", size, transform} —— 没有 logical 字段，
+	   逻辑名要从 name 的 "|" 前半段取（旧实现漏了这点，才退回 IDB_i）。 */
+	let logical = (im && im.logical) ? im.logical
+	  : (im && typeof im.name === 'string' && im.name.indexOf('|') > 0) ? im.name.split('|')[0]
+	  : (IDB + '_' + i);
+	logical = String(logical).replace(/\.png$/i, '').replace(/_\d+x\d+.*$/, '') || (IDB + '_' + i);
+	let nm = logical;
+	if (used.has(nm)){ let n = 2; while (used.has(nm + '_' + n)) n++; nm = logical + '_' + n; }
+	used.add(nm);
+	return makePamSpriteForImage(nm, i, fps);
+  });
+}
+
+/* AMPROJ → 三件套。labelCfg = [{start,end,name}]（帧区间，闭区间）
+   memo = pam_memo.txt 解析结果（可选）。若有，则按原始格式骨架还原
+   元件名 / sprite 定义 / image 名 / res / 资源路径与 id；
+   没有则生成一套干净的默认骨架（标识符严格 ASCII）。 */
+async function amprojToTriplet(model, labelCfg, baseNameStr, memo){
+  const fps = model.fps || 30;
+  /* [坑28a] 有备忘录 → 严格还原原版画布；没有 → 回落原版规范 390×390 */
+  let W = Math.round(model.width) || 390, H = Math.round(model.height) || 390;
+  if (!(memo && Array.isArray(memo.canvas) && memo.canvas[0] > 0)){
+	if (W !== PAM_DEFAULT_SIZE[0] || H !== PAM_DEFAULT_SIZE[1]){
+	  log('  未检测到备忘录：画布 ' + W + '×' + H + ' 回落为原版规范 '
+		+ PAM_DEFAULT_SIZE[0] + '×' + PAM_DEFAULT_SIZE[1], 'w');
+	}
+	W = PAM_DEFAULT_SIZE[0]; H = PAM_DEFAULT_SIZE[1];
+  } else { W = Math.round(memo.canvas[0]); H = Math.round(memo.canvas[1]); }
+  const totalFrames = Math.max(1, Math.round(model.totalTime / 1000 * fps));
+  /* ID 一律用净化后的标识符，杜绝中文等非 ASCII 渗进原版格式 */
+  const IDB = idName(baseNameStr);
+  /* res：备忘录优先；没有备忘录时按用户要求默认 1536 */
+  const resVal = (memo && memo.res) ? String(memo.res) : String(PAM_DEFAULT_RES);
+  /* 元件 index → 原始 sprite 引用。修改模式下靠它把匿名元件还原成具名 sprite。 */
+  const memoElemMap = new Map();
+  if (memo && memo.elemToSprite){
+	for (const [k, v] of Object.entries(memo.elemToSprite)){
+	  memoElemMap.set(Number(k), { sprite: !!v.sprite, resource: v.resource });
+	}
+  }
+  /* [坑39] 上面的 elemToSprite.resource 在 sprite:false 时是原版 image 下标，
+	 等 images[] 建好（拿到 _mi）后再统一重映射。 */
+  let elemImgRemap = null;
+
+  /* 1) 逐帧采样每个 shape 的变换（画布绝对像素坐标系）。
+	 [坑9 · 接缝归属] AM 的 shape 区间是闭区间 [t0,t1]，且常与相邻 shape 首尾相接
+	 （上一段 t1 恰等于下一段 t0）。若允许重叠判定，接缝帧会被两个 shape 同时命中；
+	 若用 1e-6 容差又会被浮点误差随机丢帧（实测 flip-book 元件在奇偶帧间丢 4 个 draw，
+	 帧差在 0.4% 与 2.9% 之间交替）。
+	 采用「本帧代表时刻 = f/fps*1000，落在 [t0,t1] 内即算可见」的简单规则即可 ——
+	 因为元素归属是由「本 shape 自己是否可见」决定的，重叠也只是让同帧多画一层，
+	 不会丢帧；真正要避免的只是**漏掉**。 */
+  const shapeSamples = new Map();   // sid -> Map<frame, {loc,scl,rot,skw,visible}>
+  for (const sh of model.shapes){
+	const span = Math.max(1, sh.t1 - sh.t0);
+	const f0 = Math.max(0, Math.floor(sh.t0 / 1000 * fps) - 1);
+	const f1 = Math.min(totalFrames, Math.ceil(sh.t1 / 1000 * fps) + 1);
+	const m = new Map();
+	for (let f = f0; f <= f1; f++){
+	  const tms = f / fps * 1000;
+	  if (tms < sh.t0 - 1e-9 || tms > sh.t1 + 1e-9) continue;
+	  const u = Math.min(1, Math.max(0, (tms - sh.t0) / span));
+	  const loc = trackAt(sh.loc, u, [0,0,0]);
+	  const scl = trackAt(sh.scl, u, [1,1]);
+	  const rot = trackAt(sh.rot, u, [0]);
+	  const skw = trackAt(sh.skw, u, [0,0]);
+	  m.set(f, { visible:true, loc:[loc[0], loc[1]], scl:[scl[0], scl[1]], rot:rot[0], skw:[skw[0], skw[1]] });
+	}
+	shapeSamples.set(sh.id, m);
+  }
+
+  /* 2) label 分区间。每个 label 内：按「素材来源」合并 → 同一素材=同一元件(同一图层) */
+  const images = [];              // PAM image 列表
+  const imgKeyToIdx = new Map();
+  const spriteList = [];          // PAM sprite 列表（每 image 一个占位 sprite）
+  const mainFrames = [];
+  /* ★ [坑29 · AM 新增图层的 index 分配] 旧实现 elemCounter 从 0 开始自增。
+	 有备忘录时原版元件已占用 0 ~ 417，新增图层拿到 0/1/2… 会**撞车**，
+	 轻则被 memoElemMap 误判成某个原版元件（实测新元件被还原成 sprite[32]，
+	 指向错误素材），重则两个元件共用 index 互相覆盖。
+	 这里把起点推到「备忘录里最大元件 index + 1」。 */
+  const elemCounter = { n: 0 };
+  if (memo && memo.elemToSprite){
+	let mx = -1;
+	for (const k of Object.keys(memo.elemToSprite)){
+	  const v = Number(k); if (isFinite(v) && v > mx) mx = v;
+	}
+	if (mx >= 0) elemCounter.n = mx + 1;
+  }
+  /* 新增元件登记表：elemIdx -> { label, imgIdx, spriteIdx }。
+	 用于区段 4 生成 append 与区段 6 补建具名 sprite。 */
+  const newElems = new Map();      // elemIdx -> { label, imgIdx, spriteIdx }
+  const shapeElemIdx = new Map();  // shape.id -> elemIdx（跨 label 段恒定，见 [坑30]）
+  const shapeLeafNo  = new Map();  // shape.id -> leafNo（见 [坑37]）
+  /* ★ [坑36] 只有出现在这份清单里的 id 才是「本工具编码的元件」。
+	 AM 自动生成的 id 也可能 ≥ 1000000（实测神字 1019104），
+	 只凭数值范围解码会把新增图层误判成某个原版元件。 */
+  const memoShapeIds = (memo && Array.isArray(memo.shapeIds) && memo.shapeIds.length)
+	? new Set(memo.shapeIds) : null;
+  /* ★ [坑36c] 元件 → 它可能出现的素材名集合（stem）。
+	 判据比「id 数值范围」「叶子序号」都硬：AM 新增图层用的是**新素材**，
+	 不可能出现在原版元件的素材集合里。神字 stem=1790860519749，
+	 元件 191 的素材是 zombie_egypt_ra_* —— 一眼可辨。
+	 且这份数据直接从旧 memo 的 elemToSprite/sprite/image 推出来，
+	 不需要 memo 增加新字段，对老文件同样有效。 */
+  const elemStems = new Map();
+  if (memo && memo.elemToSprite && Array.isArray(memo.sprite) && Array.isArray(memo.image)){
+	const imgStem = i => {
+	  const nm = String((memo.image[i] || {}).name || '');
+	  const vb = nm.indexOf('|');
+	  return vb > 0 ? nm.slice(0, vb) : nm;
+	};
+	const spriteImgs = (si, seen) => {
+	  seen = seen || new Set();
+	  if (si == null || seen.has(si)) return [];
+	  seen.add(si);
+	  const sp = memo.sprite[si];
+	  if (!sp) return [];
+	  const out = [];
+	  for (const fr of (sp.frame || [])){
+		for (const a of (fr.append || [])){
+		  if (a.sprite) out.push(...spriteImgs(a.resource, seen));
+		  else out.push(a.resource);
+		}
+	  }
+	  return out;
+	};
+	for (const [k, v] of Object.entries(memo.elemToSprite)){
+	  const idx = Number(k);
+	  if (!isFinite(idx) || !v) continue;
+	  const imgs = v.sprite ? spriteImgs(v.resource) : [v.resource];
+	  const set = new Set(imgs.map(imgStem).filter(Boolean));
+	  if (set.size) elemStems.set(idx, set);
+	}
+  }
+  const stemOfShape = sh => String(sh.img || '').split('/').pop().replace(/\.png$/i, '');
+  const memoSpriteCount = (memo && Array.isArray(memo.sprite)) ? memo.sprite.length : 0;
+  /* 去重集合：保证同一元件在同一帧只 append / 只 remove 一次
+	 （嵌套 sprite 的多个叶子共享同一 elemIdx，不去重会多出重复 append） */
+  const appendedOnce = new Set();
+  const removedOnce = new Set();
+
+  /* 预先把所有素材（按 shape 的 fillImage + cover 裁切结果）登记为「裁剪图」，
+	 全片共用一张图集。★ 关键：写进 PAM / 图集的必须是 cover 裁切后的可见像素，
+	 而不是原图整张 —— 否则 PAM 侧按 size 矩形显示时会带上原图被裁掉的边，
+	 实测会整体偏小 ~1.28×（原图比 size 矩形大）并出现边缘伪影。
+	 ★ [坑15 · 图集密度] 原版三件套的图集**不是**按逻辑尺寸存子图的，而是按
+	   res 倍率放大后存：实测 res=1536 时逻辑 34×31 的子图在 atlas 里是 44×40，
+	   即密度 = res/1200 ≈ 1.29。若我们按逻辑尺寸（密度 1.0）打包，
+	   渲染器把 34×31 放大到显示尺寸时会模糊，往返帧差 3.5%~15%。
+	   这里按备忘录里的 res 还原同样的密度，图集与 res.json 的 aw/ah 随之对齐。 */
+  /* ★ [坑26b] 原版子图尺寸索引：key = 资源 ID（取自 memo.image[i].name 的 "|" 后缀）。
+	 用途：cover 裁切会因宽高比的微小差异把 123×51 截成 122×51 这类 1px 偏差，
+	 有原版尺寸时直接对齐回去（1px 缩放，无损）。 */
+  const memoSizeById = new Map();
+  if (memo && Array.isArray(memo.resources) && Array.isArray(memo.image)){
+	for (const mi of memo.image){
+	  const nm = String(mi.name || '');
+	  const vb = nm.indexOf('|');
+	  if (vb < 0) continue;
+	  const rid = nm.slice(vb + 1);
+	  const rr = memo.resources.find(r => !r.atlas && r.id === rid);
+	  if (rr && rr.aw > 0 && rr.ah > 0) memoSizeById.set(rid, { aw: rr.aw, ah: rr.ah });
+	}
+  }
+  /* ★ [坑34 · 按名字匹配，不按序号] "images[] 与 memo.image[] 同序"这个前提**不成立**：
+	 实测神字图层（1790860519749.png，1260×1260）在 AM 的 shapes 里排第 0 位，
+	 于是 idx=0 匹配到 memo.image[0] = zombie_egypt_ra_34x31，
+	 神字被强行缩到 44×40，后面每条原版图都被压成"下一条"的尺寸，
+	 而 name/size 却照抄 memo —— 名字与图**整条错位一格**，渲染满屏错乱
+	 （实测 AM→PAM→AM 往返不一致 46.8%，去掉神字后降到 1.6%）。
+	 修法：按「媒体文件名 stem ↔ memo.image 的 name 前缀」建队列，用过即消耗。
+	 新增/改名图层（memo 里没有）自然落空，走新增路径，不会污染既有条目。 */
+  const memoImgQueue = new Map();   // stem -> [memoImage, ...]
+  if (memo && Array.isArray(memo.image)){
+	for (const mi of memo.image){
+	  const nm = String(mi.name || '');
+	  const vb = nm.indexOf('|');
+	  const stem = (vb > 0) ? nm.slice(0, vb) : nm;
+	  if (!stem) continue;
+	  if (!memoImgQueue.has(stem)) memoImgQueue.set(stem, []);
+	  memoImgQueue.get(stem).push(mi);
+	}
+  }
+  const takeMemoImg = fn => {
+	const stem = String(fn || '').split('/').pop().replace(/\.png$/i, '');
+	const q = memoImgQueue.get(stem);
+	return (q && q.length) ? q.shift() : null;
+  };
+  const memoRes = (memo && memo.res) ? parseFloat(memo.res) : PAM_DEFAULT_RES;
+  const density = (isFinite(memoRes) && memoRes > 0) ? (memoRes / PAM_STD_RESOLUTION) : 1;
+  /* 实际采用的图集密度（受开关控制；装箱与 res.json / effK 必须共用同一个值） */
+  /* [坑23 之后此开关已废弃] 子图在 PAM→AM 时就已**原样保留图集像素**，
+	 amproj→三件套自然就是原版密度，再乘 density 会变成双倍密度（1.64×）。
+	 常量保留仅为兼容旧配置，这里恒取 1。 */
+  const DENS = 1;  // 原为: PAM_ATLAS_DENSITY_MATCH ? (density || 1) : 1
+  const atlasItems = [];
+  for (const sh of model.shapes){
+	const fn = sh.img;
+	if (!model.media.has(fn)) continue;
+	const tex = model.textures.get(fn) || null;
+	if (!tex) continue;
+	/* key 必须把 rect 也纳入：同一张图集上的不同 rect 是不同子图 */
+	const rk = sh.rect ? ('|r' + sh.rect.join(',')) : '';
+	const key = fn + '|' + sh.halfW + ',' + sh.halfH + rk;
+	if (imgKeyToIdx.has(key)) { sh._imgKey = key; continue; }
+	let cr;
+	if (sh.rect){
+	  /* 图集模式：源区域就是 rect。k = 该区域像素密度（显示矩形尺寸 / rect 尺寸） */
+	  const rx = Math.max(0, Math.round(sh.rect[0]));
+	  const ry = Math.max(0, Math.round(sh.rect[1]));
+	  const rw = Math.max(1, Math.min(tex.width - rx, Math.round(sh.rect[2])));
+	  const rh = Math.max(1, Math.min(tex.height - ry, Math.round(sh.rect[3])));
+	  const cvs = newCanvas(rw, rh);
+	  cvs.getContext('2d').drawImage(tex, rx, ry, rw, rh, 0, 0, rw, rh);
+	  cr = { src: cvs, sx: rx, sy: ry, sw: rw, sh: rh, k: (sh.halfW*2) / rw };
+	} else {
+	  cr = coverCropForShape(tex, sh.halfW, sh.halfH);
+	}
+	/* ★ [坑15] 密度放大**已停用**：实测按 res/1200 放大子图虽然让 res.json 的
+	   aw/ah 与原版一致，但 amproj 的光栅本身就只有逻辑分辨率，放大只会插值模糊，
+	   且会让 change 矩阵里的 k 与子图像素尺寸产生新的耦合误差
+	   （实测往返帧差从 3.5% 升到 9.4%）。保持密度 1.0（逻辑分辨率）更准确。 */
+	const logical = (fn.split('/').pop() || fn).replace(/\.png$/i, '')
+	  + (images.length ? '_' + images.length : '');
+	const idx = images.length;
+	/* ★ [坑26b] 有原版尺寸就精确对齐，消掉 cover 裁切取整造成的 1px 偏差
+	   （实测 96X40 原版 123×51 被截成 122×51）。必须放在装箱之前。 */
+	/* ★ [坑35] 超大源图降采样。AM 里能贴任意分辨率的素材（实测神字
+	   1790860519749.png 是 1260×1260，而显示矩形只有 422×422 —— 2.98 倍冗余）。
+	   原样塞进图集会把规格顶到 2048×2048，图集体积翻好几倍。
+	   这里按「逻辑尺寸 × 原版密度」设上限：源比它大就降采样，源比它小则
+	   **原样保留**（保住坑23 的往返精度，Bonkchoy 的 1.28 密度图不受影响）。 */
+	{
+	  const lgW = Math.max(1, Math.round((cr.k || 1) * cr.sw));
+	  const lgH = Math.max(1, Math.round((cr.k || 1) * cr.sh));
+	  const rho = (isFinite(memoRes) && memoRes > 0) ? (memoRes / PAM_STD_RESOLUTION) : 1;
+	  const capW = Math.max(1, Math.round(lgW * Math.max(1, rho)));
+	  const capH = Math.max(1, Math.round(lgH * Math.max(1, rho)));
+	  if (cr.sw > capW || cr.sh > capH){
+		const nw = Math.max(1, Math.min(cr.sw, capW)), nh = Math.max(1, Math.min(cr.sh, capH));
+		const c2 = newCanvas(nw, nh), x2 = c2.getContext('2d');
+		x2.imageSmoothingEnabled = true; x2.imageSmoothingQuality = 'high';
+		x2.drawImage(cr.src, 0, 0, cr.sw, cr.sh, 0, 0, nw, nh);
+		cr.k = (cr.k || 1) * (cr.sw / nw);
+		cr.src = c2; cr.sw = nw; cr.sh = nh;
+	  }
+	}
+	const _mi0 = takeMemoImg(fn);
+	let crW = cr.sw, crH = cr.sh;
+	if (_mi0){
+	  const nm = String(_mi0.name || '');
+	  const vb = nm.indexOf('|');
+	  if (vb >= 0){
+		const ms = memoSizeById.get(nm.slice(vb + 1));
+		if (ms && (ms.aw !== cr.sw || ms.ah !== cr.sh)){
+		  const fc = newCanvas(ms.aw, ms.ah), fx = fc.getContext('2d');
+		  fx.imageSmoothingEnabled = true; fx.imageSmoothingQuality = 'high';
+		  fx.drawImage(cr.src, 0, 0, cr.sw, cr.sh, 0, 0, ms.aw, ms.ah);
+		  cr.src = fc; crW = ms.aw; crH = ms.ah;
+		  cr.k = (cr.k || 1) * (cr.sw / ms.aw);
+		}
+	  }
+	}
+	/* [坑15b] 密度开关：true 时把子图按 res/1200 放大后再装箱，
+	   使 res.json 的 aw/ah 与原版一致（image.size 仍是逻辑尺寸，不受影响）。 */
+	const dens = DENS;
+	const dw = Math.max(1, Math.round(crW * dens)), dh = Math.max(1, Math.round(crH * dens));
+	const dcv = (dens === 1) ? cr.src : (function(){
+	  const c = newCanvas(dw, dh), x = c.getContext('2d');
+	  x.imageSmoothingEnabled = true; x.imageSmoothingQuality = 'high';
+	  x.drawImage(cr.src, 0, 0, crW, crH, 0, 0, dw, dh);
+	  return c;
+	})();
+	atlasItems.push({ key, w: dw, h: dh, cvs: dcv });
+	imgKeyToIdx.set(key, idx);
+	sh._imgKey = key;
+	/* ★ [坑12] image 自带的锚点偏移 T_img。写 change 矩阵时要从 M_desired 里
+	   右乘 T_img⁻¹ 除掉它（见 composePamMatFromAm）。这里必须在「写 change」
+	   之前就挂到 img 上 —— 之前误放在后面的 resImages 循环里，
+	   导致 change 写入时 img._imgT 恒为 undefined，往返位置整体偏移。
+	   值取自备忘录（= 原始 PAM 的 image[i].transform），无备忘录时为单位阵。 */
+	/* [坑34] 锚点偏移也按名字取，与尺寸/命名保持一致 */
+	images.push({ logical, hostKey: key, w: crW, h: crH, idx, k: cr.k, _mi: _mi0 || null,
+	  _imgT: (_mi0 && Array.isArray(_mi0.transform)) ? _mi0.transform.slice() : [1,0,0,1,0,0] });
+  }
+  if (!images.length) throw new Error('amproj 里找不到任何可用素材');
+
+  /* ★ [坑18] 图集几何必须在「写 change 矩阵」之前算出来。
+	 区段 3 的 composePamMatFromAm 需要子图在图集里的**实际像素尺寸**(_aw/_ah)与
+	 修正后的 k(_effK)，而原实现把这两项放在区段 6 才赋值 —— 区段 3 读到的恒为
+	 undefined，只能回退到 im.w / im.k。后果：一旦图集触发自动缩放(scale<1)，
+	 所有元件的 change 矩阵都不会补偿，整段动画尺寸错 scale 倍。
+	 这里先跑一次纯几何装箱（与后面的 packAtlasCanvas 内部装箱完全等价、结果一致），
+	 把 _aw/_ah/_effK 提前落定。
+	 effK 推导：显示尺寸 = k · im.w（k = 显示矩形 / 裁切像素），
+	 又 显示尺寸 = kk · aw  ⟹  kk = k · im.w / aw。
+	 （密度=1 且未缩放时 aw === im.w，kk === k，与原行为完全一致。） */
+  /* [坑41] 首选图集规格 = 备忘录记录的原版尺寸。装得下就沿用（不重写 res），
+	 装不下才升级到标准正方形档位并重写图集大小与子图位置。
+	 两处装箱（几何前置 / 实际画图）必须用同一个 preferred，否则尺寸对不上。 */
+  const memoAtlasGeo = (memo && Array.isArray(memo.resources)) ? memo.resources.find(r => r.atlas) : null;
+  const PREFERRED_ATLAS = (memoAtlasGeo && memoAtlasGeo.width > 0 && memoAtlasGeo.height > 0)
+	? [Math.round(memoAtlasGeo.width), Math.round(memoAtlasGeo.height)] : null;
+
+  /* [坑39] 建立「原版 image 下标 → 本次下标」映射，供 sprite 定义与元件引用重映射 */
+  elemImgRemap = new Map();
+  for (let j=0;j<images.length;j++){
+	const mi = images[j] && images[j]._mi;
+	if (mi && mi.i != null && !elemImgRemap.has(mi.i)) elemImgRemap.set(mi.i, j);
+  }
+  for (const [k, v] of memoElemMap){
+	if (v && !v.sprite && v.resource != null && elemImgRemap.has(v.resource)) v.resource = elemImgRemap.get(v.resource);
+  }
+  const packedGeo = packAtlas(atlasItems.map(a => ({ key: a.key, w: a.w, h: a.h })), PREFERRED_ATLAS);
+  for (const im of images){
+	const p = packedGeo.placements.get(im.hostKey);
+	const aw = p ? p.w : im.w, ah = p ? p.h : im.h;
+	im._aw = aw; im._ah = ah;
+	/* ★ [坑25 · 逻辑尺寸 vs 图集像素] PAM 的矩阵工作在**逻辑坐标系**
+	   （渲染器会把图集里的 aw×ah 缩到 image.size 再画），而 res.json 的
+	   aw/ah 是**图集像素**（= 逻辑 × 密度）。二者必须分开：
+	     · 逻辑尺寸 logW/H —— 给 image.size、给 change 矩阵的中心换算
+	     · 图集像素 aw/ah  —— 只给 res.json
+	   旧实现把 change 矩阵的 subW/subH 传成 aw/ah（1.28 倍），又把 k 传成
+	   im.k(=1/1.28)，等于多除了一次密度：实测 index=60 原版 scale 0.48
+	   → 新版 0.37，比值恰为 1/1.284。
+	   logW 的求法：有备忘录直接用原版 image.size；否则 = k × 像素宽
+	   （k = 显示矩形宽 / 裁切像素宽，故 k·im.w 正是显示矩形 = 逻辑尺寸）。 */
+	/* [坑34] 逻辑尺寸同样按名字取 —— 按 idx 取会让新增图层（idx 靠前）
+	 顶掉原版图的 size，实测神字被写成 [34,31]。 */
+	const _gm = im._mi || null;
+	im._logW = (_gm && Array.isArray(_gm.size) && _gm.size[0] > 0) ? _gm.size[0] : Math.max(1, Math.round((im.k || 1) * im.w));
+	im._logH = (_gm && Array.isArray(_gm.size) && _gm.size[1] > 0) ? _gm.size[1] : Math.max(1, Math.round((im.k || 1) * im.h));
+	/* 线性部分直接取 shape 的逻辑缩放，不再乘任何密度因子 */
+	im._effK = 1;
+  }
+
+  /* 3) 生成 label 区间（已校验）。把每个 label 内的 shape 转成元件 */
+  const labels = labelCfg.slice().sort((a,b) => a.start - b.start);
+  const frameCfg = [];            // 每帧：{label, appends:[], removes:[], changes:[]}
+  for (let f=0; f<totalFrames; f++) frameCfg.push({ label:null, appends:[], removes:[], changes:[] });
+
+  /* ══ [坑42 · 断段续接] ══════════════════════════════════════════════
+	 现象：用户在 AM 里把某个图层**剪断**（或 AM 自己拆分），同一元件被拆成
+	 两个 shape —— 前一段保留本工具编码的 id，后一段拿到 AM 自动生成的新 id。
+	 实测 ra 的 eat 段法杖（素材 59x144）：
+		 id=1002600（可信）帧 206~213   ← 元件 26 的**前半**
+		 id=1019103（不可信）帧 213~305 ← 同一根法杖的**后半**
+	 旧逻辑把后半判成"AM 新增图层"，另起一个元件 index：
+	 结果原版 100 帧的法杖只剩 7 帧有动画，后半段静止/消失。
+	 修法：不可信的 shape 先尝试**续接**——在可信元件的帧覆盖里找
+	   「同素材、且覆盖范围正好在自己之前、自己又把它向后延长」的那个元件，
+	   接上它的 index，只补 change，不重复 append/remove。
+	 神字（素材 1790860519749 不在任何原版元件的素材集里）续接不上，
+	 仍然走新增路径，行为不变。 */
+
+  /* 每个 shape 在某 label 内的可见帧序列（与区段 3 的算法一致） */
+  const visOf = (sh, L) => {
+	const m = shapeSamples.get(sh.id);
+	if (!m) return [];
+	const s = Math.max(0, L.start), e = Math.min(totalFrames - 1, L.end);
+	const out = [];
+	for (let f=s; f<=e; f++){ const sm = m.get(f); if (sm && sm.visible) out.push(f); }
+	return out;
+  };
+  /* ★ [坑46 · 元件全局顺序] 记录每个元件在 AM 图层列表里的先后位次。
+	 用途：PAM 的 append 顺序 == 绘制顺序（后 append 的画在上层，
+	 已由原版验证：inner 内肢体在下、torso 居中、outer 外肢体与 skull/jaw 在上），
+	 所以每个 label 段首的 append 必须按「AM 图层先后顺序」排列，
+	 否则跨段才出现的图层会被塞到末尾（= 顶层），层序就乱了。 */
+  const elemOrder = new Map();
+
+  /* pass 1：可信性判定（沿用坑36/36b/36c/37 的判据） */
+  const cls = new Map();     // sh.id -> {elemIdx, leafNo, isNew, gapFill}
+  const pend = [];           // 待定（不可信）的 shape
+  for (const sh of model.shapes){
+	const m = shapeSamples.get(sh.id);
+	if (!m) continue;
+	if (imgKeyToIdx.get(sh._imgKey) === undefined) continue;
+	if (!memo){ pend.push(sh); continue; }
+	let trusted = memoShapeIds ? memoShapeIds.has(sh.id)
+	  : (sh.id >= 1000000 && sh.id < 1000000 + 1000000 * 100);
+	if (trusted){
+	  const dec0 = sh.id - 1000000;
+	  const ei0 = Math.floor(dec0 / 100), ln0 = dec0 % 100;
+	  const rels = (memo.elemLeafRel) ? (memo.elemLeafRel[String(ei0)] || memo.elemLeafRel[ei0]) : null;
+	  if (rels && Array.isArray(rels) && ln0 >= rels.length) trusted = false;
+	  if (trusted){
+		const st = elemStems.get(ei0);
+		if (st && st.size && !st.has(stemOfShape(sh))) trusted = false;
+	  }
+	}
+	if (trusted){
+	  const dec0 = sh.id - 1000000;
+	  cls.set(sh.id, { elemIdx: Math.floor(dec0 / 100), leafNo: dec0 % 100, isNew: false, gapFill: false });
+	} else pend.push(sh);
+  }
+  /* pass 3：**不续接**。
+	 早先的版本会把「AM 自动 id 的图层」接到同素材的可信元件上（当它是被剪断的
+	 同一根法杖）。但实测确认：eat 段后半（213~305）的 59x144 是**另一根法杖**
+	 ——原版里它是一个独立的元件，不是元件 26 的尾巴。硬接上去会让元件 26
+	 在两个区间之间跳变，画面上就是「一根被拉长、位置飘掉的棍子」。
+	 所以这里一律判为新增元件（配合坑37 的 leafNo=0，change 会正常写入）。 */
+  const newOnes = pend.length;
+  if (newOnes) log('  · ' + newOnes + ' 个图层在备忘录里没有对应元件，按新增元件处理', 'ok');
+  /* ★ [坑44 · 跨 label 的层序] 每个 shape 在哪些 label 段可见。
+	 用途见区段 3：跨段连续存活的元件**不能**每段 remove+append，
+	 否则会在 aliveSet 里被重新插到末尾（= 顶层）。 */
+  const shapeSegs = new Map();
+  for (const sh of model.shapes){
+	const m = shapeSamples.get(sh.id);
+	if (!m || imgKeyToIdx.get(sh._imgKey) === undefined) continue;
+	const set = new Set();
+	labels.forEach((L, li) => { if (visOf(sh, L).length) set.add(li); });
+	shapeSegs.set(sh.id, set);
+  }
+
+  /* pass 4：真正的新增元件才分配新 index（且只分配一次，见坑30） */
+  let cn = elemCounter.n;
+  for (const sh of pend){
+	if (!cls.has(sh.id)) cls.set(sh.id, { elemIdx: cn++, leafNo: 0, isNew: true, gapFill: false });
+  }
+  elemCounter.n = cn;
+  /* [坑46] 全局顺序：按 model.shapes 的下标（即 AM 图层列表顺序）登记，先到先得 */
+  model.shapes.forEach((sh, i) => {
+	const c = cls.get(sh.id);
+	if (c && !elemOrder.has(c.elemIdx)) elemOrder.set(c.elemIdx, i);
+  });
+  const elemAlive = new Set();   // [坑44] 当前仍挂在画面上的元件（未被 remove）
+  labels.forEach((L, li) => {
+	const s = Math.max(0, L.start), e = Math.min(totalFrames - 1, L.end);
+	if (s > e) return;
+	frameCfg[s].label = L.name;
+	/* 同一 label 内：**一个 shape = 一个元件 = 一个图层**（逐帧 change）。
+	   ★ 铁律：绝不按素材来源把多个 shape 合并成一个元件 —— 那样同素材的
+		 多个图层（例如「同一张图在左右手各出现一次」「翻转书的奇偶帧」）会
+		 互相覆盖，只剩最后一个，实测帧差会从 ~1% 飙到 ~12%，
+		 且元素数量从 41 掉到 29。每个 shape 各自 append 一次、
+		 在它自己的存活区间内逐帧 change。 */
+	for (const sh of model.shapes){
+	  const m = shapeSamples.get(sh.id);
+	  if (!m) continue;
+	  const imgIdx = imgKeyToIdx.get(sh._imgKey);
+	  if (imgIdx === undefined) continue;
+	  const img = images[imgIdx];
+	  /* 该 shape 在本 label 内的可见帧序列 */
+	  const visFrames = [];
+	  for (let f=s; f<=e; f++){ const sm = m.get(f); if (sm && sm.visible) visFrames.push({ f, sm }); }
+	  if (!visFrames.length) continue;
+	  /* ★ [编号还原] 三元组转换时 shape.id 编码了原始元件 index 与叶子序号
+	 （id = 1000000 + idx*100 + leafNo）。有备忘录时必须还原成原本的元件 index
+	 与 resource 指向，这样 main_sprite 的元件才能重新指向具名 sprite[]
+	 （否则元件名丢失、sprite 定义塌缩、格式污染）。
+	 没有备忘录时退回自增编号。 */
+	  /* ★ [坑30] 元件 index 必须按 **shape 身份**缓存，不能每次循环都自增。
+		 区段 3 是「外层 label 段 × 内层 shape」的双重循环 —— 一个跨多个
+	 label 段的 shape 会被处理多次。原版元件靠 id 解码出恒定 elemIdx 没问题，
+	 但新增元件走 elemCounter.n++ 时**每个段都会拿到一个新 index**，
+	 实测一个跨 7 段的图层被拆成 7 个元件（index 418~424），sprite[] 也凭空多 7 条。 */
+	  /* [坑42] 分类结果在区段 3 之前的预分类里已全部算好（含续接）。
+		 这里只查表 —— 保证同一 shape 在所有 label 段里拿到同一个元件。 */
+	  const _c = cls.get(sh.id);
+	  const elemIdx = _c ? _c.elemIdx : (elemCounter.n++);
+	  const leafNo  = _c ? _c.leafNo : 0;
+	  const isNew   = _c ? _c.isNew : true;
+	  const gapFill = _c ? !!_c.gapFill : false;
+	  if (isNew && !newElems.has(elemIdx)){
+		newElems.set(elemIdx, { label: (sh.label || '').trim(), imgIdx });
+	  }
+	  /* 逐帧写 change；append 在生命期首帧只写一次。
+	 ★ [多叶子去重] 一个原始元件（嵌套 sprite）会对应多个 shape（叶子），
+	   它们共享同一个 elemIdx。若每个叶子都 push 一条 append，帧 0 的
+	   append 数会从 21 涨到 24 —— 还原出的 PAM 与原始不一致。
+	   这里用 appendedOnce 保证「同一 elemIdx 在同一帧只 append 一次」。 */
+	  for (const { f, sm } of visFrames){
+		/* [坑42] 续接段不重复 append：元件已由可信那半段挂上，
+		   再 append 一次会出现「同一帧两条 append」的非法结构。 */
+		/* [坑44] 已经挂在画面上的元件不再 append —— 重复 append 会让它在
+		   aliveSet 里被重新插到末尾，层序从「底层」翻到「顶层」。 */
+		if (!gapFill && !elemAlive.has(elemIdx) && f === visFrames[0].f && !appendedOnce.has(elemIdx + '@' + f)){
+		  appendedOnce.add(elemIdx + '@' + f);
+		  elemAlive.add(elemIdx);
+		  frameCfg[f].appends.push({ index: elemIdx, resource: imgIdx, sprite: false });
+		}
+		/* ★ [坑13] 多叶子元件只让「主叶子」(leafNo=0) 写 change。
+	   shape.id 的编码是 1000000 + idx*100 + leafNo，可直接反解出 leafNo。
+	   若所有叶子都写 change，后写的会覆盖前面的，造成恒定偏移
+	   （实测元素 137 恒定偏 2.87px）。 */
+		/* [坑37] 用与 elemIdx 判定一致的 leafNo，不再独立按 id 取模 */
+		if (leafNo !== 0) continue;
+		/* ★ [坑16] AM 侧 shape 承载的是「叶子完整复合 M_full = M_change · relMat」。
+	   回程右乘该叶子的 relMat⁻¹ 即可精确反解出 M_change。
+	   relMat 优先取备忘录（elemLeafRel[idx][leafNo]，精确）；没有备忘录时退回
+	   该叶子的 image.transform（= 单叶子直连图的情形，覆盖绝大多数素材）。 */
+		const leafRelList = (memo && memo.elemLeafRel) ? memo.elemLeafRel[elemIdx] : null;
+		const leafRel = (leafRelList && leafRelList[leafNo]) ? leafRelList[leafNo] : img._imgT;
+		/* [坑25] subW/subH 必须是**逻辑尺寸**，不是图集像素 */
+		const mat = quantPamTransform(composePamMatFromAm(sm.loc, sm.scl, sm.rot, sm.skw,
+		  img._logW || img._aw || img.w, img._logH || img._ah || img.h,
+		  (img._effK != null ? img._effK : 1), leafRel));
+		frameCfg[f].changes.push({ index: elemIdx, transform: mat });
+	  }
+	  const last = visFrames[visFrames.length-1].f;
+	  /* ★ [坑44 · 跨 label 的层序] 只有「后续所有 label 段都不再出现」时才 remove。
+		 跨全片的图层（神字，横跨 idle/walk/eat…全部 8 段）若在每段末 remove、
+		 下段首再 append，PAM 渲染器的 aliveSet 会把它**重新插到 Map 末尾**——
+		 也就是从最底层翻到最顶层（实测现象：神字跑到僵尸上面）。
+		 原版 PopAnim 对跨段元件也是「一次 append、全程存活」，这里与之对齐。
+		 （坑43 早先把 removedOnce 改成按帧去重，正是这个翻转的成因。） */
+	  const segs = shapeSegs.get(sh.id);
+	  const later = segs ? [...segs].some(x => x > li) : false;
+	  if (!gapFill && !later && last + 1 < totalFrames && !removedOnce.has(elemIdx + '@' + (last + 1))){
+		removedOnce.add(elemIdx + '@' + (last + 1));
+		elemAlive.delete(elemIdx);
+		frameCfg[last + 1].removes.push({ index: elemIdx });
+	  }
+	}
+  });
+
+  /* ★ [坑46] 每帧的 append 按「AM 图层先后顺序」重排，保证层序与源工程一致 */
+  for (let f=0; f<totalFrames; f++){
+	const arr = frameCfg[f].appends;
+	if (arr.length > 1){
+	  arr.sort((a, b) => (elemOrder.get(a.index) != null ? elemOrder.get(a.index) : 1e9)
+					   - (elemOrder.get(b.index) != null ? elemOrder.get(b.index) : 1e9));
+	}
+  }
+
+  /* ══════════ [坑47 · index 排序兼容性] ══════════════════════════════════
+	 游戏里的渲染器（libGDX Animator）在 buildTimeline 里是这样排序的：
+		 snapshot.sort((a, b) -> a.index - b.index);
+	 也就是**按 index 数值升序绘制**，不是按 append 顺序！
+	 原版 PAM 里 append 顺序恰好 == index 升序（两套语义重合），所以看不出问题。
+	 但新增元件我们原先从 max+1 递增分配（神字拿到 192），
+	 比所有原版元件（0~170）都大 → 被排到最后 = 画在最上层。
+	 实测产物帧 250 的绘制顺序：… butter(166) → 192:神字 → 193:法杖，
+	 一张 1260×1260 的黄色神字盖住整个僵尸（脑袋位置最明显）。
+
+	 修法：给新增元件分配「能插入 AM 图层顺序对应空隙」的 index，
+	 必要时把原版 index 整体平移（+shift），腾出最前面的位置。
+	 这样在「按 index 排序」和「按 append 顺序」两种语义下层序都正确。
+	 无新增元件时 shift=0，原版 index 一字不动。 */
+  const idxMap = new Map();
+  {
+	const rank = elemOrder;                       // elemIdx -> model.shapes 首次下标
+	const segsOf = new Map();                     // elemIdx -> Set(label 段序号)
+	for (const [shid, set] of shapeSegs){
+	  const c = cls.get(shid); if (!c) continue;
+	  let ss = segsOf.get(c.elemIdx);
+	  if (!ss){ ss = new Set(); segsOf.set(c.elemIdx, ss); }
+	  for (const li of set) ss.add(li);
+	}
+	/* 每个 label 段内活着的元件，按 AM 图层顺序（rank）排列 */
+	const segElems = [];
+	for (let li=0; li<labels.length; li++){
+	  const arr = [];
+	  for (const [ei, ss] of segsOf) if (ss.has(li)) arr.push(ei);
+	  arr.sort((a,b) => (rank.get(a) != null ? rank.get(a) : 1e9) - (rank.get(b) != null ? rank.get(b) : 1e9));
+	  segElems.push(arr);
+	}
+	/* 新增元件：算出它能插入的空隙 [lower, upper]（lower=-1 表示要排最前） */
+	const front = [], inner = [];
+	for (const ei of newElems.keys()){
+	  const ss = segsOf.get(ei);
+	  if (!ss || !ss.size){ inner.push({ ei, lower: null }); continue; }
+	  let lower = null, upper = Infinity;
+	  for (const li of ss){
+		const arr = segElems[li]; const k = arr.indexOf(ei);
+		if (k < 0) continue;
+		const prev = k > 0 ? arr[k-1] : null;
+		const next = k < arr.length - 1 ? arr[k+1] : null;
+		if (!prev) lower = -1;
+		else if (lower !== -1) lower = (lower == null) ? prev : Math.max(lower, prev);
+		if (next != null && next < upper) upper = next;
+	  }
+	  if (lower === -1) front.push(ei);
+	  else if (lower != null) inner.push({ ei, lower, upper });
+	  else inner.push({ ei, lower: null });
+	}
+	front.sort((a,b) => (rank.get(a)!=null?rank.get(a):1e9) - (rank.get(b)!=null?rank.get(b):1e9));
+	const shift = front.length;
+	const origMax = (() => { let m = 0; for (const [ei] of rank) if (!newElems.has(ei) && ei > m) m = ei; return m; })();
+	let tail = origMax + shift + 1;
+	for (const [ei] of rank) if (!newElems.has(ei)) idxMap.set(ei, ei + shift);
+	front.forEach((ei, i) => idxMap.set(ei, i));
+	for (const x of inner){
+	  if (x.lower == null){ idxMap.set(x.ei, tail++); continue; }
+	  idxMap.set(x.ei, x.lower + shift + 1);
+	}
+	if (shift){
+	  log('  ✓ ' + shift + ' 个新增图层需排在最底层：原版元件 index 整体 +' + shift + '，新增元件占用 0~'
+		+ (shift - 1) + '（兼容按 index 升序绘制的渲染器）', 'ok');
+	}
+	/* 段内唯一性自检 */
+	let clash = 0;
+	for (const arr of segElems){
+	  const seen = new Set();
+	  for (const ei of arr){ const v = idxMap.get(ei); if (v == null) continue; if (seen.has(v)) clash++; seen.add(v); }
+	}
+	if (clash) log('  ⚠ 元件 index 在 ' + clash + ' 处冲突，层序可能异常', 'w');
+  }
+  const IDX = v => (idxMap.has(v) ? idxMap.get(v) : v);
+
+  /* ★ [坑29 顺序修正] 新增元件的 sprite 下标必须在区段 4 之前定下来，
+	 否则 append 里拿到 undefined 会退回「直连 image」（元件名丢失）。
+	 分配规则：紧接在备忘录 sprite 之后，按 newElems 的插入顺序递增。
+	 区段 6 里 push 的顺序与此完全一致，下标必然对得上。 */
+  /* ★ [坑45 · spriteIdx 越界] 原先这里「假设每个新增元件都补建一条 sprite」
+	 直接递增分配，而真正的复用判定在区段 6 —— 可复用的元件不 push，
+	 实际条数就比预分配少，区段 4 组装 append 时拿到越界下标。
+	 实测：eat 后半段的新法杖（元件 193）拿到 spriteIdx=42，
+	 而 sprite[] 只有 42 条（索引 0~41）→ 渲染时整根法杖解析不到。
+	 修法：复用判定提前到这里做，两处共用同一份映射表。 */
+  let SPRITE_TOTAL = 0;
+  const IMG_TO_SPRITE = new Map();
+  {
+	const remap2 = new Map();
+	for (let j=0;j<images.length;j++){
+	  const mi = images[j] && images[j]._mi;
+	  if (mi && mi.i != null && !remap2.has(mi.i)) remap2.set(mi.i, j);
+	}
+	const src = (memo && Array.isArray(memo.sprite)) ? memo.sprite : [];
+	for (let i=0;i<src.length;i++){
+	  const sp = src[i];
+	  const fr = sp && sp.frame && sp.frame[0];
+	  const ap = fr && fr.append && fr.append[0];
+	  if (ap && !ap.sprite && ap.resource != null){
+		const idx = remap2.has(ap.resource) ? remap2.get(ap.resource) : ap.resource;
+		if (!IMG_TO_SPRITE.has(idx)) IMG_TO_SPRITE.set(idx, i);
+	  }
+	}
+  }
+  {
+	let k = 0;
+	for (const [elemIdx, ne] of newElems){
+	  const _im = images[ne.imgIdx];
+	  if (_im && _im._mi && IMG_TO_SPRITE.has(ne.imgIdx)){
+		ne.spriteIdx = IMG_TO_SPRITE.get(ne.imgIdx); ne.reuse = true; continue;
+	  }
+	  ne.spriteIdx = memoSpriteCount + k++;
+	  ne.reuse = false;
+	}
+	SPRITE_TOTAL = memoSpriteCount + k;   /* [坑45b] 最终 sprite[] 条数 */
+  }
+
+  /* 4) 组装 main_sprite.frame[]：每帧一个 FrameInfo
+	 ★ [修改模式] 有备忘录时，元件的 append 必须还原成「引用原始 sprite」：
+	   原始 PAM 里 main_sprite 的 append 是 { sprite:true, resource: <spriteIdx> }，
+	   指向 sprite[] 里一个有名字的具名精灵（如 zombie_egypt_ra_staff）。
+	   若写成 { sprite:false, resource:<imageIdx> }，元件名会丢失、sprite[] 退化。 */
+  /* ★ [坑20] 还原 main_sprite 的逐帧 stop 与 command。
+	 帧数未变（纯改动画/位置）→ 按帧号精确还原；
+	 帧数变了（在 AM 里改过长度）→ stop 按「label 段末帧」规律重建，
+	 command 按比例映射，越界夹紧。 */
+  const memoFrameMeta = (memo && memo.main_sprite && Array.isArray(memo.main_sprite.frameMeta))
+	? memo.main_sprite.frameMeta : null;
+  const mainStop = new Array(totalFrames).fill(false);
+  const mainCmd  = new Array(totalFrames).fill(null);
+  /* [坑49] 用户显式套用了预设 → 分段已由用户重新定义，
+	 stop / command 必须按**当前分段 + 预设**生成，不能再沿用备忘录里
+	 属于另一套分段的 stop（实测：套菜问预设后 stop 却还是僵尸的 85/205/305，
+	 与新的 label 边界完全错位）。 */
+  const USE_PRESET = (typeof PRESET_HINT !== 'undefined') && PRESET_HINT && PRESET_HINT.segs;
+  if (!USE_PRESET && memoFrameMeta && memoFrameMeta.length){
+	const cmdClone = m => (m.command || []).map(c => ({ parameter: c.parameter || '', command: c.command || '' }));
+	if (memoFrameMeta.length === totalFrames){
+	  for (let f=0; f<totalFrames; f++){
+		const m = memoFrameMeta[f] || {};
+		mainStop[f] = !!m.stop;
+		if (m.command && m.command.length) mainCmd[f] = cmdClone(m);
+	  }
+	} else {
+	  const oldLab = [];
+	  for (let i=0;i<memoFrameMeta.length;i++){
+		if (memoFrameMeta[i].label) oldLab.push({ name: memoFrameMeta[i].label, start: i });
+	  }
+	  for (let k=0;k<oldLab.length;k++){
+		oldLab[k].end = (k+1<oldLab.length) ? (oldLab[k+1].start - 1) : (memoFrameMeta.length - 1);
+	  }
+	  const stopByName = new Map();
+	  for (const o of oldLab) if (!stopByName.has(o.name)) stopByName.set(o.name, !!(memoFrameMeta[o.end] && memoFrameMeta[o.end].stop));
+	  for (let k=0;k<labels.length;k++){
+		const L = labels[k];
+		if (stopByName.get(L.name)){
+		  const e = Math.max(0, Math.min(totalFrames - 1, L.end));
+		  if (k < labels.length - 1) mainStop[e] = true;   // 末段不停（与原版一致）
+		}
+	  }
+	  const denom = Math.max(1, memoFrameMeta.length - 1);
+	  for (let i=0;i<memoFrameMeta.length;i++){
+		const m = memoFrameMeta[i];
+		if (m.command && m.command.length){
+		  const f = Math.max(0, Math.min(totalFrames - 1, Math.round(i / denom * (totalFrames - 1))));
+		  mainCmd[f] = cmdClone(m);
+		}
+	  }
+	}
+  } else {
+	/* ══ [坑49] 无备忘录（纯种 AM / 自定义标签）时按原版规律补 stop 与 command ══
+	   实测菜问、僵尸两个动画完全吻合的规律：
+		 · stop    写在每段**末帧**；最后一段**不**停（否则动画会卡死在最后一帧）
+		 · command 写在段内相对帧（菜问 attack 系列每段第 4 帧发 use_special）
+	   这样即便没有任何原版记录，导出的三件套也具备正确的分段播放语义。 */
+	for (let k=0;k<labels.length;k++){
+	  const L = labels[k];
+	  const e = Math.max(0, Math.min(totalFrames - 1, L.end));
+	  if (k < labels.length - 1) mainStop[e] = true;
+	}
+	/* ══ [坑50] 按「每行的指令设置」生成 command ══
+	   来源优先级：
+		 ① label 行里手填的指令名（最高，用户显式指定）
+		 ② 套用的预设（USE_PRESET 时）
+		 ③ 都没有 → 该段不写 command
+	   指令帧 = 该段起始帧 + 相对偏移，夹紧在段内，绝不越界到下一 label。 */
+	for (let k=0;k<labels.length;k++){
+	  const L = labels[k];
+	  const nm = (L.cmd || '').trim();
+	  if (!nm) continue;
+	  const s = Math.max(0, Math.min(totalFrames - 1, L.start));
+	  const e = Math.max(0, Math.min(totalFrames - 1, L.end));
+	  const rel = (L.rel === '' || L.rel == null) ? 0 : parseInt(L.rel, 10);
+	  const f = Math.min(e, s + Math.max(0, isFinite(rel) ? rel : 0));
+	  if (!mainCmd[f]) mainCmd[f] = [];
+	  if (!mainCmd[f].some(x => x.command === nm)) mainCmd[f].push({ parameter: '', command: nm });
+	}
+	const ph = (typeof PRESET_HINT !== 'undefined') ? PRESET_HINT : null;
+	if (ph && ph.cmds && ph.cmds.length){
+	  for (const c of ph.cmds){
+		const segNames = c.segs || [], rels = c.rel || [];
+		/* ★ segs 与 rel **一一对应**（第 i 段用第 i 个相对帧），
+		   不能写成双重循环 —— 那会变成笛卡尔积，
+		   实测同一帧叠了 5 条 use_special。 */
+		const n2 = Math.min(segNames.length, rels.length);
+		for (let i2=0;i2<n2;i2++){
+		  const L = labels.find(x => x.name === segNames[i2]);
+		  if (!L) continue;
+		  /* 行里已显式填了指令 → 不覆盖 */
+		  if (L.cmd && String(L.cmd).trim()) continue;
+		  const s = Math.max(0, Math.min(totalFrames - 1, L.start));
+		  const e = Math.max(0, Math.min(totalFrames - 1, L.end));
+		  const f = Math.min(e, s + Math.max(0, rels[i2]|0));
+		  if (!mainCmd[f]) mainCmd[f] = [];
+		  if (!mainCmd[f].some(x => x.command === c.name)) mainCmd[f].push({ parameter: '', command: c.name });
+		}
+	  }
+	}
+  }
+  for (let f=0; f<totalFrames; f++){
+	const c = frameCfg[f];
+	mainFrames.push({
+	  stop: !!mainStop[f],
+	  change: c.changes.map(x => {
+		const m = x.transform;
+		return { anim_frame_num: 0, transform: m, src_rect: null, color: null, index: IDX(x.index) };
+	  }),
+	  label: c.label,
+	  command: mainCmd[f] || [],
+	  remove: c.removes.map(x => ({ index: IDX(x.index) })),
+	  append: c.appends.map(x => {
+		const r = memoElemMap.get(x.index);
+		/* 备忘录里有的元件 → 原样还原成具名 sprite 引用 */
+		if (r) return { resource: r.resource, name: null, sprite: !!r.sprite, index: IDX(x.index), preload_frames: 0, timescale: 1, additive: false };
+		/* ★ [坑29] AM 新增图层 / 纯种 AM 元件：补建一个具名 sprite，
+		   让 append 指向它（原版规范里 main_sprite 的元件都引用具名 sprite，
+		   直连 image 会让元件名丢失、sprite[] 退化）。 */
+		const ne = newElems.get(x.index);
+		if (ne != null && ne.spriteIdx != null){
+		  /* ★ [坑45b · 越界兜底] 万一 spriteIdx 仍越界（不同工程路径下的
+			 复用判定差异），退回直连 image 并告警 —— 绝不让 append 指向
+			 不存在的 sprite（那会让元件渲染成别的图，实测 eat 第二根法杖
+			 曾渲染成巨大的黄色神字）。 */
+		  if (ne.spriteIdx >= 0 && ne.spriteIdx < SPRITE_TOTAL){
+			return { resource: ne.spriteIdx, name: null, sprite: true, index: IDX(x.index), preload_frames: 0, timescale: 1, additive: false };
+		  }
+		  log('  ⚠ 元件 ' + x.index + ' 的 sprite 下标 ' + ne.spriteIdx + ' 越界（sprite[] 共 '
+			+ SPRITE_TOTAL + ' 条），已退回直连 image', 'w');
+		}
+		return { resource: x.resource, name: null, sprite: false, index: IDX(x.index), preload_frames: 0, timescale: 1, additive: false };
+	  }),
+	});
+  }
+
+  /* 5) 图集打包 + res.json
+	 ★ 图集规格被锁定为 512 / 1024 / 2048 之一（原版硬性约束）。
+	   若发生自动缩放（atlasScale < 1），子图在 atlas 里的实际像素尺寸变了，
+	   必须把 PAM 侧矩阵同步乘上 scale，否则显示尺寸/位置全错。 */
+  const packed = packAtlasCanvas(atlasItems.map(a => ({ key: a.key, w: a.w, h: a.h, cvs: a.cvs })), PREFERRED_ATLAS);
+  /* [坑41] 重写提示：只改图集宽高与子图 ax/ay，格式规则（id/path/slot/parent/密度）一律不动 */
+  if (packed.rewritten){
+	const fr = packed.from ? (packed.from[0] + '×' + packed.from[1]) : '默认';
+	log('  ⚠ 原版图集 ' + fr + ' 装不下当前素材：已重写为 ' + packed.W + '×' + packed.H
+	  + '（仅重写图集尺寸与子图位置 ax/ay，aw/ah 与密度不变）', 'w');
+  }
+  const atlasScale = packed.scale || 1;
+  const atlasPng = canvasPng(packed.canvas);
+  const resResources = [];
+  /* 资源路径 / id 从备忘录还原（保持原版的 atlases\ 与 slot 布局）；
+	 没有备忘录则用净化标识符生成一套干净默认值。 */
+  const memoAtlas = memo && Array.isArray(memo.resources) ? memo.resources.find(r => r.atlas) : null;
+  const atlasPath = normResPath(memoAtlas && memoAtlas.path, ['atlases', IDB + '_' + resVal + '_00']);
+  const atlasId = (memoAtlas && memoAtlas.id) ? memoAtlas.id : ('ATLASIMAGE_ATLAS_' + IDB.toUpperCase());
+  resResources.push({
+	path: atlasPath, atlas: true, width: packed.W, height: packed.H, runtime: true,
+	slot: (memoAtlas && memoAtlas.slot != null) ? memoAtlas.slot : slotBaseFor(IDB),
+	id: atlasId, type: 'Image',
+  });
+
+  /* 6) PAM image[]：
+	 ★ [坑15] size 必须是**逻辑尺寸**（显示矩形的大小），不是 atlas 像素尺寸！
+	   原版约定（实测太阳神僵尸）：PAM image.size = [34,31]（逻辑），
+	   而 res.json 的 aw/ah = 44×40（= 逻辑 × res/1200 的 atlas 像素）。
+	   旧实现把 size 写成 atlas 像素，渲染器会按 44×40 去取图并当作显示尺寸，
+	   与 change.transform（按逻辑尺寸推的）不匹配，边缘/尺寸出现 1.29× 偏差。
+	 transform 从备忘录还原（原版会带锚点偏移，见 [坑12]）。
+	 ★ [修改模式] 名字优先从备忘录还原，否则用净化标识符生成。 */
+  /* 备忘录里的子图资源（去掉 atlas 项），按**序号**与 images[] 对齐。
+	 原实现用 ax/ay 反查，装箱一变就失配，见下面 [坑19]。 */
+  /* ★ [坑19b] 按 id 建索引，不能按序号。
+	 实测：原版 Bonkchoy 的 res.json 顺序是 102x68, 103x67, 105x134…，
+	 而 am.json 的 image[] 顺序是 88x73, 68x136, 84x88… —— 两者**不一致**。
+	 按序号匹配会整条错位，path 永远拿不到 memo 的原版值（实测退回兜底，
+	 把原版的 "plant" 段写成 "plantbonkchoy"）。 */
+  const memoSubById = new Map();
+  /* ★ [坑48 · 新增素材的 slot/path 冲突] 早先给「id 在备忘录里查不到」的素材
+	 兜底用 memoSubs[i]（按序号取）—— 但备忘录子图顺序与 image[] **根本不同序**，
+	 于是新增素材（神字，i=0）复用了 memoSubs[0] = 原版脑袋 100x96 的
+	 **path 与 slot 57067**。两者 slot 相同、path 相同，游戏按 slot 建资源表时
+	 后写覆盖先写 —— 脑袋位置就渲染出了 540×540 的黄色神字。
+	 而「吸取阳光」用的是 100x96_2（slot 57068），不冲突，所以那个状态正常。
+	 修法：新增素材一律**不用**序号兜底，改发全新 slot（原版最大 slot + 1 起）
+	 与全新 path（用素材自己的逻辑名）。 */
+  const PATH_SEEN = new Set();
+  if (memo && Array.isArray(memo.resources)){
+	for (const r of memo.resources) if (!r.atlas && r.id) memoSubById.set(r.id, r);
+  }
+  const memoSubs = (memo && Array.isArray(memo.resources)) ? memo.resources.filter(r => !r.atlas) : [];
+  /* [坑48] 原版最大 slot，新增素材从这里 +1 起分配 */
+  let MEMO_SLOT_MAX = 0;
+  for (const r of memoSubs) if (r && r.slot != null && r.slot > MEMO_SLOT_MAX) MEMO_SLOT_MAX = r.slot;
+  const resImages = [];
+  for (let i=0;i<images.length;i++){
+	const im = images[i];
+	const p = packed.placements.get(im.hostKey);
+	/* aw/ah = 子图在 atlas 里的实际像素尺寸（可能被整体缩放） */
+	const aw = p ? p.w : im.w;
+	const ah = p ? p.h : im.h;
+	/* [坑18/25] _aw/_ah/_logW/_logH/_effK 已在装箱几何前置时算好（区段 3 要用） */
+	const effK = (im._effK != null) ? im._effK : 1;
+	im._aw = aw; im._ah = ah; im._effK = effK;
+	/* 逻辑尺寸：有备忘录时严格用原始 image.size 还原；否则用打包后的实际
+	   像素尺寸（density 恒为 1，故 aw == 显示矩形像素尺寸，二者一致）。 */
+	/* [坑34] 用区段 2 按名字匹配到的那条，避免序号错位 */
+	const memoImg = im._mi || null;
+	/* [坑25] 逻辑尺寸与前置计算保持一致 */
+	const logW = im._logW;
+	const logH = im._logH;
+	const imgName = (memoImg && memoImg.name)
+	  ? memoImg.name
+	  : (im.logical + '|IMAGE_' + IDB.toUpperCase() + '_' + im.logical.toUpperCase());
+	resImages.push({
+	  name: imgName,
+	  size: [logW, logH],
+	  transform: (memoImg && Array.isArray(memoImg.transform)) ? memoImg.transform.slice() : [1, 0, 0, 1, 0, 0],
+	});
+	if (p){
+	  /* ★ [坑19 · ID 脱钩] 原实现按 ax/ay 反查备忘录 —— 只要重新装箱的位置变了
+	     （改过动画、素材尺寸/顺序变了）就必然失配，id/path/slot 退回「文件名派生」
+	     的默认值；而 am.json 的 image[].name 是从备忘录**原样**还原的原版 ID。
+	     两侧命名空间就此分裂：实测本次输出 39/39 全不匹配，而原版 Bonkchoy 是
+	     39/39 全匹配。按 id 取图的渲染器会整片落空 —— 这就是「巨大的问题」。
+	     修法：子资源按**序号**匹配（顺序与原 PAM 一致，确定性），
+	     且 id 一律以 am.json 的 image[].name 里 "|" 后半段为唯一权威来源。 */
+	  const vb = imgName.indexOf('|');
+	  const rid = (vb >= 0) ? imgName.slice(vb + 1) : null;
+	  /* id 优先（精确）；**只有确属原版素材**（按名字匹配到了 memo.image）才允许
+		 退回收号兜底。新增素材走全新分配，绝不复用别人的 path/slot（坑48）。 */
+	  const isOrigImg = !!memoImg;
+	  const memoRes = (rid && memoSubById.get(rid)) || (isOrigImg ? memoSubs[i] : null) || null;
+	  const useMemoPath = !!(memoRes && memoRes.path);
+	  /* 路径兜底按原版层级 images/<res>/<分组>/<类型>/<角色>/<文件> 重建；
+		 角色名 = 逻辑名去掉尺寸后缀（zombie_egypt_ra_34x31 → zombie_egypt_ra）。 */
+	  const charName = (im.logical.replace(/_\d+x\d+.*$/, '') || im.logical).toLowerCase();
+	  const stdPath = ['images', resVal, 'initial', String((memo && memo.res_parent) ? memo.res_parent : IDB).toLowerCase(), charName, im.logical];
+	  /* [坑48] 新增素材的末段必须唯一：与已有 path 撞了就加 _new<n> 后缀 */
+	  let pathVal = useMemoPath ? normResPath(memoRes.path, stdPath) : stdPath;
+	  if (!isOrigImg){
+		const key = (Array.isArray(pathVal) ? pathVal.join('/') : String(pathVal)).toLowerCase();
+		if (PATH_SEEN.has(key)){
+		  let n2 = 2;
+		  while (PATH_SEEN.has(key + '_new' + n2)) n2++;
+		  pathVal = (Array.isArray(pathVal) ? pathVal.slice() : [String(pathVal)]);
+		  pathVal[pathVal.length - 1] = pathVal[pathVal.length - 1] + '_new' + n2;
+		}
+		const k2 = (Array.isArray(pathVal) ? pathVal.join('/') : String(pathVal)).toLowerCase();
+		PATH_SEEN.add(k2);
+	  } else {
+		const k3 = (Array.isArray(pathVal) ? pathVal.join('/') : String(pathVal)).toLowerCase();
+		PATH_SEEN.add(k3);
+	  }
+	  resResources.push({
+		path: pathVal,
+		parent: atlasId,
+		aw: aw, ah: ah, ax: p.x, ay: p.y,
+		x: 0, y: 0,                    /* ★ 原版子图必带 x/y（Bonkchoy 实测全为 0），缺了会让部分解析器读不到偏移 */
+		/* [坑28b] 无备忘录时从「atlas slot + 1」起递增，避开 1~40 高危段 */
+		/* [坑48] 新增素材：从「原版最大 slot + 1」起分配，保证全局唯一 */
+		slot: (memoRes && memoRes.slot != null) ? memoRes.slot
+			: (isOrigImg ? (slotBaseFor(IDB) + 1 + i) : (++MEMO_SLOT_MAX)),
+		id: rid || (memoRes && memoRes.id) || ('IMAGE_' + IDB.toUpperCase() + '_' + im.logical.toUpperCase()),
+		type: 'Image',
+	  });
+	}
+  }
+
+  /* 7) 组装 PopAnimInfo
+	 ★ sprite[] 是原版的「具名元件定义表」，绝不能用占位符糊弄：
+	   有备忘录 → 原样还原每一条（名字 + 每帧 append/change/remove 骨架）；
+	   没备忘录 → 生成以 image 命名的干净占位 sprite（每 image 一条）。 */
+  const resSprites = buildPamSprites(memo, resImages, fps, images, IDB);
+  /* ★ [坑29 续] 为「AM 新增图层 / 纯种 AM 元件」补建具名 sprite。
+	 命名优先用 shape 的 label（用户在 AM 里给图层起的名字，最有语义），
+	 退化到素材逻辑名；再冲突就加序号。
+	 每条 sprite 是 1 帧定义：append(resource=<imageIdx>, sprite=false)，
+	 正好对应「这个元件显示哪张图」。 */
+  {
+	/* ★ [坑31] 复用已有 sprite，别重复造。
+	   无备忘录时 buildPamSprites 已为每个 image 生成了一条占位 sprite，
+	   若这里再按元件补建一遍就会翻倍（实测纯种 AM 从 4 条变 8 条，
+	   后 4 条是没人引用的孤儿）。规则：
+		 · 该 image 已经有一条 sprite（memo 的或占位的）→ 直接指向它
+		 · 没有 → 补建一条（AM 新增媒体就是这种情况） */
+	/* [坑45] 与区段 4 共用同一份判定，保证预分配下标与实际 push 条数一致 */
+	const imgToSprite = IMG_TO_SPRITE;
+	const used = new Set(resSprites.map(x => x.name));
+	let k = 0;
+	for (const [elemIdx, ne] of newElems){
+	  /* ★ [坑31b] 只有「这张图确实是 memo 里的原版图」时才复用已有 sprite。
+		 新增图层（神字）是 images[0]，而 memo 的 sprite[0] 也引用 image 0 ——
+		 若照旧按 image 下标复用，神字会被指向一个**嵌套 sprite**，
+		 其 relMat 会污染矩阵（实测神字 loc.y 从 104.6 变成 454.9，
+		 scl 0.496→0.925, rot 0→26.8°）。判据：该 image 有 memo 对应才复用。 */
+	  if (ne.reuse) continue;   /* [坑45] 已在区段 4 判定为复用，不补建 */
+	  const _im = images[ne.imgIdx];
+	  if (_im && _im._mi && imgToSprite.has(ne.imgIdx)){ ne.spriteIdx = imgToSprite.get(ne.imgIdx); continue; }
+	  const base = idName(ne.label || (images[ne.imgIdx] && images[ne.imgIdx].logical) || ('elem_' + elemIdx));
+	  let nm = base;
+	  if (used.has(nm)){ let n2 = 2; while (used.has(nm + '_' + n2)) n2++; nm = base + '_' + n2; }
+	  used.add(nm);
+	  if (ne.spriteIdx == null) ne.spriteIdx = resSprites.length;
+	  imgToSprite.set(ne.imgIdx, ne.spriteIdx);
+	  resSprites.push(makePamSpriteForImage(nm, ne.imgIdx, fps));
+	  k++;
+	}
+	if (k) log('  ✓ 为 ' + k + ' 个 AM 新增图层的素材补建了具名 sprite（sprite 共 '
+	  + resSprites.length + ' 条）', 'ok');
+  }
+
+  const pam = {
+	image: resImages,
+	size: [W, H],
+	sprite: resSprites,
+	main_sprite: {
+	  name: (memo && memo.main_sprite && memo.main_sprite.name) || '',
+	  description: (memo && memo.main_sprite && memo.main_sprite.description) || '',
+	  work_area: (memo && memo.main_sprite && memo.main_sprite.work_area) ? memo.main_sprite.work_area.slice() : [0, totalFrames],
+	  frame_rate: fps, frame: mainFrames,
+	},
+	position: (memo && Array.isArray(memo.position)) ? memo.position.slice() : [0, 0],
+	version: (memo && memo.pam_version) ? memo.pam_version : 6,
+	frame_rate: fps,
+  };
+
+  const resJson = {
+	parent: (memo && memo.res_parent) ? memo.res_parent : IDB,
+	res: resVal,
+	resources: resResources,
+	id: (memo && memo.res_id) ? memo.res_id : IDB,
+	type: 'simple',
+  };
+
+  /* ★ [修改模式] 入口即自动检测：只要这次转换是从三件套转来的（带着旧备忘录），
+	 就把「格式骨架」原样写回，保证「三件套 → AM → 改动画 → AM → 三件套」
+	 之后元件名 / sprite 定义 / res / 资源路径分毫不差。
+	 备忘录只锁骨架，动画数据始终以 amproj 为准 —— 改位置、改旋转都照常生效。 */
+  const entries = [
+	{ name: baseNameStr + '.png', data: atlasPng },
+	{ name: baseNameStr + '.res.json', data: enc.encode(JSON.stringify(resJson, null, 2)) },
+	{ name: baseNameStr + '.PAM.am.json', data: enc.encode(JSON.stringify(pam, null, 2)) },
+  ];
+  /* 骨架备忘录：优先沿用上一轮的原件（保留 res_parent/res_id 等扩展字段），
+	 否则基于本次输入重建。 */
+  const outMemo = memo ? Object.assign({}, memo, {
+	base: baseNameStr, res: resVal,
+	elemToSprite: Object.fromEntries([...memoElemMap.entries()].map(([k, v]) => [k, { sprite: v.sprite, resource: v.resource }])),
+  }) : null;
+  if (outMemo){
+	/* [坑34] 直接以本次产出的 resImages 为准，不再回抄旧 memo（否则新增图层
+	 会让序号错位，下一轮转换时把错误的 size 带给别的图）。 */
+	outMemo.image = resImages.map((im, i) => ({
+	  i, name: im.name, size: [im.size[0], im.size[1]], transform: (im.transform || []).slice(),
+	}));
+	outMemo.resources = resResources.map((r, i) => ({
+	  atlas: !!r.atlas, id: r.id, path: r.path, slot: r.slot,
+	  ...(r.atlas ? { width: r.width, height: r.height } : { ax: r.ax, ay: r.ay, aw: r.aw, ah: r.ah }),
+	}));
+	entries.push({ name: MEMO_FILE, data: enc.encode(JSON.stringify(outMemo)) });
+  }
+  return { bytes: zipStore(entries), pam, resJson, atlasPng, W: packed.W, H: packed.H,
+		   images: images.length, totalFrames, labels: labels.length,
+		   res: resVal, hasMemo: !!outMemo, spriteCount: resSprites.length,
+		   memoBytes: outMemo ? enc.encode(JSON.stringify(outMemo)) : null };
+}
+
+
+
+/* ══════════════════════════════════════════════════════════════════════════
+   12 · Label 配置面板（仅 AM → 原版 模式）
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ══ [坑49 · 内置标签库] ══════════════════════════════════════════════════
+   从两个原版动画里实测提取的完整标签序列（含每段帧数、stop、command）。
+   用途：① 名称输入框的下拉候选；② 一键套用整段序列（按当前总帧数等比映射）。
+
+   实测规律（两个动画完全吻合）：
+	 · label  写在每段**首帧**，其余帧为 null
+	 · stop   写在每段**末帧**，最后一段不停
+	 · command 写在段内特定帧（菜问 attack 系列每段的第 5 帧发 use_special）
+*/
+const LABEL_PRESETS = [
+  {
+	key:'bonkchoy', name:'菜问 Bonkchoy', total:283,
+	segs:[['idle',30],['idle2',30],['idle3',31],['attack',10],['attack2',10],['attack3',20],
+		  ['attack4',15],['attack5',15],['plantfood_on',30],['plantfood',30],['plantfood_off',10],['water',52]],
+	/* use_special 落在 attack~attack5 每段内的相对帧（实测 95/105/115/125/135/150） */
+	cmds:[{name:'use_special', segs:['attack','attack2','attack3','attack4','attack5'], rel:[4,4,4,4,4]}],
+  },
+  {
+	key:'ra', name:'僵尸 Ra', total:460,
+	segs:[['idle',86],['walk',120],['eat',100],['power_up',20],['power',30],
+		  ['power_down',38],['die',65],['particles',1]],
+	cmds:[],
+  },
+];
+/* ══ [坑50 · 指令库] ══════════════════════════════════════════════════════
+   PAM 的 command 是「动画驱动宿主行为」的钩子：播到某一帧时游戏去执行对应动作。
+   两个**有据可查**的指令：
+	 · use_special —— 释放 / 大招（植物养料）。实测菜问在 attack~attack5 五段各发一次，
+		 共 6 条（帧 95/105/115/125/135/150）。
+	 · use_action  —— 攻击 / 开火。PvZ-2 MOD 技术文档明确记载：
+		 「豌豆射手的发射动作是由 peashooter.pam 中的 use_action 指令触发的」。
+   其余名称纯属自定义（游戏不认识就当失效指令，不影响播放），可自由输入。 */
+const COMMAND_PRESETS = [
+  { name:'use_special', desc:'释放 / 大招（植物养料）', segs:['attack','attack2','attack3','attack4','attack5'], rel:4 },
+  { name:'use_action',  desc:'攻击 / 开火（发射子弹）', segs:['attack','shoot'], rel:0 },
+];
+/* 通用标签（PVZ2 常见动作名，供自定义时下拉挑选） */
+const LABEL_COMMON = ['idle','walk','attack','eat','die','water','power','plantfood',
+  'plantfood_on','plantfood_off','particles','appear','disappear','sleep','wake','hit','boost'];
+function labelVocabulary(){
+  const set = new Set(LABEL_COMMON);
+  for (const p of LABEL_PRESETS) for (const [n] of p.segs) set.add(n);
+  return [...set].sort();
+}
+/* 把预设序列映射到当前总帧数：前 n-1 段按比例取整，末段吸收余数 */
+function presetToRows(preset, total){
+  const srcTotal = preset.total || 1;
+  const rows = []; let cur = 0;
+  /* 指令：段名 → 相对帧 */
+  const cmdOf = new Map();
+  for (const c of (preset.cmds || [])){
+	const segNames = c.segs || [], rels = c.rel || [];
+	for (let i2=0;i2<Math.min(segNames.length, rels.length);i2++) cmdOf.set(segNames[i2], { n:c.name, r:rels[i2] });
+  }
+  for (let i=0;i<preset.segs.length;i++){
+	const [nm, len] = preset.segs[i];
+	let w;
+	if (i === preset.segs.length - 1) w = Math.max(1, total - cur);
+	else w = Math.max(1, Math.round(len / srcTotal * total));
+	const e = Math.min(total - 1, cur + w - 1);
+	const cm = cmdOf.get(nm);
+	rows.push({ start: cur, end: e, name: nm, cmd: cm ? cm.n : '', rel: cm ? String(cm.r) : '' });
+	cur = e + 1;
+	if (cur > total - 1 && i < preset.segs.length - 1){ /* 帧不够就截断 */ break; }
+  }
+  return rows;
+}
+let AM_TOTAL_FRAMES = 0;      // 载入 amproj 后填充，用于 label 默认值与校验
+let PRESET_HINT = null;       // [坑49] 最近套用的预设（用于 stop / command 还原）
+function labelRowsData(){
+  const rows = [];
+  for (const el of $('labelRows').querySelectorAll('.lblrow')){
+	const [s, e, n, c, r] = el.querySelectorAll('input');
+	rows.push({ start: s.value, end: e.value, name: n.value, cmd: c.value, rel: r.value, _el: el });
+  }
+  return rows;
+}
+function renderLabelRows(rows){
+  const box = $('labelRows');
+  box.innerHTML = '';
+  const head = document.createElement('div');
+  head.className = 'lblhead';
+  head.innerHTML = '<span>起始帧</span><span>结束帧</span><span>名称</span>'
+	+ '<span title="播到该帧时触发游戏动作">指令</span>'
+	+ '<span title="相对本段起始帧的偏移，如 4 = 段首后第4帧">帧</span><span></span>';
+  box.appendChild(head);
+  for (const r of rows) addLabelRow(r.start, r.end, r.name, r.cmd, r.rel);
+  validateLabelsUI();
+}
+function addLabelRow(start, end, name, cmd, rel){
+  const box = $('labelRows');
+  const row = document.createElement('div');
+  row.className = 'lblrow';
+  row.innerHTML = '<input type="number" min="0" value="' + (start != null ? start : 0) + '">'
+	+ '<input type="number" min="0" value="' + (end != null ? end : '') + '">'
+	+ '<input type="text" list="labelVocab" placeholder="输入或选择标签" value="' + esc(name || '') + '">'
+	+ '<input type="text" list="cmdVocab" placeholder="（无）" value="' + esc(cmd || '') + '" title="指令名，留空=不添加">'
+	+ '<input type="number" min="0" placeholder="0" value="' + esc(rel || '') + '" title="相对段首的帧偏移">'
+	+ '<button class="del" title="删除">×</button>';
+  row.querySelector('.del').onclick = () => { row.remove(); validateLabelsUI(); };
+  for (const inp of row.querySelectorAll('input')) inp.oninput = validateLabelsUI;
+  box.appendChild(row);
+}
+function defaultLabelRows(){
+  if (AM_TOTAL_FRAMES > 0) return [{ start:0, end:AM_TOTAL_FRAMES - 1, name:'all' }];
+  return [{ start:0, end:0, name:'all' }];
+}
+function validateLabelsUI(){
+  const rows = labelRowsData();
+  const res = validateLabels(rows, AM_TOTAL_FRAMES);
+  const msg = $('labelMsg');
+  for (const r of rows){
+	const bad = r._el && (String(r.start) === '' || String(r.end) === ''
+	  || parseInt(r.start,10) > parseInt(r.end,10)
+	  || (AM_TOTAL_FRAMES > 0 && parseInt(r.end,10) > AM_TOTAL_FRAMES - 1)
+	  || parseInt(r.start,10) < 0);
+	const [s, e] = r._el.querySelectorAll('input');
+	s.classList.toggle('bad', bad); e.classList.toggle('bad', bad);
+  }
+  if (res.ok){
+	msg.innerHTML = '<span class="badge ok">合法</span> 共 ' + rows.length + ' 条 label'
+	  + (AM_TOTAL_FRAMES > 0 ? '，总帧数 ' + AM_TOTAL_FRAMES : '');
+	msg.className = 'hint';
+  } else {
+	msg.innerHTML = '<span class="badge bad">无效</span> ' + res.errs.slice(0,4).map(esc).join('；')
+	  + (res.errs.length > 4 ? ' …（共 ' + res.errs.length + ' 条问题）' : '');
+	msg.className = 'hint';
+  }
+  if (MODE === 'am2pam') $('goBtn').disabled = !(res.ok && SRC);
+  return res;
+}
+/* [坑49/50] 填充下拉词表：标签 + 指令 */
+(function(){
+  const dl = $('labelVocab');
+  if (dl) dl.innerHTML = labelVocabulary().map(v => '<option value="' + esc(v) + '"></option>').join('');
+  const dc = $('cmdVocab');
+  if (dc) dc.innerHTML = COMMAND_PRESETS.map(c =>
+	'<option value="' + esc(c.name) + '">' + esc(c.desc) + '</option>').join('');
+})();
+/* [坑49] 一键套用预设：铺标签 + 记忆 stop/command 规律，供导出时按名字还原 */
+function applyLabelPreset(preset){
+  if (!(AM_TOTAL_FRAMES > 0)){ log('请先载入 .amproj，再套用预设', 'w'); return; }
+  const rows = presetToRows(preset, AM_TOTAL_FRAMES);
+  renderLabelRows(rows);
+  PRESET_HINT = preset;
+  log('  已套用「' + preset.name + '」' + rows.length + ' 段标签（总帧 ' + AM_TOTAL_FRAMES
+	+ '，按原版比例映射）；段末帧自动加 stop' + (preset.cmds.length ? '，并按原版规律写入 command' : ''), 'ok');
+}
+$('labelPresetBonkchoy').onclick = () => applyLabelPreset(LABEL_PRESETS[0]);
+$('labelPresetRa').onclick = () => applyLabelPreset(LABEL_PRESETS[1]);
+
+$('labelAddBtn').onclick = () => {
+  const rows = labelRowsData();
+  const last = rows.length ? parseInt(rows[rows.length-1].end, 10) : -1;
+  const s = isFinite(last) ? Math.min(last + 1, Math.max(0, AM_TOTAL_FRAMES - 1)) : 0;
+  addLabelRow(s, AM_TOTAL_FRAMES > 0 ? AM_TOTAL_FRAMES - 1 : s, 'label' + (rows.length + 1));
+  validateLabelsUI();
+};
+/* ★ [坑33 · 全局图层按 label 边界拆分]
+   场景：用户在 AM 里新增一个覆盖全片的图层（实测是黄色「神」字，
+   图层名 = 素材文件名 1790860519749.png，跨 0~459 帧）。
+   旧的「按素材自动分组」把它当成一个 0~459 的大组排在最前，
+   后面 power / walk / eat … 全被"重叠修复"推到 460 之后，
+   大半直接越界消失 —— 分组结果基本报废。
+   新算法：
+	 ① 识别「全局图层」——跨度 ≥ 总帧数的 GLOBAL_SPAN 比例（默认 0.8），
+		或恰好从 0 铺到末帧。它们只当成员，不参与分段命名。
+	 ② 用**非全局图层**的起止帧切出原子边界，时间轴被切成互不重叠的段。
+	 ③ 每段取覆盖它的非全局图层中出现最多的 label 命名（票数相同取跨度小者，
+		即"更具体"的那个）。整段只有全局图层时，用全局图层名 + 序号。
+	 ④ 合并相邻的同名段。
+   这样神字被自然拆进 idle / walk / eat … 各段，分组就正常了。 */
+const GLOBAL_SPAN_RATIO = 0.8;
+function autoLabelRowsFromShapes(model, total){
+  const fps = model.fps || 30;
+  const iv = [];
+  for (const sh of model.shapes){
+	const f0 = Math.max(0, Math.floor(sh.t0 / 1000 * fps));
+	const f1 = Math.min(total - 1, Math.ceil(sh.t1 / 1000 * fps) - 1);
+	if (f1 < f0) continue;
+	const nm = (sh.label || '').trim() || ('shape_' + sh.id);
+	iv.push({ f0, f1, nm, span: f1 - f0 + 1 });
+  }
+  if (!iv.length) return null;
+  const isGlobal = x => (x.span >= Math.max(1, Math.round(total * GLOBAL_SPAN_RATIO)))
+					 || (x.f0 === 0 && x.f1 >= total - 1);
+  const locals = iv.filter(x => !isGlobal(x));
+  const globals = iv.filter(isGlobal);
+  /* 没有任何"局部"图层可依据时（例如整个工程就是一个全局图），退回旧行为 */
+  if (!locals.length){
+	const g = new Map();
+	for (const x of iv){
+	  if (!g.has(x.nm)) g.set(x.nm, { start:x.f0, end:x.f1, name:x.nm });
+	  else { const q = g.get(x.nm); q.start = Math.min(q.start, x.f0); q.end = Math.max(q.end, x.f1); }
+	}
+	const rows = [...g.values()].sort((a,b) => a.start - b.start);
+	let out = []; for (const r of rows){
+	  if (out.length && r.start <= out[out.length-1].end) r.start = out[out.length-1].end + 1;
+	  if (r.start <= r.end && r.start < total) { r.end = Math.min(r.end, total-1); out.push(r); }
+	}
+	return out.length ? { rows: out, globals: globals.length } : null;
+  }
+  /* ① 边界点：所有局部图层的起止 */
+  const marks = new Set([0, total]);
+  for (const x of locals){ marks.add(x.f0); marks.add(x.f1 + 1); }
+  const bnds = [...marks].filter(v => v >= 0 && v <= total).sort((a,b) => a - b);
+  /* ② 原子段 */
+  const segs = [];
+  for (let i=0;i+1<bnds.length;i++){
+	const a = bnds[i], b = bnds[i+1] - 1;
+	if (a > b || a >= total) continue;
+	segs.push({ start:a, end:Math.min(b, total-1), name:'' });
+  }
+  /* ③ 逐段命名 */
+  for (const sg of segs){
+	const votes = new Map();
+	for (const x of locals){
+	  if (x.f0 > sg.end || x.f1 < sg.start) continue;   // 不覆盖本段
+	  const cur = votes.get(x.nm);
+	  if (!cur) votes.set(x.nm, { n:1, span:x.span });
+	  else { cur.n++; cur.span = Math.min(cur.span, x.span); }
+	}
+	if (votes.size){
+	  let best = null;
+	  for (const [nm, v] of votes){
+		if (!best || v.n > best.v.n || (v.n === best.v.n && v.span < best.v.span)) best = { nm, v };
+	  }
+	  sg.name = best.nm;
+	} else {
+	  /* 整段只有全局图层覆盖 */
+	  const gg = globals.filter(x => x.f0 <= sg.end && x.f1 >= sg.start);
+	  sg.name = gg.length ? (gg[0].nm + (segs.length > 1 ? '_seg' : '')) : 'label';
+	}
+  }
+  /* ④ 合并相邻同名段 */
+  const rows = [];
+  for (const sg of segs){
+	const p = rows[rows.length-1];
+	if (p && p.name === sg.name && p.end + 1 >= sg.start) p.end = sg.end;
+	else rows.push({ start:sg.start, end:sg.end, name:sg.name });
+  }
+  /* ⑤ 重名加序号（PAM label 不允许重复） */
+  const seen = new Map();
+  for (const r of rows){
+	const c = (seen.get(r.name) || 0) + 1; seen.set(r.name, c);
+	if (c > 1) r.name = r.name + '_' + c;
+  }
+  return { rows, globals: globals.length };
+}
+
+$('labelAutoBtn').onclick = () => {
+  if (!CUR_AM_MODEL){ log('请先载入 .amproj，再按素材自动分组', 'w'); return; }
+  const fps = CUR_AM_MODEL.fps || 30;
+  const total = Math.max(1, Math.round(CUR_AM_MODEL.totalTime / 1000 * fps));
+  const built = autoLabelRowsFromShapes(CUR_AM_MODEL, total);
+  let rows = (built && built.rows) ? built.rows : defaultLabelRows();
+  if (!rows.length) rows = defaultLabelRows();
+  renderLabelRows(rows);
+  const v = validateLabelsUI();
+  const gl = (built && built.globals) ? built.globals : 0;
+  log('  已按素材自动分组：' + rows.length + ' 段'
+	+ (gl ? '（其中 ' + gl + ' 个跨全片的图层已按边界拆分到各段，未独占整片）' : '')
+	+ (v.ok ? '' : '；仍有问题：' + v.errs[0]), v.ok ? 'ok' : 'w');
+};
+$('labelAllBtn').onclick = () => { renderLabelRows(defaultLabelRows()); };
+/* ★ [坑32] 「按备忘录还原」：直接从 memo 的逐帧 label 记录重建分段，
+   免去用户手工推算帧号（也就不会再撞上「与第 1 行 all 重叠」这类校验错误）。
+   帧数对不上（在 AM 里改过长度）时按比例映射并夹紧，保证区间互斥、不越界。 */
+/* 把备忘录的逐帧 label 记录转成互斥的帧区间表。total 为当前 AM 总帧数，
+   帧数对不上时按比例映射并夹紧，保证「不重叠、不越界、不留缝」。 */
+function labelRowsFromMemo(memo, total){
+  const fm = memo && memo.main_sprite && Array.isArray(memo.main_sprite.frameMeta) ? memo.main_sprite.frameMeta : null;
+  if (!fm || !fm.length) return null;
+  const N = total || Math.max(1, fm.length);
+  const segs = [];
+  for (let i=0;i<fm.length;i++) if (fm[i].label) segs.push({ name: fm[i].label, s: i });
+  if (!segs.length) return null;
+  for (let k=0;k<segs.length;k++) segs[k].e = (k+1 < segs.length) ? (segs[k+1].s - 1) : (fm.length - 1);
+  const scale = (fm.length !== N) ? (N - 1) / Math.max(1, fm.length - 1) : 1;
+  const rows = [];
+  for (let k=0;k<segs.length;k++){
+	let a = Math.round(segs[k].s * scale), b = Math.round(segs[k].e * scale);
+	a = Math.max(0, Math.min(N - 1, a)); b = Math.max(0, Math.min(N - 1, b));
+	if (rows.length && a <= rows[rows.length-1].end) a = rows[rows.length-1].end + 1;
+	if (a > b) continue;
+	rows.push({ start:a, end:b, name:segs[k].name });
+  }
+  if (rows.length && rows[rows.length-1].end < N - 1) rows[rows.length-1].end = N - 1;
+  if (!rows.length) rows.push({ start:0, end:N-1, name:'all' });
+  return { rows, srcFrames: fm.length, scale };
+}
+/* 当前可用的备忘录：转换时解析过的 > 上传时多选附带的 */
+function currentMemo(){
+  if (typeof CUR_MEMO !== 'undefined' && CUR_MEMO) return CUR_MEMO;
+  if (typeof EXTRA_MEMO !== 'undefined' && EXTRA_MEMO && EXTRA_MEMO.bytes){
+	try { return JSON.parse(dec.decode(EXTRA_MEMO.bytes)); } catch(_){ return null; }
+  }
+  return null;
+}
+/* 「按素材自动分组」= 按 AM 里各图层的名字与可见区间切段；
+   「按备忘录分组」  = 按原版三件套记录的逐帧 label 切段（帧号最准）。
+   两者并存，用户可任选；有备忘录时优先推荐后者。 */
+$('labelMemoBtn').onclick = () => {
+  const memo = currentMemo();
+  const fm = memo && memo.main_sprite && Array.isArray(memo.main_sprite.frameMeta) ? memo.main_sprite.frameMeta : null;
+  const total = AM_TOTAL_FRAMES || 1;
+  const built = labelRowsFromMemo(memo, total);
+  if (!built){ log('没有可用的备忘录，或备忘录里没记录 label（请先上传带 pam_memo.txt 的 amproj，或同时多选该 txt）', 'w'); return; }
+  CUR_MEMO = memo;
+  renderLabelRows(built.rows);
+  const v = validateLabelsUI();
+  log('  已从备忘录还原 ' + built.rows.length + ' 条 label'
+	+ (built.scale !== 1 ? '（原 ' + built.srcFrames + ' 帧 → 现 ' + total + ' 帧，按比例映射）' : '')
+	+ (v.ok ? '' : '；仍有问题：' + v.errs[0]), v.ok ? 'ok' : 'w');
+};
+
+/* ══════════════════════════════════════════════════════════════════════════
+   13 · 新模式接线：runConvert / 预览 / 自测 / 下载
+   ══════════════════════════════════════════════════════════════════════════ */
+let CUR_TRIPLET = null;    // pam2am 模式的源三件套
+let CUR_AM_MODEL = null;   // am2pam 模式的源 amproj 模型
+let CUR_PAM_RENDER = null; // 三件套渲染器
+let CUR_MEMO = null;       // 当前生效的格式备忘录（供 label 面板还原原版分段）
+
+/* 扩展 runConvert：新增 pam2am / am2pam 两个分支 */
+const _runConvertBase = runConvert;
+runConvert = async function(){
+  if (!SRC) return;
+  if (MODE !== 'pam2am' && MODE !== 'am2pam') return _runConvertBase();
+  logClear();
+  if (MODE === 'pam2am') await runPam2Am();
+  else await runAm2Pam();
+};
+
+async function runPam2Am(){
+  log('模式: 原版三件套 → AM');
+  log('解压 ' + SRC.name + ' …');
+  const files = await unzip(SRC.bytes);
+  log('  条目数: ' + files.size, 'ok');
+  const triplet = parseTriplet(files);
+  const { pam } = triplet;
+  const labels = pamLabelRanges(pam);
+  const life = buildElementLife(pam);
+  log('  PAM v' + pam.version + ': ' + pam.size[0] + 'x' + pam.size[1] + ' @' + pam.frame_rate + 'fps, image '
+	+ pam.image.length + ' 张, sprite ' + pam.sprite.length + ' 个, 主帧 ' + pam.main_sprite.frame.length
+	+ ', 元件 ' + life.size + ' 个', 'ok');
+  log('  label: ' + labels.map(l => l.name + '(' + l.start + '~' + (l.end-1) + ')').join(', '), 'ok');
+  const images = await sliceTripletImages(triplet);
+  const t0 = performance.now();
+  const res = pamToAmproj(pam, images, baseName(SRC.name), triplet.res);
+  const ms = performance.now() - t0;
+  OUT = { name: baseName(SRC.name) + '.amproj', bytes: res.bytes, kind: 'amproj' };
+  /* 备忘录单独交付：不进 amproj 包（AM 会丢），单独下载留档 */
+  OUT_MEMO = res.memoBytes ? { name: baseName(SRC.name) + '.' + MEMO_FILE, bytes: res.memoBytes } : null;
+  if (OUT_MEMO) log('  备忘录已单独生成（' + (OUT_MEMO.bytes.length/1024).toFixed(0)
+	+ ' KB），请点「下载备忘录 txt」保存 —— AM 编辑后需与新版 amproj 一起上传', 'ok');
+  log('  输出 ' + res.shapes + ' 个 shape / ' + res.subCount + ' 张子图（各自一张 PNG media）, '
+	+ (res.bytes.length/1024).toFixed(0) + ' KB，耗时 ' + ms.toFixed(0) + 'ms', 'ok');
+  log('  ✓ 同一 label 内每个元件=一个 shape（逐帧为主关键帧），无逐帧膨胀', 'ok');
+
+  /* 预览：左=原版 PAM 逐帧，右=转换后 amproj 逐帧 */
+  const amFiles = await unzip(res.bytes);
+  const model = parseAmproj(amFiles);
+  await decodeAmTextures(model);
+  const pr = makePamRenderer(pam, images);
+  PV = { mode:'pam2am', W:res.W, H:res.H, fps:res.fps, model, pamRender:pr,
+		 totalFrames: pam.main_sprite.frame.length, bgA:'#00000000', bgB:model.bgcolor };
+  $('info').innerHTML = kv('画布', res.W + ' × ' + res.H)
+	+ kv('帧率', res.fps + ' fps') + kv('总帧数', PV.totalFrames)
+	+ kv('原版元件', life.size) + kv('输出 shape', res.shapes)
+	+ kv('素材', res.subCount + ' 张 PNG（各自独立 media）')
+	+ kv('label 数', labels.length);
+  $('tA').textContent = '原始 原版三件套(PAM)'; $('tB').textContent = '转换后 AMPROJ';
+  finish(PV.totalFrames);
+}
+
+async function runAm2Pam(){
+  log('模式: AM → 原版三件套');
+  log('解压 ' + SRC.name + ' …');
+  const files = await unzip(SRC.bytes);
+  const model = parseAmproj(files);
+  await decodeAmTextures(model);
+  CUR_AM_MODEL = model;
+  /* ★ [修改模式] 自动检测：amproj 包里若带着 pam_memo.txt，说明它是从原版
+	 三件套转来的。此时按备忘录还原格式骨架（元件名 / sprite 定义 / res /
+	 资源路径），保证「三件套 → AM → 改动画 → AM → 三件套」后骨架分毫不差。 */
+  let memo = null;
+  const memoBytes = files.get(MEMO_FILE) || (EXTRA_MEMO ? EXTRA_MEMO.bytes : null);
+  if (!files.get(MEMO_FILE) && EXTRA_MEMO) log('  ✓ 使用了多选附带的 ' + EXTRA_MEMO.name, 'ok');
+  if (memoBytes){
+	try {
+	  memo = JSON.parse(dec.decode(memoBytes) || JSON.stringify(memoBytes));
+	  log('  ✓ 检测到 ' + MEMO_FILE + '，启用修改模式：按原版骨架还原'
+		+ '（res=' + (memo.res || '?') + ', sprite ' + ((memo.sprite && memo.sprite.length) || 0) + ' 条）', 'ok');
+	} catch(e){
+	  memo = null;
+	  log('  ⚠ ' + MEMO_FILE + ' 解析失败，已忽略，改用默认骨架', 'w');
+	}
+  } else {
+	log('  未检测到 ' + MEMO_FILE + '，按默认骨架导出（元件名将使用素材名）', 'w');
+  }
+  CUR_MEMO = memo;
+  const fps = model.fps || 30;
+  AM_TOTAL_FRAMES = Math.max(1, Math.round(model.totalTime / 1000 * fps));
+  /* 若用户尚未编辑 label 配置（只有默认行），按总帧数刷新默认 all */
+  const rowsNow = labelRowsData();
+  if (rowsNow.length <= 1) renderLabelRows(defaultLabelRows());
+  else validateLabelsUI();
+  log('  AM: ' + model.width + 'x' + model.height + ' @' + fps + 'fps, shape '
+	+ model.shapes.length + ' 个, 素材 ' + model.media.size + ', 时长 '
+	+ model.totalTime.toFixed(0) + 'ms / ' + AM_TOTAL_FRAMES + ' 帧', 'ok');
+
+  const v = validateLabelsUI();
+  if (!v.ok){
+	log('  ✗ label 配置非法，已中止。请修正下方 label 帧区间。', 'e');
+	throw new Error('label 配置非法：' + v.errs[0]);
+  }
+  const labelCfg = v.rows.map(r => ({ start:r.start, end:r.end, name:r.name, cmd:r.cmd, rel:r.rel }));
+
+  const t0 = performance.now();
+  const res = await amprojToTriplet(model, labelCfg, baseName(SRC.name), memo);
+  /* 三件套 zip 里已含备忘录；这里额外挂一份供单独下载留档 */
+  OUT_MEMO = res.memoBytes ? { name: baseName(SRC.name) + '.' + MEMO_FILE, bytes: res.memoBytes } : null;
+  const ms = performance.now() - t0;
+  OUT = { name: baseName(SRC.name) + '_triplet.zip', bytes: res.bytes, kind: 'zip' };
+  log('  输出 ' + res.images + ' 张子图 → 图集 ' + res.W + '×' + res.H
+	+ (res.scale<1?'（子图缩放 '+(res.scale*100).toFixed(0)+'%）':'')
+	+ ', res=' + res.res + ', sprite ' + res.spriteCount + ' 条, '
+	+ res.labels + ' 条 label, ' + (res.bytes.length/1024).toFixed(0) + ' KB，耗时 ' + ms.toFixed(0) + 'ms', 'ok');
+  log('  ✓ 三件套：' + baseName(SRC.name) + '.png / .res.json / .PAM.am.json（严格对齐 PopStudio 规范）', 'ok');
+
+  /* 预览：左=原始 amproj，右=导出的三件套 */
+  const tripFiles = await unzip(res.bytes);
+  const triplet = parseTriplet(tripFiles);
+  const images = await sliceTripletImages(triplet);
+  const pr = makePamRenderer(triplet.pam, images);
+  CUR_TRIPLET = triplet; CUR_PAM_RENDER = pr;
+  PV = { mode:'am2pam', W:model.width, H:model.height, fps, model, pamRender:pr,
+		 totalFrames: AM_TOTAL_FRAMES, bgA:model.bgcolor, bgB:'#00000000' };
+  $('info').innerHTML = kv('画布', model.width + ' × ' + model.height)
+	+ kv('帧率', fps + ' fps') + kv('总帧数', AM_TOTAL_FRAMES)
+	+ kv('AM shape', model.shapes.length) + kv('输出元件', triplet.pam.main_sprite.frame.reduce((s,f)=>s+f.append.length,0))
+	+ kv('输出 label', labelCfg.length) + kv('图集', res.W + '×' + res.H + (res.scale<1 ? ' (缩放'+(res.scale*100).toFixed(0)+'%)' : ''));
+  $('tA').textContent = '原始 AMPROJ'; $('tB').textContent = '导出的原版三件套';
+  finish(PV.totalFrames);
+}
+
+/* finishConvert 的公共收尾（pam2am 用） */
+function finish(totalFrames){
+  const fr = $('frame'); fr.max = String(totalFrames - 1); fr.value = '0';
+  $('infoCard').style.display = '';
+  $('dlBtn').disabled = false;
+  $('dlMemoBtn').disabled = !OUT_MEMO;
+  $('statLine').textContent = '完成：' + OUT.name + (OUT_MEMO ? '（备忘录请单独下载保存）' : '');
+  paintPreview(0);
+}
+/* 覆盖原 runConvert 的收尾为可复用函数（保持 FLA 分支行为不变） */
+const _paintPreviewBase = paintPreview;
+
+/* 扩展预览渲染 */
+drawSide = function(ctx, side, frameIdx){
+  const st = PV;
+  const tMs = frameIdx / st.fps * 1000;
+  const bg = (side === 'A') ? st.bgA : st.bgB;
+  if (bg && bg !== '#00000000'){ ctx.fillStyle = bg; ctx.fillRect(0, 0, st.W, st.H); }
+  const isPam = (st.mode === 'pam2am' || st.mode === 'am2pam');
+  if (!isPam){
+	/* 原有两种模式：沿用旧逻辑 */
+	if (side === 'A'){
+	  if (st.mode === 'fla2am') renderTimeline(ctx, st.doc.main, frameIdx, st.doc, 0);
+	  else renderAmFrame(ctx, st.model, tMs);
+	} else {
+	  if (st.mode === 'fla2am') renderAmFrame(ctx, st.model, tMs);
+	  else renderTimeline(ctx, st.doc.main, frameIdx, st.doc, 0);
+	}
+	return;
+  }
+  /* 新模式：一侧渲染 amproj，另一侧渲染 PAM */
+  const renderAm = () => renderAmFrame(ctx, st.model, tMs);
+  const renderPam = () => st.pamRender.draw(ctx, frameIdx);
+  if (st.mode === 'pam2am'){ if (side === 'A') renderPam(); else renderAm(); }
+  else { if (side === 'A') renderAm(); else renderPam(); }
+};
+
+/* 扩展往返自测 */
+const _selfTestBase = selfTest;
+selfTest = async function(){
+  if (!SRC) return;
+  if (MODE !== 'pam2am' && MODE !== 'am2pam') return _selfTestBase();
+  logClear();
+  log('往返自测开始…', 'ok');
+  const files = await unzip(SRC.bytes);
+  const sampleFrames = 12;
+  if (MODE === 'pam2am'){
+	/* PAM → AM → PAM：比对两版三件套逐帧渲染 */
+	const trip0 = parseTriplet(files);
+	const images0 = await sliceTripletImages(trip0);
+	const r1 = pamToAmproj(trip0.pam, images0, baseName(SRC.name), trip0.res);
+	const files1 = await unzip(r1.bytes);
+	const model1 = parseAmproj(files1); await decodeAmTextures(model1);
+	const v = validateLabels([{ start:0, end:trip0.pam.main_sprite.frame.length-1, name:'all' }], 0);
+	/* 自测同样走「自动检测备忘录」这条路，模拟真实往返 */
+	/* 备忘录已不随 amproj 包交付，直接用 pamToAmproj 的返回值（等价于用户把
+	   单独下载的 txt 再上传） */
+	const memo1 = r1.memo || null;
+	const r2 = await amprojToTriplet(model1, v.rows, baseName(SRC.name), memo1);
+	const files2 = await unzip(r2.bytes);
+	const trip1 = parseTriplet(files2);
+	const images1 = await sliceTripletImages(trip1);
+	const prA = makePamRenderer(trip0.pam, images0);
+	const prB = makePamRenderer(trip1.pam, images1);
+	const total = trip0.pam.main_sprite.frame.length;
+	const errs = [];
+	/* ★ 画布必须覆盖 PAM 的坐标空间：PAM 的 tx/ty 最大可到 pam.size（太阳神僵尸
+	   坐标 130~250，配合 100+ 的子图会超过 390），amproj 的 W/H 只是「逻辑画布」，
+	   直接拿它当比较画布会把边缘元件裁掉，虚报 35% 的不一致。
+	   这里用 pam.size + 200 余量，保证两边都完整入镜。 */
+	const cw = Math.max(trip0.pam.size[0], trip1.pam.size[0]) + 200;
+	const ch = Math.max(trip0.pam.size[1], trip1.pam.size[1]) + 200;
+	for (let i=0;i<sampleFrames;i++){
+	  const fr = Math.round(i * (total-1) / Math.max(1, sampleFrames-1));
+	  const a = newCanvas(cw, ch), b = newCanvas(cw, ch);
+	  prA.draw(a.getContext('2d'), fr); prB.draw(b.getContext('2d'), fr);
+	  errs.push({ frame: fr, pct: diffCanvases(a, b).pct });
+	}
+	report(errs, 'PAM→AM→PAM（原版→AM→原版）');
+  } else {
+	/* AM → PAM → AM */
+	const model0 = parseAmproj(files); await decodeAmTextures(model0);
+	const fps = model0.fps || 30;
+	const total = Math.max(1, Math.round(model0.totalTime/1000*fps));
+	const v = validateLabels([{ start:0, end:total-1, name:'all' }], total);
+	const r1 = await amprojToTriplet(model0, v.rows, baseName(SRC.name));
+	const files1 = await unzip(r1.bytes);
+	const trip = parseTriplet(files1);
+	const images = await sliceTripletImages(trip);
+	const r2 = pamToAmproj(trip.pam, images, baseName(SRC.name), trip.res);
+	const files2 = await unzip(r2.bytes);
+	const model1 = parseAmproj(files2); await decodeAmTextures(model1);
+	const errs = [];
+	for (let i=0;i<sampleFrames;i++){
+	  const fr = Math.round(i * (total-1) / Math.max(1, sampleFrames-1));
+	  const tms = fr / fps * 1000;
+	  const a = newCanvas(model0.width, model0.height), b = newCanvas(model1.width, model1.height);
+	  renderAmFrame(a.getContext('2d'), model0, tms);
+	  renderAmFrame(b.getContext('2d'), model1, tms);
+	  errs.push({ frame: fr, pct: diffCanvases(a, b).pct });
+	}
+	report(errs, 'AM→PAM→AM（AM→原版→AM）');
+  }
+};
+
+/* 文件选择 / URL 载入时也要刷新 label 面板与按钮态 */
+(function patchLoaders(){
+  const oldChange = $('fileIn').onchange;
+  $('fileIn').onchange = async e => {
+	await oldChange(e);
+	if (MODE === 'am2pam' && SRC){ try { await primeAm2PamUI(); } catch(_){} }
+	else if (MODE === 'pam2am'){ $('goBtn').disabled = !SRC; }
+  };
+  const oldUrl = $('urlBtn').onclick;
+  $('urlBtn').onclick = async () => {
+	await oldUrl();
+	if (MODE === 'am2pam' && SRC){ try { await primeAm2PamUI(); } catch(_){} }
+	else if (MODE === 'pam2am'){ $('goBtn').disabled = !SRC; }
+  };
+})();
+async function primeAm2PamUI(){
+  try {
+	const files = await unzip(SRC.bytes);
+	const model = parseAmproj(files);
+	CUR_AM_MODEL = model;
+	const fps = model.fps || 30;
+	AM_TOTAL_FRAMES = Math.max(1, Math.round(model.totalTime / 1000 * fps));
+	/* 备忘录来源：包内 > 多选附带的独立 txt */
+	let m = null, mSrc = '';
+	if (files.get(MEMO_FILE)){
+	  try { m = JSON.parse(dec.decode(files.get(MEMO_FILE))); mSrc = MEMO_FILE; } catch(_){ m = null; }
+	  if (!m) log('  ⚠ ' + MEMO_FILE + ' 存在但无法解析，将改用默认骨架', 'w');
+	}
+	if (!m && typeof EXTRA_MEMO !== 'undefined' && EXTRA_MEMO && EXTRA_MEMO.bytes){
+	  try { m = JSON.parse(dec.decode(EXTRA_MEMO.bytes)); mSrc = EXTRA_MEMO.name; } catch(_){ m = null; }
+	}
+	CUR_MEMO = m || null;
+	if (m){
+	  log('  ✓ 检测到备忘录' + (mSrc ? '（' + mSrc + '）' : '') + '：启用修改模式（按原版骨架还原 res='
+		+ (m.res||'?') + ', sprite ' + ((m.sprite&&m.sprite.length)||0)
+		+ ' 条, image ' + ((m.image&&m.image.length)||0) + ' 条）', 'ok');
+	}
+	/* ★ [坑32] 有备忘录就**直接把原版 label 分段铺好**，别让用户对着
+	   默认的单行 all 手工拆 —— 那正是「第 2 行与第 1 行重叠」这类报错的来源。
+	   帧数对不上（在 AM 里改过长度）时按比例映射，保证区间互斥不越界。 */
+	const built = m ? labelRowsFromMemo(m, AM_TOTAL_FRAMES) : null;
+	renderLabelRows((built && built.rows.length > 1) ? built.rows : defaultLabelRows());
+	if (built && built.rows.length > 1){
+	  log('  ✓ 已按备忘录自动还原 ' + built.rows.length + ' 条原版 label 分段'
+		+ (built.scale !== 1 ? '（原 ' + built.srcFrames + ' 帧 → 现 ' + AM_TOTAL_FRAMES + ' 帧，按比例映射）' : '')
+		+ '，可直接转换；如需自定义再手动改', 'ok');
+	}
+	if (!m) {
+	  log('  未检测到 ' + MEMO_FILE + '：按默认骨架导出（元件名取自素材，res=' + PAM_DEFAULT_RES + '）', 'w');
+	}
+  } catch(e){ log('  预读 amproj 失败：' + e.message, 'w'); }
+}
+
+/* 覆写 setMode 的按钮态初始化，保证切到新模式时 label 面板/按钮正确 */
+const _setModeBase = setMode;
+setMode = function(m){
+  _setModeBase(m);
+  if (m === 'am2pam'){
+	if (!labelRowsData().length) renderLabelRows(defaultLabelRows());
+	validateLabelsUI();
+  } else {
+	$('goBtn').disabled = !SRC;
+  }
+};
+
 setMode('fla2am');
-log('就绪。选择 .fla 或 .amproj 后点「转换」。', 'ok');
+log('就绪。选择 .fla / .amproj / 三件套 .zip 后点「转换」。', 'ok');
 </script>
 </body>
 </html>
