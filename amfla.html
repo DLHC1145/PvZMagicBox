@@ -327,7 +327,7 @@ function zipStore(entries){
    dat ≠ PNG，布局为：32B 头 + raw deflate(预乘BGRA) + adler32(大端) + 0000。
    若把 PNG 原样塞进 dat，Animate 解析失败 → 位图全部打不开（这正是"只选 am 全炸"的根因）。
    头部字段（小端）：[0]=03 [1]=05 [2:4]=W*4 [4:6]=W [6:8]=H [12:16]=W*20(twips)
-                     [20:24]=H*20(twips) [24:28]=01 01 02 00 [28:30]=78 01 [30:32]=deflate长+4 */
+					 [20:24]=H*20(twips) [24:28]=01 01 02 00 [28:30]=78 01 [30:32]=deflate长+4 */
 function adler32(bytes){
   let a = 1, b = 0;
   for (let i = 0; i < bytes.length; i++){ a = (a + bytes[i]) % 65521; b = (b + a) % 65521; }
@@ -344,15 +344,15 @@ async function decodePngRgba(bytes){
   let pos = 8, W = 0, H = 0, depth = 8, ctype = 6, interlace = 0, plte = null, trns = null;
   const idat = [];
   while (pos + 8 <= bytes.length){
-    const len = dv.getUint32(pos);
-    const type = String.fromCharCode(bytes[pos+4], bytes[pos+5], bytes[pos+6], bytes[pos+7]);
-    const data = bytes.subarray(pos + 8, pos + 8 + len);
-    if (type === 'IHDR'){ W = dv.getUint32(pos+8); H = dv.getUint32(pos+12); depth = bytes[pos+16]; ctype = bytes[pos+17]; interlace = bytes[pos+18]; }
-    else if (type === 'PLTE') plte = data;
-    else if (type === 'tRNS') trns = data;
-    else if (type === 'IDAT') idat.push(data);
-    else if (type === 'IEND') break;
-    pos += 12 + len;
+	const len = dv.getUint32(pos);
+	const type = String.fromCharCode(bytes[pos+4], bytes[pos+5], bytes[pos+6], bytes[pos+7]);
+	const data = bytes.subarray(pos + 8, pos + 8 + len);
+	if (type === 'IHDR'){ W = dv.getUint32(pos+8); H = dv.getUint32(pos+12); depth = bytes[pos+16]; ctype = bytes[pos+17]; interlace = bytes[pos+18]; }
+	else if (type === 'PLTE') plte = data;
+	else if (type === 'tRNS') trns = data;
+	else if (type === 'IDAT') idat.push(data);
+	else if (type === 'IEND') break;
+	pos += 12 + len;
   }
   if (depth !== 8) throw new Error('暂不支持 ' + depth + 'bit PNG');
   if (interlace) throw new Error('暂不支持隔行 PNG');
@@ -366,56 +366,56 @@ async function decodePngRgba(bytes){
   const up = new Uint8Array(H * stride);
   let p = 0;
   for (let y = 0; y < H; y++){
-    const f = raw[p++], row = y * stride;
-    for (let x = 0; x < stride; x++){
-      const r = raw[p++];
-      const left = x >= chan ? up[row + x - chan] : 0;
-      const upv = y > 0 ? up[row - stride + x] : 0;
-      const ul = (y > 0 && x >= chan) ? up[row - stride + x - chan] : 0;
-      let v;
-      if (f === 0) v = r;
-      else if (f === 1) v = r + left;
-      else if (f === 2) v = r + upv;
-      else if (f === 3) v = r + ((left + upv) >> 1);
-      else {
-        const pa = Math.abs(upv - ul), pb = Math.abs(left - ul), pc = Math.abs(left + upv - 2*ul);
-        v = r + ((pa <= pb && pa <= pc) ? left : (pb <= pc ? upv : ul));
-      }
-      up[row + x] = v & 0xFF;
-    }
+	const f = raw[p++], row = y * stride;
+	for (let x = 0; x < stride; x++){
+	  const r = raw[p++];
+	  const left = x >= chan ? up[row + x - chan] : 0;
+	  const upv = y > 0 ? up[row - stride + x] : 0;
+	  const ul = (y > 0 && x >= chan) ? up[row - stride + x - chan] : 0;
+	  let v;
+	  if (f === 0) v = r;
+	  else if (f === 1) v = r + left;
+	  else if (f === 2) v = r + upv;
+	  else if (f === 3) v = r + ((left + upv) >> 1);
+	  else {
+		const pa = Math.abs(upv - ul), pb = Math.abs(left - ul), pc = Math.abs(left + upv - 2*ul);
+		v = r + ((pa <= pb && pa <= pc) ? left : (pb <= pc ? upv : ul));
+	  }
+	  up[row + x] = v & 0xFF;
+	}
   }
   const out = new Uint8ClampedArray(W * H * 4);
   for (let i = 0, j = 0; i < W * H; i++, j += 4){
-    const o = i * chan;
-    if (ctype === 6){ out[j]=up[o]; out[j+1]=up[o+1]; out[j+2]=up[o+2]; out[j+3]=up[o+3]; }
-    else if (ctype === 2){ out[j]=up[o]; out[j+1]=up[o+1]; out[j+2]=up[o+2]; out[j+3]=255; }
-    else if (ctype === 0){ out[j]=out[j+1]=out[j+2]=up[o]; out[j+3]=255; }
-    else if (ctype === 4){ out[j]=out[j+1]=out[j+2]=up[o]; out[j+3]=up[o+1]; }
-    else {
-      const idx = up[o]*3;
-      out[j]=plte[idx]; out[j+1]=plte[idx+1]; out[j+2]=plte[idx+2];
-      out[j+3]=(trns && up[o] < trns.length) ? trns[up[o]] : 255;
-    }
+	const o = i * chan;
+	if (ctype === 6){ out[j]=up[o]; out[j+1]=up[o+1]; out[j+2]=up[o+2]; out[j+3]=up[o+3]; }
+	else if (ctype === 2){ out[j]=up[o]; out[j+1]=up[o+1]; out[j+2]=up[o+2]; out[j+3]=255; }
+	else if (ctype === 0){ out[j]=out[j+1]=out[j+2]=up[o]; out[j+3]=255; }
+	else if (ctype === 4){ out[j]=out[j+1]=out[j+2]=up[o]; out[j+3]=up[o+1]; }
+	else {
+	  const idx = up[o]*3;
+	  out[j]=plte[idx]; out[j+1]=plte[idx+1]; out[j+2]=plte[idx+2];
+	  out[j+3]=(trns && up[o] < trns.length) ? trns[up[o]] : 255;
+	}
   }
   return { w: W, h: H, data: out };
 }
 /* 把 PNG 打包成 Animate 原生 dat。
    实测格式（26 个原版样本逆向 + Animate 打开验证）：
    - 32B 头: [0]=3 [1]=5 [2:4]=W*4 [4:6]=W [6:8]=H [12:16]=W*20 [20:24]=H*20
-             [24:28]=01 01 02 00 [28:30]=78 01 [30:32]=首段长
+			 [24:28]=01 01 02 00 [28:30]=78 01 [30:32]=首段长
    - 像素: ARGB 预乘（byte0=A，RGB 预乘 alpha）——与 SWF DefineBitsLossless2 fmt5 一致
    - 数据区: 完整 zlib(78 01+deflate+adler32BE) 去掉头两字节后按 ≤2048 链式分段:
-             [首段][u16 段长][段数据]...[u16 0]（单段时 clen=数据长，后跟 0000） */
+			 [首段][u16 段长][段数据]...[u16 0]（单段时 clen=数据长，后跟 0000） */
 async function makeFlaDat(pngBytes){
   const img = await decodePngRgba(pngBytes);
   const { w, h } = img, s = img.data;
   const px = new Uint8Array(w * h * 4);
   for (let i = 0, j = 0; i < s.length; i += 4, j += 4){
-    const a = s[i+3];
-    px[j]   = a;                               /* A */
-    px[j+1] = (s[i]   * a + 127) / 255 | 0;    /* R 预乘 */
-    px[j+2] = (s[i+1] * a + 127) / 255 | 0;    /* G 预乘 */
-    px[j+3] = (s[i+2] * a + 127) / 255 | 0;    /* B 预乘 */
+	const a = s[i+3];
+	px[j]   = a;                               /* A */
+	px[j+1] = (s[i]   * a + 127) / 255 | 0;    /* R 预乘 */
+	px[j+2] = (s[i+1] * a + 127) / 255 | 0;    /* G 预乘 */
+	px[j+3] = (s[i+2] * a + 127) / 255 | 0;    /* B 预乘 */
   }
   const def = await deflateRawBytes(px);
   const body = new Uint8Array(def.length + 4);          /* deflate + adler32(大端) */
@@ -437,10 +437,10 @@ async function makeFlaDat(pngBytes){
   dv.setUint16(30, Math.min(body.length, SEGSZ), true);
   let src = 0, dst = 32;
   for (let k = 0; k < nSeg; k++){
-    const n = Math.min(SEGSZ, body.length - src);
-    out.set(body.subarray(src, src + n), dst);
-    src += n; dst += n;
-    if (k + 1 < nSeg){ dv.setUint16(dst, Math.min(SEGSZ, body.length - src), true); dst += 2; }
+	const n = Math.min(SEGSZ, body.length - src);
+	out.set(body.subarray(src, src + n), dst);
+	src += n; dst += n;
+	if (k + 1 < nSeg){ dv.setUint16(dst, Math.min(SEGSZ, body.length - src), true); dst += 2; }
   }
   dv.setUint16(dst, 0, true);                           /* 结束标记 */
   return out;
@@ -1842,6 +1842,249 @@ function trackAt(track, u, def){
   }
   return last.v.slice();
 }
+/* ═══ [嵌套合成修复] 助手：ARGB / 特效属性采样 / 父链矩阵 / 矢量光栅化 ═══ */
+function argbColor(sv){
+  if (!sv) return [1,1,1,1];
+  let h = String(sv).trim().replace(/^#/, '');
+  if (h.length === 6) h = 'ff' + h;
+  if (h.length !== 8) return [1,1,1,1];
+  const v = parseInt(h, 16);
+  if (isNaN(v)) return [1,1,1,1];
+  return [((v>>16)&255)/255, ((v>>8)&255)/255, (v&255)/255, ((v>>24)&255)/255];
+}
+function amPropNum(p, u, def){
+  if (p.kfs && p.kfs.length) return trackAt({ kfs: p.kfs }, u, def);
+  const v = String(p.raw || '').split(',').map(Number);
+  return (v.length && v.every(x => isFinite(x))) ? v : def;
+}
+function amNodeMatrixAt(nd, tGlob){
+  const tLoc = nd.remap ? nd.remap(tGlob) : tGlob;
+  const span = Math.max(1, nd.t1 - nd.t0);
+  const u = Math.min(1, Math.max(0, (tLoc - nd.t0) / span));
+  const loc = trackAt(nd.loc, u, [0,0,0]);
+  const scl = trackAt(nd.scl, u, [1,1]);
+  const rot = trackAt(nd.rot, u, [0]);
+  const skw = trackAt(nd.skw, u, [0,0]);
+  let m = composeTrs(rot[0]*Math.PI/180, scl[0], scl[1], skw[0], skw[1], loc[0], loc[1]);
+  if (nd.piv && nd.piv.kfs.length){
+    const p = trackAt(nd.piv, u, [0,0]);
+    if (p[0] || p[1]) m = matMul(m, [1,0,0,1, -(p[0]||0), -(p[1]||0)]);
+  }
+  let op = 1;
+  if (nd.op && nd.op.kfs.length){ const o = trackAt(nd.op, u, [1])[0]; op = isFinite(o) ? o : 1; }
+  return { m, op };
+}
+function amChainAt(chain, tGlob){
+  let m = null, op = 1;
+  for (const nd of chain){
+    const r = amNodeMatrixAt(nd, tGlob);
+    m = m ? matMul(m, r.m) : r.m;
+    op *= r.op;
+  }
+  return { m, op };
+}
+/* 特效采样（预览级）→ { sclMul, preM, raster:[...], unsupported:[...] } */
+function amSampleEffects(sh, u, warned){
+  const out = { sclMul: [1,1], preM: null, raster: [], unsupported: [] };
+  for (const ef of (sh.effects || [])){
+    const short = (ef.id || '').split('.').pop();
+    const P = (n, d) => { const p = ef.props.find(x => x.name === n); return p ? amPropNum(p, u, d) : d; };
+    const PS = (n, d) => { const p = ef.props.find(x => x.name === n); return p ? p.raw : d; };
+    if (short === 'scaleassist'){
+      const s = P('scale', [1])[0] || 1; const ax = P('axis', [0])[0] | 0;
+      if (ax === 1) out.sclMul[0] *= s; else if (ax === 2) out.sclMul[1] *= s;
+      else { out.sclMul[0] *= s; out.sclMul[1] *= s; }
+    } else if (short === 'transform2'){
+      const px = P('posx',[0])[0]||0, py = P('posy',[0])[0]||0, ang = P('angle',[0])[0]||0;
+      const sx2 = P('scalex',[1])[0]||1, sy2 = P('scaley',[1])[0]||1;
+      const m2 = composeTrs(ang*Math.PI/180, sx2, sy2, 0, 0, px, py);
+      out.preM = out.preM ? matMul(out.preM, m2) : m2;
+    } else if (short === 'jitter'){
+      const mag = P('mag',[0])[0]||0, fr = P('freq',[0])[0]||0, sd = P('seed',[0])[0]||0, ang = P('angle',[0])[0]||0;
+      if (mag){
+        const ph = 2*Math.PI*fr*u + sd*7;
+        const dx = mag*Math.cos(ang*Math.PI/180)*Math.sin(ph);
+        const dy = mag*Math.sin(ang*Math.PI/180)*Math.cos(ph);
+        const m2 = [1,0,0,1,dx,dy];
+        out.preM = out.preM ? matMul(out.preM, m2) : m2;
+      }
+    } else if (short === 'pixelate2'){
+      const ps = Math.max(1, P('size',[1])[0]||1);
+      if (ps > 1.01) out.raster.push({ kind: 'pixelate', ps });
+    } else if (short === 'threshold'){
+      const t = P('threshold',[0.5])[0]!==undefined?P('threshold',[0.5])[0]:0.5;
+      const f = P('feather',[0])[0]||0;
+      const iv = PS('invert','false');
+      out.raster.push({ kind: 'threshold', t, f, inv: /^(true|1)$/i.test(String(iv)) });
+    } else if (short === 'palettemap'){
+      const cols = [];
+      for (let i=1;i<=8;i++){ const c = PS('color'+i, null); if (c) cols.push(argbColor(c)); }
+      const a = P('alpha',[1])[0]; const alpha = (a===undefined||!isFinite(a))?1:a;
+      const npal = Math.max(1, Math.min(cols.length, P('palette',[cols.length])[0] | 0 || cols.length));
+      out.raster.push({ kind: 'palette', cols: cols.slice(0, npal), alpha });
+    } else if (short === 'gaussianblur'){
+      const st = P('strength',[0])[0]||0;
+      if (st > 0.05) out.raster.push({ kind: 'blur', r: st });
+    } else if (short === 'chromakey-adv'){
+      const keys = [];
+      for (let i=1;i<=4;i++){
+        const c = PS('c'+i+'color', null); if (!c) continue;
+        const md = PS('c'+i+'mode','key');
+        if (/^off$/i.test(String(md))) continue;
+        keys.push({ col: argbColor(c), tol: P('c'+i+'threshold',[0])[0]||0, f: P('c'+i+'feather',[0])[0]||0 });
+      }
+      if (keys.length) out.raster.push({ kind: 'chroma', keys });
+    } else if (short === 'chromakey'){
+      out.raster.push({ kind: 'chroma', keys: [{ col: argbColor(PS('keyColor','#ff00ff00')),
+        tol: P('threshold',[0.2])[0]||0, f: P('feather',[0.05])[0]||0 }] });
+    } else if (short === 'softglow'){
+      /* 辉光：模糊+提亮副本以 lighter 叠加（预览近似） */
+      out.raster.push({ kind: 'glow',
+        strength: P('strength',[1])[0], brightness: P('brightness',[0])[0],
+        blend: P('blend',[0])[0], outsideAlpha: P('outsideAlpha',[0])[0] });
+    } else if (short === 'looks-blink'){
+      const frq = P('freq',[0])[0]||0, fl = P('fill',[0])[0]||0, ex = P('exposure',[0])[0]||0;
+      const ofs = P('offset',[0])[0]||0;
+      out.raster.push({ kind: 'blink', frq, fill: fl, exposure: ex, offset: ofs });
+    } else if (short === 'line'){
+      const cnt = P('count',[1])[0]|0;
+      if (cnt !== 1 && out.unsupported.indexOf(ef.id) < 0) out.unsupported.push(ef.id || short);
+    } else if (short){
+      if (out.unsupported.indexOf(ef.id) < 0) out.unsupported.push(ef.id || short);
+    }
+  }
+  if (warned){
+    for (const idd of out.unsupported){
+      if (!warned.has(idd)){ warned.add(idd); log('  ⚠ 特效暂不支持（已忽略）: ' + String(idd).split('.').pop(), 'w'); }
+    }
+  }
+  return out;
+}
+/* 矢量路径 d="M x y L x y C .. Z" 光栅化 → { cv, w, h }（w/h 为局部单位） */
+function amRasterPath(d, col, psEl){
+  const toks = String(d).match(/[MLCQZmlcqz]|-?\d*\.?\d+(?:[eE][-+]?\d+)?/g);
+  if (!toks || !toks.length) return null;
+  const segs = []; let i = 0; let cmd = null;
+  const num = () => { const v = parseFloat(toks[i++]); return isFinite(v) ? v : 0; };
+  while (i < toks.length){
+    const t = toks[i];
+    if (/^[A-Za-z]$/.test(t)){ cmd = t.toUpperCase(); i++; if (cmd === 'Z'){ segs.push(['Z']); cmd = null; } continue; }
+    if (cmd === 'M'){ segs.push(['M', num(), num()]); cmd = 'L'; }
+    else if (cmd === 'L') segs.push(['L', num(), num()]);
+    else if (cmd === 'C') segs.push(['C', num(), num(), num(), num(), num(), num()]);
+    else if (cmd === 'Q'){ const ax = num(), ay = num(), bx = num(), by = num(); segs.push(['C', ax, ay, ax, ay, bx, by]); }
+    else i++;
+  }
+  if (!segs.length) return null;
+  const strokeW = psEl ? Math.max(0.1, atF(ch(psEl,'size'),'value', 1) || 0) : 0;
+  const pad = strokeW ? strokeW / 2 + 1 : 0.5;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const sg of segs){
+    for (let k = 1; k < sg.length; k += 2){
+      const x = sg[k], y = sg[k+1];
+      if (!isFinite(x) || !isFinite(y)) continue;
+      if (x < x0) x0 = x; if (x > x1) x1 = x;
+      if (y < y0) y0 = y; if (y > y1) y1 = y;
+    }
+  }
+  if (!isFinite(x0)) return null;
+  const bw = (x1 - x0) + pad*2, bh = (y1 - y0) + pad*2;
+  const kk = Math.min(1, 1024 / Math.max(bw, bh));
+  const cv = newCanvas(Math.max(2, Math.round(bw*kk)), Math.max(2, Math.round(bh*kk)));
+  const g = cv.getContext('2d');
+  g.scale(kk, kk);
+  g.translate(pad - x0, pad - y0);
+  g.beginPath();
+  for (const sg of segs){
+    if (sg[0] === 'M') g.moveTo(sg[1], sg[2]);
+    else if (sg[0] === 'L') g.lineTo(sg[1], sg[2]);
+    else if (sg[0] === 'C') g.bezierCurveTo(sg[1], sg[2], sg[3], sg[4], sg[5], sg[6]);
+    else if (sg[0] === 'Z') g.closePath();
+  }
+  const rgba = (c) => 'rgba(' + Math.round(c[0]*255) + ',' + Math.round(c[1]*255) + ',' + Math.round(c[2]*255) + ',' + c[3] + ')';
+  if (strokeW){
+    g.strokeStyle = rgba(col); g.lineWidth = strokeW; g.lineJoin = 'round'; g.stroke();
+  } else {
+    g.fillStyle = rgba(col); g.fill();
+  }
+  return { cv, w: bw, h: bh };
+}
+/* 特效像素级处理：pixelate / threshold / palettemap / chromakey / blink */
+function amRasterizeEffects(tex, sx, sy, cw, chh, fx, u){
+  const k = Math.min(1, 1024 / Math.max(cw, chh, 1));
+  const W = Math.max(1, Math.round(cw*k)), H = Math.max(1, Math.round(chh*k));
+  const cv = newCanvas(W, H);
+  const g = cv.getContext('2d');
+  for (const r of fx){
+    if (r.kind === 'blur') g.filter = 'blur(' + (r.r*k).toFixed(2) + 'px)';
+  }
+  g.drawImage(tex, sx, sy, cw, chh, 0, 0, W, H);
+  g.filter = 'none';
+  for (const r of fx){
+    if (r.kind === 'glow'){
+      const bc = newCanvas(W, H); const bx = bc.getContext('2d');
+      const rad = Math.min(24, 4 + 18 * Math.max(0, Math.min(1, r.strength === undefined ? 1 : r.strength)));
+      bx.filter = 'blur(' + rad.toFixed(1) + 'px) brightness(' + (1 + Math.max(0, r.brightness || 0)).toFixed(2) + ')';
+      bx.drawImage(cv, 0, 0);
+      g.globalCompositeOperation = 'lighter';
+      g.globalAlpha = Math.min(1, ((r.blend || 0) + (r.outsideAlpha === undefined ? 0.6 : r.outsideAlpha)) * Math.max(0.2, Math.min(1, r.strength === undefined ? 1 : r.strength)));
+      g.drawImage(bc, 0, 0);
+      g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1;
+    } else if (r.kind === 'pixelate'){
+      const ps = Math.max(2, Math.round(r.ps*k));
+      const sw = Math.max(1, Math.round(W/ps)), shh = Math.max(1, Math.round(H/ps));
+      const sm = newCanvas(sw, shh); const sg = sm.getContext('2d');
+      sg.imageSmoothingEnabled = true; sg.drawImage(cv, 0, 0, sw, shh);
+      g.imageSmoothingEnabled = false; g.clearRect(0,0,W,H); g.drawImage(sm, 0, 0, sw, shh, 0, 0, W, H);
+      g.imageSmoothingEnabled = true;
+    } else if (r.kind === 'threshold' || r.kind === 'palette' || r.kind === 'chroma'){
+      let img;
+      try { img = g.getImageData(0, 0, W, H); } catch(e){ continue; }
+      const d = img.data;
+      for (let pi = 0; pi < d.length; pi += 4){
+        if (d[pi+3] === 0) continue;
+        if (r.kind === 'threshold'){
+          const lum = (0.2126*d[pi] + 0.7152*d[pi+1] + 0.0722*d[pi+2]) / 255;
+          const on = r.inv ? lum < r.t : lum > r.t;
+          const v = on ? 255 : 0;
+          d[pi] = d[pi+1] = d[pi+2] = v;
+        } else if (r.kind === 'palette'){
+          if (!r.cols.length) continue;
+          let best = r.cols[0], bd = Infinity;
+          for (const c of r.cols){
+            const dd = (d[pi]-c[0]*255)*(d[pi]-c[0]*255) + (d[pi+1]-c[1]*255)*(d[pi+1]-c[1]*255) + (d[pi+2]-c[2]*255)*(d[pi+2]-c[2]*255);
+            if (dd < bd){ bd = dd; best = c; }
+          }
+          const a = Math.max(0, Math.min(1, r.alpha));
+          d[pi]   = d[pi]   + (best[0]*255 - d[pi]) * a;
+          d[pi+1] = d[pi+1] + (best[1]*255 - d[pi+1]) * a;
+          d[pi+2] = d[pi+2] + (best[2]*255 - d[pi+2]) * a;
+        } else if (r.kind === 'chroma'){
+          for (const kk of r.keys){
+            const dd = Math.sqrt((d[pi]-kk.col[0]*255)*(d[pi]-kk.col[0]*255) + (d[pi+1]-kk.col[1]*255)*(d[pi+1]-kk.col[1]*255) + (d[pi+2]-kk.col[2]*255)*(d[pi+2]-kk.col[2]*255));
+            const t0 = kk.tol*255, t1 = t0 + Math.max(1, kk.f*255);
+            if (dd <= t1) d[pi+3] = Math.min(d[pi+3], Math.round(255 * Math.max(0, (dd - t0) / (t1 - t0))));
+          }
+        }
+      }
+      g.putImageData(img, 0, 0);
+    } else if (r.kind === 'blink'){
+      const frq = r.frq || 0, fl = Math.max(0, Math.min(1, r.fill||0)), ex = r.exposure||0;
+      if (frq > 0 && (fl > 0 || ex !== 0)){
+        const ph = ((u * frq + (r.offset||0)) % 1 + 1) % 1;
+        if (ph < fl){
+          const f = 1 + Math.max(0, ex) * (1 - ph/fl);
+          g.globalCompositeOperation = 'source-atop';
+          g.fillStyle = 'rgba(255,255,255,' + Math.max(0, Math.min(1, (f-1)/Math.max(0.001,f))) + ')';
+          g.fillRect(0, 0, W, H);
+          g.globalCompositeOperation = 'source-over';
+        }
+      }
+    }
+  }
+  return cv;
+}
+
 function parseAmproj(files){
   let xmlBytes = null;
   for (const prefer of ['converted-from-fla.xml', 'project.xml']){
@@ -1852,8 +2095,8 @@ function parseAmproj(files){
   const root = parseXml(xmlBytes).documentElement;
   const model = {
 	title: at(root,'title',''), width: atI(root,'width',390), height: atI(root,'height',390),
-	fps: atF(root,'fps',30) || 30, totalTime: atF(root,'totalTime',0), bgcolor: at(root,'bgcolor','#000000'),
-	shapes: [], media: new Map(), textures: new Map(), xmlBytes,
+	fps: atF(root,'fps',30) || 30, totalTime: atF(root,'totalTime',0), bgcolor: at(root,'bgcolor','#00000000'),
+	shapes: [], media: new Map(), textures: new Map(), xmlBytes, warnings: [],
   };
   for (const m of chs(root,'media')){
 	let fn = at(m,'filename','');
@@ -1862,40 +2105,180 @@ function parseAmproj(files){
 	if (!bytes){ const b = fn.split('/').pop(); bytes = files.get(b) || files.get(decodeURIComponent(fn)); }
 	if (bytes) model.media.set(fn, bytes);
   }
-  for (const sh of chs(root,'shape')){
-	const tr = ch(sh,'transform');
-	const sz = ch(sh,'property') && at(ch(sh,'property'),'name','') === 'size' ? ch(sh,'property') : null;
-	let sizeEl = null;
-	for (const p of chs(sh,'property')) if (at(p,'name','') === 'size') sizeEl = p;
-	let hw = 100, hh = 100;
-	if (sizeEl){ const sv = at(sizeEl,'value','').split(',').map(Number); if (sv.length >= 2){ hw = sv[0]; hh = sv[1]; } }
-	if (!tr) continue;
-	/* 解析 s=".rect(x, y, w, h)"（本工具导出的图集模式）或 s=".rect"（旧式整图） */
-	let rect = null;
-	const sAttr = at(sh,'s','');
+  const warnMsgs = new Set();
+  const warn = (msg) => { if (!warnMsgs.has(msg)){ warnMsgs.add(msg); model.warnings.push(msg); } };
+  const usedIds = new Set();
+  function uniqId(id){
+	let n = parseInt(id, 10); if (!isFinite(n)) n = 900000000 + usedIds.size;
+	while (usedIds.has(n)) n = 900000000 + usedIds.size;
+	usedIds.add(n); return n;
+  }
+  /* 特效属性 → { name, raw, kfs }（kfs t 为 0..1 归一化，与轨道一致） */
+  function parseEffectProps(ef){
+	const props = [];
+	for (const p of chs(ef,'property')){
+	  const kfs = [];
+	  for (const kf of chs(p,'kf')){
+		const v = at(kf,'v','').split(',').map(Number);
+		kfs.push({ t: atF(kf,'t',0), v, ease: null });
+	  }
+	  kfs.sort((a,b)=>a.t-b.t);
+	  props.push({ name: at(p,'name',''), raw: at(p,'value',''), kfs });
+	}
+	return props;
+  }
+  function nodeOf(el, nt){
+	const tr = ch(el,'transform');
+	const st = atF(el,'startTime',0);
+	return { loc: parseTrack(tr,'location'), scl: parseTrack(tr,'scale'), rot: parseTrack(tr,'rotation'),
+		skw: parseTrack(tr,'skew'), piv: parseTrack(tr,'pivot'), op: parseTrack(tr,'opacity'),
+		t0: st, t1: Math.max(st + 1, atF(el,'endTime', nt || model.totalTime || 1000)) };
+  }
+  /* 纯色 / 矢量 shape → 合成 PNG 纹理，走与位图完全相同的下游管线 */
+  function synthTexture(el, sid){
+	const pth = ch(el,'path');
+	const colEl = ch(el,'fillColor');
+	let w = 0, h = 0;
+	for (const p of chs(el,'property')) if (at(p,'name','')==='size'){
+	  const sv = at(p,'value','').split(',').map(Number);
+	  if (sv.length>=2){ w = Math.abs(sv[0])*2; h = Math.abs(sv[1])*2; }
+	}
+	const col = argbColor(colEl ? at(colEl,'value','#ff000000') : '#ff000000');
+	let cv = null;
+	if (pth && at(pth,'d','')){
+	  const geo = amRasterPath(at(pth,'d',''), col, ch(el,'path-stroke'));
+	  if (!geo) return null;
+	  cv = geo.cv; w = geo.w; h = geo.h;
+	} else if (at(el,'s','') === '.circle'){
+	  /* 圆形原语：AM 新建默认圆 直径约200（halfW=100） */
+	  const R = (w > 0 ? w : 200) / 2;
+	  cv = newCanvas(Math.max(2, Math.round(R*2)), Math.max(2, Math.round(R*2)));
+	  const cx3 = cv.getContext('2d');
+	  cx3.fillStyle = 'rgba(' + Math.round(col[0]*255) + ',' + Math.round(col[1]*255) + ',' + Math.round(col[2]*255) + ',' + col[3] + ')';
+	  cx3.beginPath(); cx3.arc(cv.width/2, cv.height/2, Math.max(1, cv.width/2 - 1), 0, Math.PI*2); cx3.fill();
+	  w = R*2; h = R*2;
+	} else if (w > 0 && h > 0){
+	  cv = newCanvas(Math.max(2, Math.round(w)), Math.max(2, Math.round(h)));
+	  const cx2 = cv.getContext('2d');
+	  cx2.fillStyle = 'rgba(' + Math.round(col[0]*255) + ',' + Math.round(col[1]*255) + ',' + Math.round(col[2]*255) + ',' + col[3] + ')';
+	  cx2.fillRect(0, 0, cv.width, cv.height);
+	} else return null;
+	const bytes = canvasPng(cv);
+	const name = '__synth_' + sid + '.png';
+	model.media.set(name, bytes);
+	return { img: name, halfW: w/2, halfH: h/2 };
+  }
+  function buildShape(el, env, pchain){
+	const tr = ch(el,'transform');
+	const fillType = at(el,'fillType','media');
+	let img = at(el,'fillImage','').replace('amproj:','');
+	let hw = 100, hh = 100, rect = null;
+	for (const p of chs(el,'property')) if (at(p,'name','')==='size'){
+	  const sv = at(p,'value','').split(',').map(Number);
+	  if (sv.length>=2){ hw = sv[0]; hh = sv[1]; }
+	}
+	const sAttr = at(el,'s','');
 	const rm = /\.rect\s*\(\s*([-\d.]+)\s*,\s*([-\d.]+)\s*,\s*([-\d.]+)\s*,\s*([-\d.]+)\s*\)/.exec(sAttr);
 	if (rm) rect = [ +rm[1], +rm[2], +rm[3], +rm[4] ];
-	model.shapes.push({
-	  id: atI(sh,'id',0), label: at(sh,'label',''), img: at(sh,'fillImage','').replace('amproj:',''),
-	  t0: atF(sh,'startTime',0), t1: atF(sh,'endTime', model.totalTime),
-	  halfW: hw, halfH: hh, rect,
+	if (fillType === 'media'){
+	  if (!img || !model.media.has(img)){
+		warn('素材缺失: ' + (img || '(空)') + '（图层已跳过: ' + at(el,'label','') + '）');
+		return null;
+	  }
+	} else if (fillType === 'color' || fillType === 'none'){
+	  const sy = synthTexture(el, at(el,'id', String(usedIds.size)));
+	  if (!sy){ warn('矢量/纯色图层无法光栅化（无 path 且无 size），已跳过: ' + at(el,'label','')); return null; }
+	  img = sy.img; hw = sy.halfW; hh = sy.halfH;
+	} else {
+	  warn('未知 fillType=' + fillType + '，按 media 处理: ' + at(el,'label',''));
+	}
+	const t0 = atF(el,'startTime',0);
+	const t1 = Math.max(t0 + 1, atF(el,'endTime', env.nt || model.totalTime || 1000));
+	const effects = [];
+	for (const ef of chs(el,'effect')) effects.push({ id: at(ef,'id',''), props: parseEffectProps(ef) });
+	if (effects.length) model.hasEffects = true;
+	const sh = {
+	  id: uniqId(at(el,'id','')), label: at(el,'label',''), img,
+	  t0, t1, halfW: hw, halfH: hh, rect,
 	  loc: parseTrack(tr,'location'), scl: parseTrack(tr,'scale'),
 	  rot: parseTrack(tr,'rotation'), skw: parseTrack(tr,'skew'),
-	});
+	  piv: parseTrack(tr,'pivot'), op: parseTrack(tr,'opacity') || parseTrack(el,'opacity'),
+	  effects, chain: env.chain.concat(pchain), remap: env.remap, unremap: env.unremap,
+	  g0: env.unremap ? env.unremap(t0) : t0, g1: env.unremap ? env.unremap(t1) : t1,
+	};
+	maxGlobalEnd = Math.max(maxGlobalEnd, sh.g1);
+	return sh;
   }
-  let maxEnd = 0;
-  for (const s of model.shapes) maxEnd = Math.max(maxEnd, s.t1);
-  if (!model.totalTime) model.totalTime = maxEnd;
+  let maxGlobalEnd = 0;
+  function walkScene(sceneEl, env){
+	const idMap = new Map();
+	for (const c of sceneEl.children){
+	  const tg = c.tagName || '';
+	  if (tg === 'shape' || tg === 'nullobj' || tg === 'embedScene') idMap.set(at(c,'id',''), c);
+	}
+	function parentChain(el){
+	  const out = [];
+	  const pid0 = at(el,'parent','');
+	  if (!pid0) return out;
+	  const seen = new Set();
+	  let cur = idMap.get(pid0);
+	  while (cur && !seen.has(cur)){
+		seen.add(cur);
+		out.unshift(nodeOf(cur, env.nt));
+		const np = at(cur,'parent','');
+		cur = np ? idMap.get(np) : null;
+	  }
+	  if (seen.size) out.forEach(nd => { nd.remap = env.remap; });
+	  return out;
+	}
+	for (const c of sceneEl.children){
+	  const tg = c.tagName || '';
+	  if (tg === 'embedScene'){
+		const sc = Array.from(c.children).find(x => (x.tagName||'') === 'scene');
+		if (!sc){ warn('embedScene 内没有 <scene>，已跳过'); continue; }
+		if (env.depth >= 8){ warn('嵌套合成超过 8 层，过深部分已跳过'); continue; }
+		const T0 = atF(c,'startTime',0), T1 = atF(c,'endTime', T0 + 1);
+		const NT = Math.max(1e-3, atF(sc,'totalTime',0) || (T1 - T0));
+		const pchain = parentChain(c);
+		const selfNode = nodeOf(c, env.nt);
+		selfNode.t0 = T0; selfNode.t1 = Math.max(T0 + 1, T1);
+		const childChain = env.chain.concat(pchain, [selfNode]);
+		for (const nd of childChain) if (!nd.remap) nd.remap = env.remap;
+		/* remap/unremap 必须跨层复合：本层只是 global↔上层局部 的又一段线性映射 */
+		const upR = env.remap, upU = env.unremap;
+		const spanC = Math.max(1e-6, T1 - T0);
+		const invR = (tau) => upU(T0 + (Math.max(0, Math.min(NT, tau)) / NT) * (T1 - T0));
+		const fwdR = (t) => { const tl = upR(t); return Math.max(0, Math.min(NT, ((tl - T0) / spanC) * NT)); };
+		walkScene(sc, { remap: fwdR, unremap: invR, chain: childChain, nt: NT, depth: env.depth + 1 });
+		maxGlobalEnd = Math.max(maxGlobalEnd, invR(NT));
+		continue;
+	  }
+	  if (tg !== 'shape') continue;
+	  if (at(c,'hidden','false') === 'true' || at(c,'visible','true') === 'false') continue;
+	  if (at(c,'blending','') === 'mask'){ warn('blending=mask 遮罩图层暂不支持，已跳过: ' + at(c,'label','')); continue; }
+	  const sh = buildShape(c, env, parentChain(c));
+	  if (sh) model.shapes.push(sh);
+	}
+  }
+  const rootNT = atF(root,'totalTime',0) || 0;
+  walkScene(root, { remap: (t)=>t, unremap: (t)=>t, chain: [], nt: rootNT, depth: 0 });
+  if (maxGlobalEnd > model.totalTime) model.totalTime = maxGlobalEnd;
+  if (!model.totalTime) model.totalTime = 1000;
+  if (model.hasEffects) warn('导出格式（FLA/三件套）不承载 AM 特效，像素/几何特效仅在预览中尽量还原');
+  for (const w of model.warnings) log('  ⚠ ' + w, 'w');
   return model;
 }
 /* 把 amproj 的一帧画到 ctx（坐标=画布绝对像素，与转换器一致） */
 function renderAmFrame(ctx, model, tMs){
+  if (!renderAmFrame._warned) renderAmFrame._warned = new Set();
+  const warned = renderAmFrame._warned;
   for (const sh of model.shapes){
-	if (tMs < sh.t0 - 1e-6 || tMs > sh.t1 + 1e-6) continue;
+	const tN = sh.remap ? sh.remap(tMs) : tMs;
+	if (tN < sh.t0 - 1e-6 || tN > sh.t1 + 1e-6) continue;
 	const tex = model.textures.get(sh.img);
 	if (!tex) continue;
 	const span = Math.max(1, sh.t1 - sh.t0);
-	const u = (tMs - sh.t0) / span;
+	const u = (tN - sh.t0) / span;
 	const loc = trackAt(sh.loc, u, [0,0,0]);
 	const scl = trackAt(sh.scl, u, [1,1]);
 	const rot = trackAt(sh.rot, u, [0]);
@@ -1912,10 +2295,45 @@ function renderAmFrame(ctx, model, tMs){
 	  cw = rw/fit; chh = rh/fit;
 	  sx = (iw - cw)*0.5; sy = (ih - chh)*0.5;
 	}
-	const m = composeTrs(rot[0]*Math.PI/180, scl[0], scl[1], skw[0], skw[1], loc[0], loc[1]);
+	const fx = amSampleEffects(sh, u, warned);
+	const sxm = scl[0] * fx.sclMul[0], sym = scl[1] * fx.sclMul[1];
+	let m = composeTrs(rot[0]*Math.PI/180, sxm, sym, skw[0], skw[1], loc[0], loc[1]);
+	if (fx.preM) m = matMul(m, fx.preM);
+	/* pivot：内容点 pivot 落在 location 上 */
+	if (sh.piv && sh.piv.kfs.length){
+	  const p = trackAt(sh.piv, u, [0,0]);
+	  if (p[0] || p[1]) m = matMul(m, [1,0,0,1, -(p[0]||0), -(p[1]||0)]);
+	}
+	/* 父链（embedScene / nullobj / 图层父子），在全局时间采样 */
+	let cop = 1;
+	if (sh.chain && sh.chain.length){
+	  const c = amChainAt(sh.chain, tMs);
+	  if (c.m) m = matMul(c.m, m);
+	  cop = c.op;
+	}
+	/* 自身透明度轨道 */
+	let op = 1;
+	if (sh.op && sh.op.kfs.length){ const o = trackAt(sh.op, u, [1])[0]; op = isFinite(o) ? o : 1; }
+	op *= cop;
+	if (op <= 0.015) continue;
 	ctx.save();
+	ctx.globalAlpha = Math.max(0, Math.min(1, op));
 	ctx.transform(m[0],m[1],m[2],m[3],m[4],m[5]);
-	ctx.drawImage(tex, sx, sy, cw, chh, -rw*0.5, -rh*0.5, rw, rh);
+	if (fx.raster.length){
+	  /* 像素类特效：缓存光栅结果（u 按 1/240 量化 + 源区域一起做键） */
+	  const uq = Math.round(u * 240);
+	  const key = uq + '|' + sx.toFixed(1) + ',' + sy.toFixed(1) + ',' + cw.toFixed(1) + ',' + chh.toFixed(1);
+	  if (!sh._fxCache) sh._fxCache = new Map();
+	  let rast = sh._fxCache.get(key);
+	  if (!rast){
+		rast = amRasterizeEffects(tex, sx, sy, cw, chh, fx.raster, u);
+		if (sh._fxCache.size > 48) sh._fxCache.clear();
+		sh._fxCache.set(key, rast);
+	  }
+	  ctx.drawImage(rast, 0, 0, rast.width, rast.height, -rw*0.5, -rh*0.5, rw, rh);
+	} else {
+	  ctx.drawImage(tex, sx, sy, cw, chh, -rw*0.5, -rh*0.5, rw, rh);
+	}
 	ctx.restore();
   }
 }
@@ -1930,14 +2348,14 @@ async function decodeAmTextures(model){
 /* ── 逆向：AMPROJ → FLA(XFL)（结构修复版）──────────────────────────────
    修复要点（对应旧版三处致命伤）：
    ① 结构还原：主时间线 = label 层(逐帧打名) + action 层(末帧 stop())
-     + instance 层(逐段切 label 实例)；元件库 = image/*(最小位图 graphic)
-     → sprite/*(部件容器) → label/*(逐帧动画、一层一部件)，
-     与真实 Animate 导出的「第二种 FLA」完全同构。旧版把全部 shape 平铺成
-     95 个主时间线位图图层、<symbols/> 为空，Animate 无法解析。
+	 + instance 层(逐段切 label 实例)；元件库 = image/*(最小位图 graphic)
+	 → sprite/*(部件容器) → label/*(逐帧动画、一层一部件)，
+	 与真实 Animate 导出的「第二种 FLA」完全同构。旧版把全部 shape 平铺成
+	 95 个主时间线位图图层、<symbols/> 为空，Animate 无法解析。
    ② 体积回归：按主时间线 fps 重采样 + 同值连续帧 duration 合并，
-     不再逐帧膨胀；终止帧/隐藏段写空白关键帧而非复制内容。
+	 不再逐帧膨胀；终止帧/隐藏段写空白关键帧而非复制内容。
    ③ 打包合规：DOMDocument.xml 紧随 mimetype 且 deflate 压缩，
-     补齐 META-INF / PublishSettings / bin 位图数据等标准条目。 */
+	 补齐 META-INF / PublishSettings / bin 位图数据等标准条目。 */
 const XFL_EMPTY = new Uint8Array(0);
 let __xflId = 0;
 const xflItemId = () => '6abc58ff-' + (++__xflId).toString(16).padStart(8, '0');
@@ -1951,22 +2369,22 @@ const xflUuid = () => {
 function zipWrite(entries){
   const chunks = [], central = []; let off = 0;
   for (const e of entries){
-    const nb = enc.encode(e.name), method = e.deflate ? 8 : 0;
-    const data = e.data, crc = e.crc, usize = e.usize, csize = data.length;
-    const lh = new Uint8Array(30 + nb.length), lv = new DataView(lh.buffer);
-    lv.setUint32(0, 0x04034b50, true); lv.setUint16(4, 20, true); lv.setUint16(6, 0, true);
-    lv.setUint16(8, method, true); lv.setUint16(10, 0, true); lv.setUint16(12, 0, true);
-    lv.setUint32(14, crc, true); lv.setUint32(18, csize, true); lv.setUint32(22, usize, true);
-    lv.setUint16(26, nb.length, true); lv.setUint16(28, 0, true);
-    lh.set(nb, 30); chunks.push(lh, data);
-    const ce = new Uint8Array(46 + nb.length), cv = new DataView(ce.buffer);
-    cv.setUint32(0, 0x02014b50, true); cv.setUint16(4, 20, true); cv.setUint16(6, 20, true);
-    cv.setUint16(8, 0, true); cv.setUint16(10, method, true); cv.setUint16(12, 0, true); cv.setUint16(14, 0, true);
-    cv.setUint32(16, crc, true); cv.setUint32(20, csize, true); cv.setUint32(24, usize, true);
-    cv.setUint16(28, nb.length, true); cv.setUint16(30, 0, true); cv.setUint16(32, 0, true);
-    cv.setUint16(34, 0, true); cv.setUint16(36, 0, true); cv.setUint32(38, 0, true); cv.setUint32(42, off, true);
-    ce.set(nb, 46); central.push(ce);
-    off += lh.length + csize;
+	const nb = enc.encode(e.name), method = e.deflate ? 8 : 0;
+	const data = e.data, crc = e.crc, usize = e.usize, csize = data.length;
+	const lh = new Uint8Array(30 + nb.length), lv = new DataView(lh.buffer);
+	lv.setUint32(0, 0x04034b50, true); lv.setUint16(4, 20, true); lv.setUint16(6, 0, true);
+	lv.setUint16(8, method, true); lv.setUint16(10, 0, true); lv.setUint16(12, 0, true);
+	lv.setUint32(14, crc, true); lv.setUint32(18, csize, true); lv.setUint32(22, usize, true);
+	lv.setUint16(26, nb.length, true); lv.setUint16(28, 0, true);
+	lh.set(nb, 30); chunks.push(lh, data);
+	const ce = new Uint8Array(46 + nb.length), cv = new DataView(ce.buffer);
+	cv.setUint32(0, 0x02014b50, true); cv.setUint16(4, 20, true); cv.setUint16(6, 20, true);
+	cv.setUint16(8, 0, true); cv.setUint16(10, method, true); cv.setUint16(12, 0, true); cv.setUint16(14, 0, true);
+	cv.setUint32(16, crc, true); cv.setUint32(20, csize, true); cv.setUint32(24, usize, true);
+	cv.setUint16(28, nb.length, true); cv.setUint16(30, 0, true); cv.setUint16(32, 0, true);
+	cv.setUint16(34, 0, true); cv.setUint16(36, 0, true); cv.setUint32(38, 0, true); cv.setUint32(42, off, true);
+	ce.set(nb, 46); central.push(ce);
+	off += lh.length + csize;
   }
   const cdOff = off, cdSize = central.reduce((s,c) => s + c.length, 0);
   const eocd = new Uint8Array(22), ev = new DataView(eocd.buffer);
@@ -1988,19 +2406,19 @@ const matMulX = (X, Y) => [
 function xflImageSymbol(name, mediaLib){
   return `<DOMSymbolItem xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://ns.adobe.com/xfl/2008/" name="${esc(name)}" itemID="${xflItemId()}" symbolType="graphic">
   <timeline>
-    <DOMTimeline name="${esc(name.split('/')[1])}">
-      <layers>
-        <DOMLayer color="#4F4FFF" current="true" isSelected="true">
-          <frames>
-            <DOMFrame index="0" keyMode="9728">
-              <elements>
-                <DOMBitmapInstance libraryItemName="${esc(mediaLib)}"/>
-              </elements>
-            </DOMFrame>
-          </frames>
-        </DOMLayer>
-      </layers>
-    </DOMTimeline>
+	<DOMTimeline name="${esc(name.split('/')[1])}">
+	  <layers>
+		<DOMLayer color="#4F4FFF" current="true" isSelected="true">
+		  <frames>
+			<DOMFrame index="0" keyMode="9728">
+			  <elements>
+				<DOMBitmapInstance libraryItemName="${esc(mediaLib)}"/>
+			  </elements>
+			</DOMFrame>
+		  </frames>
+		</DOMLayer>
+	  </layers>
+	</DOMTimeline>
   </timeline>
 </DOMSymbolItem>
 `;
@@ -2008,19 +2426,19 @@ function xflImageSymbol(name, mediaLib){
 function xflSpriteSymbol(name, imgLib){
   return `<DOMSymbolItem xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://ns.adobe.com/xfl/2008/" name="${esc(name)}" itemID="${xflItemId()}" symbolType="graphic">
   <timeline>
-    <DOMTimeline name="${esc(name.split('/')[1])}">
-      <layers>
-        <DOMLayer color="#4F4FFF" current="true" isSelected="true">
-          <frames>
-            <DOMFrame index="0" keyMode="9728">
-              <elements>
-                <DOMSymbolInstance libraryItemName="${esc(imgLib)}" symbolType="graphic" loop="loop"/>
-              </elements>
-            </DOMFrame>
-          </frames>
-        </DOMLayer>
-      </layers>
-    </DOMTimeline>
+	<DOMTimeline name="${esc(name.split('/')[1])}">
+	  <layers>
+		<DOMLayer color="#4F4FFF" current="true" isSelected="true">
+		  <frames>
+			<DOMFrame index="0" keyMode="9728">
+			  <elements>
+				<DOMSymbolInstance libraryItemName="${esc(imgLib)}" symbolType="graphic" loop="loop"/>
+			  </elements>
+			</DOMFrame>
+		  </frames>
+		</DOMLayer>
+	  </layers>
+	</DOMTimeline>
   </timeline>
 </DOMSymbolItem>
 `;
@@ -2029,56 +2447,109 @@ function xflLabelSymbol(name, short, parts, f0, f1){
   const nfr = f1 - f0 + 1;
   const lay = [];
   for (let pi = parts.length - 1; pi >= 0; pi--){   /* amproj 顺序=自底向上 → XFL 反序 */
-    const s = parts[pi];
-    const fr = [];
-    let i = 0;
-    while (i < nfr){
-      const m = s._per[f0 + i];
-      let j = i;
-      while (j + 1 < nfr){
-        const m2 = s._per[f0 + j + 1];
-        if (!m && !m2){ j++; continue; }
-        if (m && m2 && m.every((v, t) => Math.abs(v - m2[t]) < 1e-7)){ j++; continue; }
-        break;
-      }
-      const dur = j - i + 1;
-      const durA = dur > 1 ? ` duration="${dur}"` : '';
-      if (!m){
-        fr.push(`            <DOMFrame index="${i}"${durA} keyMode="9728">
-              <elements/>
-            </DOMFrame>`);
-      } else {
-        fr.push(`            <DOMFrame index="${i}"${durA} keyMode="9728">
-              <elements>
-                <DOMSymbolInstance libraryItemName="${esc(s._spr)}" symbolType="graphic" loop="loop">
-                  <matrix>
-                    <Matrix ${xflMat(m)}/>
-                  </matrix>
-                </DOMSymbolInstance>
-              </elements>
-            </DOMFrame>`);
-      }
-      i = j + 1;
-    }
-    lay.push(`        <DOMLayer name="${esc(s._short)}" color="#4F4FFF">
-          <frames>
+	const s = parts[pi];
+	const fr = [];
+	let i = 0;
+	while (i < nfr){
+	  const m = s._per[f0 + i];
+	  const ov = (s._op && s._op[f0 + i] != null) ? s._op[f0 + i] : 1;
+	  const rv = (s._rgb && s._rgb[f0 + i]) || null;
+	  let j = i;
+	  while (j + 1 < nfr){
+		const m2 = s._per[f0 + j + 1];
+		const ov2 = (s._op && s._op[f0 + j + 1] != null) ? s._op[f0 + j + 1] : 1;
+		const rv2 = (s._rgb && s._rgb[f0 + j + 1]) || null;
+		if (!m && !m2){ j++; continue; }
+		if (m && m2 && Math.abs(ov - ov2) < 1e-4 && m.every((v, t) => Math.abs(v - m2[t]) < 1e-7)
+		  && JSON.stringify(rv) === JSON.stringify(rv2)){ j++; continue; }
+		break;
+	  }
+	  const dur = j - i + 1;
+	  const durA = dur > 1 ? ` duration="${dur}"` : '';
+	  if (!m){
+		fr.push(`            <DOMFrame index="${i}"${durA} keyMode="9728">
+			  <elements/>
+			</DOMFrame>`);
+	  } else {
+		fr.push(`            <DOMFrame index="${i}"${durA} keyMode="9728">
+			  <elements>
+				<DOMSymbolInstance libraryItemName="${esc(s._spr)}" symbolType="graphic" loop="loop">
+				  <matrix>
+					<Matrix ${xflMat(m)}/>
+				  </matrix>${((ov < 0.999) || rv) ? `
+				  <color>
+					<Color redMultiplier="${rv ? fmt(rv[0]) : '1'}" greenMultiplier="${rv ? fmt(rv[1]) : '1'}" blueMultiplier="${rv ? fmt(rv[2]) : '1'}" alphaMultiplier="${fmt(Math.max(0, Math.min(1, ov)))}"/>
+				  </color>` : ''}
+				</DOMSymbolInstance>
+			  </elements>
+			</DOMFrame>`);
+	  }
+	  i = j + 1;
+	}
+	lay.push(`        <DOMLayer name="${esc(s._short)}" color="#4F4FFF">
+		  <frames>
 ` + fr.join('\n') + `
-          </frames>
-        </DOMLayer>`);
+		  </frames>
+		</DOMLayer>`);
   }
   return `<DOMSymbolItem xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://ns.adobe.com/xfl/2008/" name="${esc(name)}" itemID="${xflItemId()}" symbolType="graphic">
   <timeline>
-    <DOMTimeline name="${esc(short)}">
-      <layers>
+	<DOMTimeline name="${esc(short)}">
+	  <layers>
 ` + lay.join('\n') + `
-      </layers>
-    </DOMTimeline>
+	  </layers>
+	</DOMTimeline>
   </timeline>
 </DOMSymbolItem>
 `;
 }
 
+/* ═══ [特效降级] 导出前的特效烘焙 ═══
+   FLA / 原版三件套都不承载 AM 特效。为把「转换前后差距」压到最小：
+   · 像素类（pixelate2/palettemap/threshold/gaussianblur/chromakey/softglow/looks-blink）
+     → 采样行程中点 u=0.5，把特效直接烘焙进派生纹理（导出期间替换 sh.img，导完还原）；
+   · 几何类（scaleassist/transform2/jitter）→ 已进逐帧矩阵；
+   · palettemap 的动画 alpha / looks-blink 的曝光 → 进逐帧 Color（FLA 才有，PAM 无此字段）。 */
+const PIXEL_FX_KINDS = ['pixelate','palette','threshold','blur','chroma','glow','blink'];
+function amBakeEffects(model){
+  const undo = [];
+  let baked = 0;
+  for (let i = 0; i < model.shapes.length; i++){
+	const sh = model.shapes[i];
+	if (!sh.effects || !sh.effects.length) continue;
+	if (!model.textures.get(sh.img)) continue;
+	const span = Math.max(1, sh.t1 - sh.t0);
+	const u = 0.5;
+	const fx = amSampleEffects(sh, u, null);
+	const pix = fx.raster.filter(r => PIXEL_FX_KINDS.indexOf(r.kind) >= 0);
+	if (!pix.length) continue;
+	const tex = model.textures.get(sh.img);
+	const rw = sh.halfW*2, rh = sh.halfH*2;
+	let sx, sy, cw, chh;
+	if (sh.rect){
+	  sx = sh.rect[0]; sy = sh.rect[1]; cw = sh.rect[2]; chh = sh.rect[3];
+	} else {
+	  const fit = Math.max(rw/tex.width, rh/tex.height);
+	  cw = rw/fit; chh = rh/fit; sx = (tex.width - cw)*0.5; sy = (tex.height - chh)*0.5;
+	}
+	try {
+	  const rast = amRasterizeEffects(tex, sx, sy, cw, chh, pix, u);
+	  const name = '__fxbake_' + i + '_' + String(sh.img).replace(/[^\w.-]+/g, '_');
+	  model.media.set(name, canvasPng(rast));
+	  model.textures.set(name, rast);   /* 画布即纹理：amprojToTriplet 直接可用（同步） */
+	  undo.push([sh, sh.img]);
+	  sh.img = name; sh.rect = null;   /* 烘焙图覆盖整个显示矩形（cover 区域已含特效） */
+	  baked++;
+	} catch(e){ /* 烘焙失败则保留原图，仅丢特效 */ }
+  }
+  if (baked) log('  · 已把 ' + baked + ' 个图层的像素类特效烘焙进纹理（动画参数取行程中点近似）');
+  return () => { for (const [sh, img] of undo) sh.img = img; };
+}
 async function am2fla(model){
+  const __undoFx = amBakeEffects(model);
+  try { return await __am2flaImpl(model); } finally { __undoFx(); }
+}
+async function __am2flaImpl(model){
   const fps = model.fps || 30;
   const W = model.width, H = model.height;
   const R = Math.round;
@@ -2111,7 +2582,7 @@ async function am2fla(model){
 
   /* ── 1 · 主时间线长度 ── */
   let lastReal = 0;
-  for (const sh of model.shapes) if (texs.has(sh.img)) lastReal = Math.max(lastReal, sh.t1);
+  for (const sh of model.shapes) if (texs.has(sh.img)) lastReal = Math.max(lastReal, (sh.g1 !== undefined) ? sh.g1 : sh.t1);
   if (!lastReal) lastReal = Math.max(1, model.totalTime || 1);
   const L = Math.max(1, Math.round(lastReal / 1000 * fps));
 
@@ -2121,36 +2592,75 @@ async function am2fla(model){
 	const tex = texs.get(sh.img);
 	if (!tex) continue;
 	const t0 = sh.t0, t1 = Math.max(sh.t0 + 1, sh.t1);
+	const spanN = Math.max(1, t1 - t0);
+	/* [嵌套合成修复] g0/g1 = shape 可见窗口的全局毫秒；remapT 全局→嵌套局部 */
+	const remapT = sh.remap || (t => t);
+	const unmapT = sh.unremap || (t => t);
+	const g0 = (sh.g0 !== undefined) ? sh.g0 : t0;
+	const g1 = (sh.g1 !== undefined) ? sh.g1 : t1;
 	const abs = (tr, def) => {
-	  const kfs = (tr.kfs || []).map(k => ({ t: t0 + (t1 - t0) * k.t, v: k.v, ease: k.ease || null }));
+	  const kfs = (tr.kfs || []).map(k => ({ t: unmapT(t0 + (t1 - t0) * k.t), v: k.v, ease: k.ease || null }));
 	  return { kfs, def };
 	};
-	const e = { sh, tex, t0, t1, _short: (sh.label || 'part').replace(/^_+/, '') };
+	const e = { sh, tex, t0, t1, g0, g1, _short: (sh.label || 'part').replace(/^_+/, '') };
 	e.kLoc = abs(sh.loc, [sh.halfW, sh.halfH, 0]);
 	e.kScl = abs(sh.scl, [1, 1]);
 	e.kRot = abs(sh.rot, [0]);
 	e.kSkw = abs(sh.skw, [0, 0]);
-	/* [位图修复·v2] shape 的 size 值是「显示全宽/全高」（如 13.5），AM 导出的 PNG
-	   画布整体缩放后填入该显示框，画布中心 = loc 锚点。
-	   旧实现把 size 当半宽再乘 2（RW=27），又用 max 比例做 B 的线性部分，
-	   导致位图被放大 ~2 倍且锚点错位 —— 这就是「位图爆掉」的根因。
-	   新公式: g = 2*size/W_am（各向异性），B 平移 = −g×画布中心。 */
-	const RW = sh.halfW, RH = sh.halfH;             // 全宽/全高（非半宽！）
+	e.kPiv = sh.piv && sh.piv.kfs.length ? abs(sh.piv, [0, 0]) : null;
+	e.kOp = sh.op && sh.op.kfs.length ? sh.op : null;
+	/* [位图修复·v2] B 把纹理像素映射到 ±sizeP（= 显示矩形 2×sizeP 的半开区间），
+	   画布中心 = loc 锚点；与 renderAmFrame 的 -rw/2..rw/2 完全一致。 */
+	const RW = sh.halfW, RH = sh.halfH;
 	const gx = tex.w ? (RW * 2 / tex.w) : 1, gy = tex.h ? (RH * 2 / tex.h) : 1;
 	e.B = [gx, 0, 0, gy, -gx * tex.w / 2, -gy * tex.h / 2];
+	e.chain = (sh.chain && sh.chain.length) ? sh.chain : null;
 	e._per = new Array(L).fill(null);
+	e._op = new Array(L).fill(1);
+	e._rgb = new Array(L).fill(null);
 	for (let fr = 0; fr < L; fr++){
 	  const ms = (fr + 0.5) * frameMs;
-	  if (ms < t0 - 1e-6 || ms > t1 + 1e-6) continue;
+	  if (ms < g0 - 1e-6 || ms > g1 + 1e-6) continue;
+	  const tN = remapT(ms);
+	  const u = Math.min(1, Math.max(0, (tN - t0) / spanN));
 	  const loc = trackAt(e.kLoc, ms, e.kLoc.def);
 	  const scl = trackAt(e.kScl, ms, e.kScl.def);
 	  const rot = trackAt(e.kRot, ms, e.kRot.def)[0];
 	  const skw = trackAt(e.kSkw, ms, e.kSkw.def);
 	  if (Math.abs(scl[0]) < 5e-3 || Math.abs(scl[1]) < 5e-3) continue;   /* 隐藏段 */
 	  const cs = Math.cos(rot*Math.PI/180), sn = Math.sin(rot*Math.PI/180);
-	  const A = [scl[0]*(cs - sn*skw[1]), scl[0]*(sn + cs*skw[1]),
+	  let A = [scl[0]*(cs - sn*skw[1]), scl[0]*(sn + cs*skw[1]),
 				 scl[1]*(cs*skw[0] - sn), scl[1]*(sn*skw[0] + cs), loc[0], loc[1]];
+	  /* 几何类特效（scaleassist/transform2/jitter）：导出时按矩阵近似还原 */
+	  const fx = amSampleEffects(sh, u, null);
+	  if (fx.sclMul[0] !== 1 || fx.sclMul[1] !== 1) A = matMul(A, [fx.sclMul[0],0,0,fx.sclMul[1],0,0]);
+	  if (fx.preM) A = matMul(A, fx.preM);
+	  /* pivot：内容点 pivot 落在 location 上 */
+	  if (e.kPiv){
+		const p = trackAt(e.kPiv, ms, e.kPiv.def);
+		if (p[0] || p[1]) A = matMul(A, [1,0,0,1,-(p[0]||0),-(p[1]||0)]);
+	  }
+	  /* 父链 + 透明度 */
+	  let op = 1;
+	  if (e.kOp){ const o = trackAt(e.kOp, u, [1])[0]; op *= (isFinite(o) ? o : 1); }
+	  if (e.chain){ const c = amChainAt(e.chain, ms); if (c.m) A = matMul(c.m, A); op *= c.op; }
+	  /* [特效降级] palettemap 动画 alpha → alphaMultiplier；blink 曝光 → RGB 乘数提亮 */
+	  let rgbMul = null;
+	  for (const r of fx.raster){
+	    if (r.kind === 'palette' && r.alpha !== undefined && r.alpha < 0.999) op *= Math.max(0, r.alpha);
+	    else if (r.kind === 'blink' && r.frq > 0){
+	      const fl = Math.max(0, Math.min(1, r.fill||0));
+	      const ph = ((u * r.frq + (r.offset||0)) % 1 + 1) % 1;
+	      if (ph < fl){
+	        const k = 1 + Math.max(0, r.exposure||0) * (1 - ph/fl) * 0.5;
+	        rgbMul = [k, k, k];
+	      }
+	    }
+	  }
+	  if (op <= 0.02) continue;
 	  e._per[fr] = matMulX(A, e.B);
+	  e._op[fr] = op;
+	  e._rgb[fr] = rgbMul;
 	}
 	shapes.push(e);
   }
@@ -2227,7 +2737,7 @@ async function am2fla(model){
 
   /* ── 7 · DOMDocument.xml ── */
   /* [关键] 位图必须打包成 Animate 原生 dat（bitmapDataHRef 指向），Animate 从 dat 解位图；
-     直接塞 PNG 进去 Animate 会全部打不开。PNG 仅作 href 预览图保留。 */
+	 直接塞 PNG 进去 Animate 会全部打不开。PNG 仅作 href 预览图保留。 */
   for (const t of texs.values()) t.datBytes = await makeFlaDat(t.bytes);
   const D = [];
   D.push("<?xml version='1.0' encoding='UTF-8' ?>");
@@ -3506,7 +4016,7 @@ function decompPamMat(m, subW, subH, k){
 	   d = sin·shear + cos·sy
    旧实现写成 c = −sin·sy + kx、d = cos·sy + ky（把 shear 只加在 c、漏了 d），
    与分解式不互逆，凭空产生 c 分量偏差 ±0.05~0.06。 */
-function composePamMatFromAm(loc, scl, rotDeg, skew, subW, subH, k, relMat){
+function composePamMatFromAm(loc, scl, rotDeg, skew, subW, subH, k, relMat, preM){
   const r = rotDeg * Math.PI / 180;
   const cos = Math.cos(r), sin = Math.sin(r);
   const kk = (k && isFinite(k) && k > 0) ? k : 1;
@@ -3523,7 +4033,9 @@ function composePamMatFromAm(loc, scl, rotDeg, skew, subW, subH, k, relMat){
 	 回程必须右乘 **该叶子的 relMat⁻¹** 才能精确得到 M_change。
 	 旧实现只乘 image.transform⁻¹（= 单叶子直连图的情形），对嵌套/多叶子
 	 扇出元件（如元素 24 → _particles → 4 图）会残留约 18px 偏移（帧差 2%）。 */
-  return mulMat([a, b, c, d, tx, ty], matInverse(relMat));
+  let _base = [a, b, c, d, tx, ty];
+  if (preM) _base = mulMat(preM, _base);   /* [特效降级] 几何特效矩阵夹在 A 与内容映射之间 */
+  return mulMat(_base, matInverse(relMat));
 }
 /* 2×3 仿射矩阵求逆（[a,b,c,d,tx,ty] 表示 [[a,c,tx],[b,d,ty]]）。
    奇异时退回单位阵，保证调用方永远不会拿到 NaN。 */
@@ -3831,7 +4343,11 @@ function buildPamSprites(memo, resImages, fps, images, IDB){
    memo = pam_memo.txt 解析结果（可选）。若有，则按原始格式骨架还原
    元件名 / sprite 定义 / image 名 / res / 资源路径与 id；
    没有则生成一套干净的默认骨架（标识符严格 ASCII）。 */
-async function amprojToTriplet(model, labelCfg, baseNameStr, memo){
+function amprojToTriplet(model, labelCfg, baseNameStr, memo){
+  const __undoFx = amBakeEffects(model);
+  try { return __amprojToTripletImpl(model, labelCfg, baseNameStr, memo); } finally { __undoFx(); }
+}
+async function __amprojToTripletImpl(model, labelCfg, baseNameStr, memo){
   const fps = model.fps || 30;
   /* [坑28a] 有备忘录 → 严格还原原版画布；没有 → 回落原版规范 390×390 */
   let W = Math.round(model.width) || 390, H = Math.round(model.height) || 390;
@@ -3866,21 +4382,36 @@ async function amprojToTriplet(model, labelCfg, baseNameStr, memo){
 	 采用「本帧代表时刻 = f/fps*1000，落在 [t0,t1] 内即算可见」的简单规则即可 ——
 	 因为元素归属是由「本 shape 自己是否可见」决定的，重叠也只是让同帧多画一层，
 	 不会丢帧；真正要避免的只是**漏掉**。 */
-  const shapeSamples = new Map();   // sid -> Map<frame, {loc,scl,rot,skw,visible}>
+  const shapeSamples = new Map();   // sid -> Map<frame, {loc,scl,rot,skw,visible,cm,op}>
   for (const sh of model.shapes){
+	const remapT = sh.remap || (t => t);
 	const span = Math.max(1, sh.t1 - sh.t0);
-	const f0 = Math.max(0, Math.floor(sh.t0 / 1000 * fps) - 1);
-	const f1 = Math.min(totalFrames, Math.ceil(sh.t1 / 1000 * fps) + 1);
+	const g0 = (sh.g0 !== undefined) ? sh.g0 : sh.t0;
+	const g1 = (sh.g1 !== undefined) ? sh.g1 : sh.t1;
+	const f0 = Math.max(0, Math.floor(g0 / 1000 * fps) - 1);
+	const f1 = Math.min(totalFrames, Math.ceil(g1 / 1000 * fps) + 1);
 	const m = new Map();
 	for (let f = f0; f <= f1; f++){
 	  const tms = f / fps * 1000;
-	  if (tms < sh.t0 - 1e-9 || tms > sh.t1 + 1e-9) continue;
-	  const u = Math.min(1, Math.max(0, (tms - sh.t0) / span));
+	  if (tms < g0 - 1e-9 || tms > g1 + 1e-9) continue;
+	  const tN = remapT(tms);
+	  if (tN < sh.t0 - 1e-9 || tN > sh.t1 + 1e-9) continue;
+	  const u = Math.min(1, Math.max(0, (tN - sh.t0) / span));
 	  const loc = trackAt(sh.loc, u, [0,0,0]);
-	  const scl = trackAt(sh.scl, u, [1,1]);
+	  let scl = trackAt(sh.scl, u, [1,1]);
 	  const rot = trackAt(sh.rot, u, [0]);
 	  const skw = trackAt(sh.skw, u, [0,0]);
-	  m.set(f, { visible:true, loc:[loc[0], loc[1]], scl:[scl[0], scl[1]], rot:rot[0], skw:[skw[0], skw[1]] });
+	  /* [特效降级] 几何类特效：scaleassist 折进缩放，transform2/jitter 作为 fxm */
+	  let fxm = null;
+	  const _fx = amSampleEffects(sh, u, null);
+	  if (_fx.sclMul[0] !== 1 || _fx.sclMul[1] !== 1) scl = [scl[0]*_fx.sclMul[0], scl[1]*_fx.sclMul[1]];
+	  if (_fx.preM) fxm = _fx.preM;
+	  /* 嵌套/父子链：预乘祖先矩阵（cm），透明度只用于可见性判定 */
+	  let cm = null, op = 1;
+	  if (sh.chain && sh.chain.length){ const c = amChainAt(sh.chain, tms); cm = c.m; op = c.op; }
+	  if (sh.op && sh.op.kfs.length){ const o = trackAt(sh.op, u, [1])[0]; op *= (isFinite(o) ? o : 1); }
+	  if (op <= 0.02) continue;
+	  m.set(f, { visible:true, loc:[loc[0], loc[1]], scl:[scl[0], scl[1]], rot:rot[0], skw:[skw[0], skw[1]], cm, op, fxm });
 	}
 	shapeSamples.set(sh.id, m);
   }
@@ -4347,9 +4878,11 @@ async function amprojToTriplet(model, labelCfg, baseNameStr, memo){
 		const leafRelList = (memo && memo.elemLeafRel) ? memo.elemLeafRel[elemIdx] : null;
 		const leafRel = (leafRelList && leafRelList[leafNo]) ? leafRelList[leafNo] : img._imgT;
 		/* [坑25] subW/subH 必须是**逻辑尺寸**，不是图集像素 */
-		const mat = quantPamTransform(composePamMatFromAm(sm.loc, sm.scl, sm.rot, sm.skw,
+		let _pmm = composePamMatFromAm(sm.loc, sm.scl, sm.rot, sm.skw,
 		  img._logW || img._aw || img.w, img._logH || img._ah || img.h,
-		  (img._effK != null ? img._effK : 1), leafRel));
+		  (img._effK != null ? img._effK : 1), leafRel, sm.fxm);
+		if (sm.cm) _pmm = mulMat(sm.cm, _pmm);   /* [嵌套合成修复] 祖先链预乘 */
+		const mat = quantPamTransform(_pmm);
 		frameCfg[f].changes.push({ index: elemIdx, transform: mat });
 	  }
 	  const last = visFrames[visFrames.length-1].f;
