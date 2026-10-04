@@ -322,6 +322,130 @@ function zipStore(entries){
   return out;
 }
 
+/* ── Animate 原生位图 dat 格式（逆向自 Animate 20.0 保存的合法 FLA，26 个样本全量验证） ──
+   DOMBitmapItem 的 bitmapDataHRef 指向 bin/*.dat，Animate 从 dat 读取实际位图数据；
+   dat ≠ PNG，布局为：32B 头 + raw deflate(预乘BGRA) + adler32(大端) + 0000。
+   若把 PNG 原样塞进 dat，Animate 解析失败 → 位图全部打不开（这正是"只选 am 全炸"的根因）。
+   头部字段（小端）：[0]=03 [1]=05 [2:4]=W*4 [4:6]=W [6:8]=H [12:16]=W*20(twips)
+                     [20:24]=H*20(twips) [24:28]=01 01 02 00 [28:30]=78 01 [30:32]=deflate长+4 */
+function adler32(bytes){
+  let a = 1, b = 0;
+  for (let i = 0; i < bytes.length; i++){ a = (a + bytes[i]) % 65521; b = (b + a) % 65521; }
+  return ((b << 16) | a) >>> 0;
+}
+async function inflateZlibBytes(bytes){
+  const st = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate'));
+  return new Uint8Array(await new Response(st).arrayBuffer());
+}
+/* 纯 JS PNG 解码（8bit/非隔行，支持 RGBA/RGB/灰度/灰度+alpha/调色板），返回非预乘 RGBA */
+async function decodePngRgba(bytes){
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  if (dv.getUint32(0) !== 0x89504E47) throw new Error('非 PNG 数据');
+  let pos = 8, W = 0, H = 0, depth = 8, ctype = 6, interlace = 0, plte = null, trns = null;
+  const idat = [];
+  while (pos + 8 <= bytes.length){
+    const len = dv.getUint32(pos);
+    const type = String.fromCharCode(bytes[pos+4], bytes[pos+5], bytes[pos+6], bytes[pos+7]);
+    const data = bytes.subarray(pos + 8, pos + 8 + len);
+    if (type === 'IHDR'){ W = dv.getUint32(pos+8); H = dv.getUint32(pos+12); depth = bytes[pos+16]; ctype = bytes[pos+17]; interlace = bytes[pos+18]; }
+    else if (type === 'PLTE') plte = data;
+    else if (type === 'tRNS') trns = data;
+    else if (type === 'IDAT') idat.push(data);
+    else if (type === 'IEND') break;
+    pos += 12 + len;
+  }
+  if (depth !== 8) throw new Error('暂不支持 ' + depth + 'bit PNG');
+  if (interlace) throw new Error('暂不支持隔行 PNG');
+  const chan = { 0:1, 2:3, 3:1, 4:2, 6:4 }[ctype];
+  if (!chan) throw new Error('不支持色彩类型 ' + ctype);
+  let total = 0; for (const q of idat) total += q.length;
+  const zbuf = new Uint8Array(total); let zo = 0;
+  for (const q of idat){ zbuf.set(q, zo); zo += q.length; }
+  const raw = await inflateZlibBytes(zbuf);
+  const stride = W * chan;
+  const up = new Uint8Array(H * stride);
+  let p = 0;
+  for (let y = 0; y < H; y++){
+    const f = raw[p++], row = y * stride;
+    for (let x = 0; x < stride; x++){
+      const r = raw[p++];
+      const left = x >= chan ? up[row + x - chan] : 0;
+      const upv = y > 0 ? up[row - stride + x] : 0;
+      const ul = (y > 0 && x >= chan) ? up[row - stride + x - chan] : 0;
+      let v;
+      if (f === 0) v = r;
+      else if (f === 1) v = r + left;
+      else if (f === 2) v = r + upv;
+      else if (f === 3) v = r + ((left + upv) >> 1);
+      else {
+        const pa = Math.abs(upv - ul), pb = Math.abs(left - ul), pc = Math.abs(left + upv - 2*ul);
+        v = r + ((pa <= pb && pa <= pc) ? left : (pb <= pc ? upv : ul));
+      }
+      up[row + x] = v & 0xFF;
+    }
+  }
+  const out = new Uint8ClampedArray(W * H * 4);
+  for (let i = 0, j = 0; i < W * H; i++, j += 4){
+    const o = i * chan;
+    if (ctype === 6){ out[j]=up[o]; out[j+1]=up[o+1]; out[j+2]=up[o+2]; out[j+3]=up[o+3]; }
+    else if (ctype === 2){ out[j]=up[o]; out[j+1]=up[o+1]; out[j+2]=up[o+2]; out[j+3]=255; }
+    else if (ctype === 0){ out[j]=out[j+1]=out[j+2]=up[o]; out[j+3]=255; }
+    else if (ctype === 4){ out[j]=out[j+1]=out[j+2]=up[o]; out[j+3]=up[o+1]; }
+    else {
+      const idx = up[o]*3;
+      out[j]=plte[idx]; out[j+1]=plte[idx+1]; out[j+2]=plte[idx+2];
+      out[j+3]=(trns && up[o] < trns.length) ? trns[up[o]] : 255;
+    }
+  }
+  return { w: W, h: H, data: out };
+}
+/* 把 PNG 打包成 Animate 原生 dat。
+   实测格式（26 个原版样本逆向 + Animate 打开验证）：
+   - 32B 头: [0]=3 [1]=5 [2:4]=W*4 [4:6]=W [6:8]=H [12:16]=W*20 [20:24]=H*20
+             [24:28]=01 01 02 00 [28:30]=78 01 [30:32]=首段长
+   - 像素: ARGB 预乘（byte0=A，RGB 预乘 alpha）——与 SWF DefineBitsLossless2 fmt5 一致
+   - 数据区: 完整 zlib(78 01+deflate+adler32BE) 去掉头两字节后按 ≤2048 链式分段:
+             [首段][u16 段长][段数据]...[u16 0]（单段时 clen=数据长，后跟 0000） */
+async function makeFlaDat(pngBytes){
+  const img = await decodePngRgba(pngBytes);
+  const { w, h } = img, s = img.data;
+  const px = new Uint8Array(w * h * 4);
+  for (let i = 0, j = 0; i < s.length; i += 4, j += 4){
+    const a = s[i+3];
+    px[j]   = a;                               /* A */
+    px[j+1] = (s[i]   * a + 127) / 255 | 0;    /* R 预乘 */
+    px[j+2] = (s[i+1] * a + 127) / 255 | 0;    /* G 预乘 */
+    px[j+3] = (s[i+2] * a + 127) / 255 | 0;    /* B 预乘 */
+  }
+  const def = await deflateRawBytes(px);
+  const body = new Uint8Array(def.length + 4);          /* deflate + adler32(大端) */
+  body.set(def, 0);
+  new DataView(body.buffer).setUint32(def.length, adler32(px), false);
+  const SEGSZ = 2048;
+  const nSeg = Math.ceil(body.length / SEGSZ);
+  let tail = (nSeg - 1) * 2;                            /* 后续段的长度前缀 */
+  const out = new Uint8Array(32 + body.length + tail + 2);
+  const dv = new DataView(out.buffer);
+  out[0] = 3; out[1] = 5;
+  dv.setUint16(2, w * 4, true);
+  dv.setUint16(4, w, true);
+  dv.setUint16(6, h, true);
+  dv.setUint32(12, w * 20, true);
+  dv.setUint32(20, h * 20, true);
+  out[24] = 1; out[25] = 1; out[26] = 2; out[27] = 0;
+  out[28] = 0x78; out[29] = 0x01;
+  dv.setUint16(30, Math.min(body.length, SEGSZ), true);
+  let src = 0, dst = 32;
+  for (let k = 0; k < nSeg; k++){
+    const n = Math.min(SEGSZ, body.length - src);
+    out.set(body.subarray(src, src + n), dst);
+    src += n; dst += n;
+    if (k + 1 < nSeg){ dv.setUint16(dst, Math.min(SEGSZ, body.length - src), true); dst += 2; }
+  }
+  dv.setUint16(dst, 0, true);                           /* 结束标记 */
+  return out;
+}
+
 /* ══════════════════════════════════════════════════════════════════════════
    2 · XML（DOMParser + 按 localName 取，彻底躲开命名空间）
    ══════════════════════════════════════════════════════════════════════════ */
@@ -1803,183 +1927,418 @@ async function decodeAmTextures(model){
 	} catch(e){ log('  素材解码失败 ' + fn, 'w'); }
   }
 }
-/* ── 逆向：AMPROJ → FLA(XFL) ── */
-function am2fla(model){
+/* ── 逆向：AMPROJ → FLA(XFL)（结构修复版）──────────────────────────────
+   修复要点（对应旧版三处致命伤）：
+   ① 结构还原：主时间线 = label 层(逐帧打名) + action 层(末帧 stop())
+     + instance 层(逐段切 label 实例)；元件库 = image/*(最小位图 graphic)
+     → sprite/*(部件容器) → label/*(逐帧动画、一层一部件)，
+     与真实 Animate 导出的「第二种 FLA」完全同构。旧版把全部 shape 平铺成
+     95 个主时间线位图图层、<symbols/> 为空，Animate 无法解析。
+   ② 体积回归：按主时间线 fps 重采样 + 同值连续帧 duration 合并，
+     不再逐帧膨胀；终止帧/隐藏段写空白关键帧而非复制内容。
+   ③ 打包合规：DOMDocument.xml 紧随 mimetype 且 deflate 压缩，
+     补齐 META-INF / PublishSettings / bin 位图数据等标准条目。 */
+const XFL_EMPTY = new Uint8Array(0);
+let __xflId = 0;
+const xflItemId = () => '6abc58ff-' + (++__xflId).toString(16).padStart(8, '0');
+const xflUuid = () => {
+  const h = [];
+  for (let i = 0; i < 32; i++) h.push((Math.random() * 16 | 0).toString(16));
+  const j = s => s.join('');
+  return j(h.slice(0,8)) + '-' + j(h.slice(8,12)) + '-' + j(h.slice(12,16)) + '-' + j(h.slice(16,20)) + '-' + j(h.slice(20,32)).toUpperCase();
+};
+/* zip 写出（支持 deflate 条目：data 为已压缩字节，crc/usize 为原始数据量） */
+function zipWrite(entries){
+  const chunks = [], central = []; let off = 0;
+  for (const e of entries){
+    const nb = enc.encode(e.name), method = e.deflate ? 8 : 0;
+    const data = e.data, crc = e.crc, usize = e.usize, csize = data.length;
+    const lh = new Uint8Array(30 + nb.length), lv = new DataView(lh.buffer);
+    lv.setUint32(0, 0x04034b50, true); lv.setUint16(4, 20, true); lv.setUint16(6, 0, true);
+    lv.setUint16(8, method, true); lv.setUint16(10, 0, true); lv.setUint16(12, 0, true);
+    lv.setUint32(14, crc, true); lv.setUint32(18, csize, true); lv.setUint32(22, usize, true);
+    lv.setUint16(26, nb.length, true); lv.setUint16(28, 0, true);
+    lh.set(nb, 30); chunks.push(lh, data);
+    const ce = new Uint8Array(46 + nb.length), cv = new DataView(ce.buffer);
+    cv.setUint32(0, 0x02014b50, true); cv.setUint16(4, 20, true); cv.setUint16(6, 20, true);
+    cv.setUint16(8, 0, true); cv.setUint16(10, method, true); cv.setUint16(12, 0, true); cv.setUint16(14, 0, true);
+    cv.setUint32(16, crc, true); cv.setUint32(20, csize, true); cv.setUint32(24, usize, true);
+    cv.setUint16(28, nb.length, true); cv.setUint16(30, 0, true); cv.setUint16(32, 0, true);
+    cv.setUint16(34, 0, true); cv.setUint16(36, 0, true); cv.setUint32(38, 0, true); cv.setUint32(42, off, true);
+    ce.set(nb, 46); central.push(ce);
+    off += lh.length + csize;
+  }
+  const cdOff = off, cdSize = central.reduce((s,c) => s + c.length, 0);
+  const eocd = new Uint8Array(22), ev = new DataView(eocd.buffer);
+  ev.setUint32(0, 0x06054b50, true); ev.setUint16(4, 0, true); ev.setUint16(6, 0, true);
+  ev.setUint16(8, entries.length, true); ev.setUint16(10, entries.length, true);
+  ev.setUint32(12, cdSize, true); ev.setUint32(16, cdOff, true); ev.setUint16(20, 0, true);
+  const out = new Uint8Array(off + cdSize + 22); let o = 0;
+  for (const c of chunks){ out.set(c, o); o += c.length; }
+  for (const c of central){ out.set(c, o); o += c.length; }
+  out.set(eocd, o);
+  return out;
+}
+const xflMat = m => `a="${fmt(m[0])}" b="${fmt(m[1])}" c="${fmt(m[2])}" d="${fmt(m[3])}" tx="${fmt(m[4])}" ty="${fmt(m[5])}"`;
+const matMulX = (X, Y) => [
+  X[0]*Y[0] + X[2]*Y[1], X[1]*Y[0] + X[3]*Y[1],
+  X[0]*Y[2] + X[2]*Y[3], X[1]*Y[2] + X[3]*Y[3],
+  X[0]*Y[4] + X[2]*Y[5] + X[4], X[1]*Y[4] + X[3]*Y[5] + X[5]];
+
+function xflImageSymbol(name, mediaLib){
+  return `<DOMSymbolItem xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://ns.adobe.com/xfl/2008/" name="${esc(name)}" itemID="${xflItemId()}" symbolType="graphic">
+  <timeline>
+    <DOMTimeline name="${esc(name.split('/')[1])}">
+      <layers>
+        <DOMLayer color="#4F4FFF" current="true" isSelected="true">
+          <frames>
+            <DOMFrame index="0" keyMode="9728">
+              <elements>
+                <DOMBitmapInstance libraryItemName="${esc(mediaLib)}"/>
+              </elements>
+            </DOMFrame>
+          </frames>
+        </DOMLayer>
+      </layers>
+    </DOMTimeline>
+  </timeline>
+</DOMSymbolItem>
+`;
+}
+function xflSpriteSymbol(name, imgLib){
+  return `<DOMSymbolItem xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://ns.adobe.com/xfl/2008/" name="${esc(name)}" itemID="${xflItemId()}" symbolType="graphic">
+  <timeline>
+    <DOMTimeline name="${esc(name.split('/')[1])}">
+      <layers>
+        <DOMLayer color="#4F4FFF" current="true" isSelected="true">
+          <frames>
+            <DOMFrame index="0" keyMode="9728">
+              <elements>
+                <DOMSymbolInstance libraryItemName="${esc(imgLib)}" symbolType="graphic" loop="loop"/>
+              </elements>
+            </DOMFrame>
+          </frames>
+        </DOMLayer>
+      </layers>
+    </DOMTimeline>
+  </timeline>
+</DOMSymbolItem>
+`;
+}
+function xflLabelSymbol(name, short, parts, f0, f1){
+  const nfr = f1 - f0 + 1;
+  const lay = [];
+  for (let pi = parts.length - 1; pi >= 0; pi--){   /* amproj 顺序=自底向上 → XFL 反序 */
+    const s = parts[pi];
+    const fr = [];
+    let i = 0;
+    while (i < nfr){
+      const m = s._per[f0 + i];
+      let j = i;
+      while (j + 1 < nfr){
+        const m2 = s._per[f0 + j + 1];
+        if (!m && !m2){ j++; continue; }
+        if (m && m2 && m.every((v, t) => Math.abs(v - m2[t]) < 1e-7)){ j++; continue; }
+        break;
+      }
+      const dur = j - i + 1;
+      const durA = dur > 1 ? ` duration="${dur}"` : '';
+      if (!m){
+        fr.push(`            <DOMFrame index="${i}"${durA} keyMode="9728">
+              <elements/>
+            </DOMFrame>`);
+      } else {
+        fr.push(`            <DOMFrame index="${i}"${durA} keyMode="9728">
+              <elements>
+                <DOMSymbolInstance libraryItemName="${esc(s._spr)}" symbolType="graphic" loop="loop">
+                  <matrix>
+                    <Matrix ${xflMat(m)}/>
+                  </matrix>
+                </DOMSymbolInstance>
+              </elements>
+            </DOMFrame>`);
+      }
+      i = j + 1;
+    }
+    lay.push(`        <DOMLayer name="${esc(s._short)}" color="#4F4FFF">
+          <frames>
+` + fr.join('\n') + `
+          </frames>
+        </DOMLayer>`);
+  }
+  return `<DOMSymbolItem xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://ns.adobe.com/xfl/2008/" name="${esc(name)}" itemID="${xflItemId()}" symbolType="graphic">
+  <timeline>
+    <DOMTimeline name="${esc(short)}">
+      <layers>
+` + lay.join('\n') + `
+      </layers>
+    </DOMTimeline>
+  </timeline>
+</DOMSymbolItem>
+`;
+}
+
+async function am2fla(model){
   const fps = model.fps || 30;
   const W = model.width, H = model.height;
-  const mediaByFile = new Map();     // key -> 裁剪后的素材
+  const R = Math.round;
+  const frameMs = 1000 / fps;
+
+  /* ── 0 · 素材表（按文件名去重；rect 图集模式先裁出可见区域） ── */
+  const texs = new Map();                    // img 文件名 -> {bytes,w,h,base}
   for (const sh of model.shapes){
-	if (!model.media.has(sh.img)) continue;
+	if (!model.media.has(sh.img) || texs.has(sh.img)) continue;
 	const srcBytes = model.media.get(sh.img);
 	const [sw, shh] = pngSize(srcBytes);
 	if (!sw) continue;
-	const RW = sh.halfW*2, RH = sh.halfH*2;
-	/* [关键] AM 的 mediaFillMode="fill" 是「等比放大到完全覆盖 + 居中裁切」(cover):
-	   素材被放进 size 矩形(2*halfW × 2*halfH)里, 比例不符时两边被裁掉。
-	   而 FLA 的位图实例**不能裁切**, 若直接把整张原图等比放大, 实例外框就成了
-	   整张方图(远大于 size 矩形), 元件尺寸整个偏大。
-	   所以先把素材按可见区域裁出来, 之后实例外框 = AM 的 size 矩形, 尺寸才一致。
-	   [坑8 · 亚像素对齐] AM 的裁切原点是分数 (sxExact/syExact), 裁剪图只能取整;
-	   若实例矩阵再用 RW/cw 的近似比例, 内容会整体错位 ~1px(轮廓差异 ~2%)。
-	   这里裁剪原点四舍五入到最接近的整数像素, 并让矩阵沿用**同一个 cover 比例 k**
-	   把裁剪图映射回舞台 —— 每个源像素都落在 AM 本该放它的位置(误差≤边缘半像素)。 */
-	const k = Math.max(RW/sw, RH/shh);
-	/* 若 shape 带 rect（本工具导出的图集模式），源区域就是 rect 本身，
-	   不再做 cover 推导 —— 图集里那块像素正是当初 cover 裁切的结果。 */
-	let cw, chh, sx, sy;
+	let bytes = srcBytes, iw = sw, ih = shh;
 	if (sh.rect){
-	  sx = Math.max(0, Math.round(sh.rect[0]));
-	  sy = Math.max(0, Math.round(sh.rect[1]));
-	  cw = Math.max(1, Math.round(sh.rect[2]));
-	  chh = Math.max(1, Math.round(sh.rect[3]));
-	} else {
-	  cw = Math.min(sw, Math.max(1, Math.round(RW/k)));
-	  chh = Math.min(shh, Math.max(1, Math.round(RH/k)));
-	  sx = Math.round((sw - RW/k) / 2);
-	  sy = Math.round((shh - RH/k) / 2);
+	  const RW = sh.halfW*2, RH = sh.halfH*2;
+	  const k = Math.max(RW/sw, RH/shh);
+	  const cw = Math.max(1, Math.round(sh.rect[2])), chh = Math.max(1, Math.round(sh.rect[3]));
+	  const sx = Math.max(0, Math.round(sh.rect[0])), sy = Math.max(0, Math.round(sh.rect[1]));
+	  const bmp = model.textures.get(sh.img);
+	  if (bmp && (cw !== sw || chh !== shh)){
+		const cv = newCanvas(cw, chh), cctx = cv.getContext('2d');
+		cctx.imageSmoothingEnabled = true; cctx.imageSmoothingQuality = 'high';
+		cctx.drawImage(bmp, sx, sy, cw, chh, 0, 0, cw, chh);
+		bytes = canvasPng(cv); iw = cw; ih = chh;
+	  }
 	}
-	const key = sh.img + '|' + cw + ',' + chh + ',' + sx + ',' + sy;
-	sh._mk = key;
-	/* 实例矩阵：把裁剪图映射回舞台，使其恰好铺满 size 矩形。
-	   rect 模式下 k 由 rect 尺寸与显示矩形之比决定（即图集里的像素密度）。 */
-	const kUse = sh.rect ? (RW / cw) : k;
-	sh._B = [kUse, 0, 0, kUse, -RW*0.5, -RH*0.5];
-	if (mediaByFile.has(key)) continue;
-	const bmp = model.textures.get(sh.img);
-	let bytes = srcBytes;
-	if (bmp && (cw !== sw || chh !== shh)){
-	  const cv = newCanvas(cw, chh), cctx = cv.getContext('2d');
-	  cctx.imageSmoothingEnabled = true; cctx.imageSmoothingQuality = 'high';
-	  cctx.drawImage(bmp, sx, sy, cw, chh, 0, 0, cw, chh);
-	  bytes = canvasPng(cv);
-	}
-	let nm = (sh.img.split('/').pop() || sh.img).replace(/\.png$/i, '');
-	/* [第二种 FLA] 位图素材按 Animate 的库结构落盘:
-	   name = "media/<base>"(库项名), 实体文件 LIBRARY/media/<base>.png,
-	   DOMBitmapItem 的 href / bitmapDataHRef 都指向 media/<base>.png。 */
-	const base = 'bm_' + safeName(nm) + '_' + sha1Hex(bytes).slice(0,6);
-	mediaByFile.set(key, { name: 'media/' + base, file: base + '.png', bytes, iw: cw, ih: chh });
+	const base = safeName((sh.img.split('/').pop() || sh.img).replace(/\.png$/i, ''));
+	texs.set(sh.img, { bytes, w: iw, h: ih, base });
   }
-  let totalFrames = Math.max(1, Math.round(model.totalTime/1000*fps));
-  const layerXml = [];
-  const usedLayers = new Map();
-  let maxEndFrame = 0;
+
+  /* ── 1 · 主时间线长度 ── */
+  let lastReal = 0;
+  for (const sh of model.shapes) if (texs.has(sh.img)) lastReal = Math.max(lastReal, sh.t1);
+  if (!lastReal) lastReal = Math.max(1, model.totalTime || 1);
+  const L = Math.max(1, Math.round(lastReal / 1000 * fps));
+
+  /* ── 2 · 逐帧采样（帧中点；隐藏段=空白） ── */
+  const shapes = [];
   for (const sh of model.shapes){
-	const med = mediaByFile.get(sh._mk);
-	if (!med) continue;
+	const tex = texs.get(sh.img);
+	if (!tex) continue;
 	const t0 = sh.t0, t1 = Math.max(sh.t0 + 1, sh.t1);
-	const f0 = Math.max(0, Math.floor(t0/1000*fps));
-	const f1 = Math.ceil(t1/1000*fps);
-	maxEndFrame = Math.max(maxEndFrame, f1);
-	/* 素材已裁到 AM 可见区域, 用第一轮算好的精确 cover 映射矩阵（sh._B）。 */
-	const B = sh._B;
-	/* 逐帧烘焙矩阵 */
-	const runFrames = [];
-	for (let fr=f0; fr<f1; fr++){
-	  const tms = fr/fps*1000;
-	  const u = (tms - t0) / Math.max(1, t1 - t0);
-	  const loc = trackAt(sh.loc, u, [0,0,0]);
-	  const scl = trackAt(sh.scl, u, [1,1]);
-	  const rot = trackAt(sh.rot, u, [0]);
-	  const skw = trackAt(sh.skw, u, [0,0]);
-	  const A = composeTrs(rot[0]*Math.PI/180, scl[0], scl[1], skw[0], skw[1], loc[0], loc[1]);
-	  runFrames.push(matMul(A, B));
+	const abs = (tr, def) => {
+	  const kfs = (tr.kfs || []).map(k => ({ t: t0 + (t1 - t0) * k.t, v: k.v, ease: k.ease || null }));
+	  return { kfs, def };
+	};
+	const e = { sh, tex, t0, t1, _short: (sh.label || 'part').replace(/^_+/, '') };
+	e.kLoc = abs(sh.loc, [sh.halfW, sh.halfH, 0]);
+	e.kScl = abs(sh.scl, [1, 1]);
+	e.kRot = abs(sh.rot, [0]);
+	e.kSkw = abs(sh.skw, [0, 0]);
+	/* [位图修复·v2] shape 的 size 值是「显示全宽/全高」（如 13.5），AM 导出的 PNG
+	   画布整体缩放后填入该显示框，画布中心 = loc 锚点。
+	   旧实现把 size 当半宽再乘 2（RW=27），又用 max 比例做 B 的线性部分，
+	   导致位图被放大 ~2 倍且锚点错位 —— 这就是「位图爆掉」的根因。
+	   新公式: g = 2*size/W_am（各向异性），B 平移 = −g×画布中心。 */
+	const RW = sh.halfW, RH = sh.halfH;             // 全宽/全高（非半宽！）
+	const gx = tex.w ? (RW * 2 / tex.w) : 1, gy = tex.h ? (RH * 2 / tex.h) : 1;
+	e.B = [gx, 0, 0, gy, -gx * tex.w / 2, -gy * tex.h / 2];
+	e._per = new Array(L).fill(null);
+	for (let fr = 0; fr < L; fr++){
+	  const ms = (fr + 0.5) * frameMs;
+	  if (ms < t0 - 1e-6 || ms > t1 + 1e-6) continue;
+	  const loc = trackAt(e.kLoc, ms, e.kLoc.def);
+	  const scl = trackAt(e.kScl, ms, e.kScl.def);
+	  const rot = trackAt(e.kRot, ms, e.kRot.def)[0];
+	  const skw = trackAt(e.kSkw, ms, e.kSkw.def);
+	  if (Math.abs(scl[0]) < 5e-3 || Math.abs(scl[1]) < 5e-3) continue;   /* 隐藏段 */
+	  const cs = Math.cos(rot*Math.PI/180), sn = Math.sin(rot*Math.PI/180);
+	  const A = [scl[0]*(cs - sn*skw[1]), scl[0]*(sn + cs*skw[1]),
+				 scl[1]*(cs*skw[0] - sn), scl[1]*(sn*skw[0] + cs), loc[0], loc[1]];
+	  e._per[fr] = matMulX(A, e.B);
 	}
-	/* 合并连续相同矩阵 */
-	const runs = [];
-	for (const m of runFrames){
-	  const last = runs[runs.length-1];
-	  if (last && last.m.every((v,i) => Math.abs(v - m[i]) < 1e-9)) last.d++;
-	  else runs.push({ m, d: 1 });
-	}
-	const name = sh.label || ('layer_' + sh.id);
-	let uniq = name, gi = 1;
-	while (usedLayers.has(uniq)) uniq = name + '_' + (gi++);
-	usedLayers.set(uniq, 1);
-	const parts = ['        <DOMLayer name="' + esc(uniq) + '" color="#4FFF4F" current="false">',
-				   '          <frames>'];
-	let idx = f0;
-	/* [坑9 · 尾残影] 内容结束后若只留「普通帧(9728)+空 elements」的空白段:
-	   ① 部分导入器把它解释为「延续上一关键帧内容」→ label 播完后最后一帧姿势
-	     原地停留成残影（原始 FLA 每层内容都铺满全时间线, 从不触发此坑, 故只有
-	     转换产物会残影）; ② 一些播放器按「最后一个含元素帧」取帧、无视空白段,
-	     同样残影。修复: 全部内容帧/空白帧都用 keyMode="14688"（关键帧/空白关键帧,
-	     空白关键帧=显式清空内容）; 并在内容末尾补一帧 1e-4 缩放的「终止帧」
-	     （视觉不可见）, 让任何取帧逻辑都只能取到空内容。 */
-	if (f0 > 0) parts.push(`            <DOMFrame index="0" keyMode="14688" duration="${f0}"><elements/></DOMFrame>`);
-	for (const r of runs){
-	  parts.push(`            <DOMFrame index="${idx}" keyMode="14688" duration="${r.d}">`);
-	  parts.push('              <elements>');
-	  parts.push(`                <DOMBitmapInstance libraryItemName="${esc(med.name)}">`);
-	  parts.push('                  <matrix>');
-	  parts.push(`                    <Matrix a="${fmt(r.m[0])}" b="${fmt(r.m[1])}" c="${fmt(r.m[2])}" d="${fmt(r.m[3])}" tx="${fmt(r.m[4])}" ty="${fmt(r.m[5])}"/>`);
-	  parts.push('                  </matrix>');
-	  parts.push('                </DOMBitmapInstance>');
-	  parts.push('              </elements>');
-	  parts.push('            </DOMFrame>');
-	  idx += r.d;
-	}
-	if (idx < totalFrames && runs.length){
-	  /* 终止帧：复制最后一个矩阵但缩放 ×1e-4（亚像素级, 任何播放器都画不出来） */
-	  const lm = runs[runs.length-1].m;
-	  parts.push(`            <DOMFrame index="${idx}" keyMode="14688" duration="1">`);
-	  parts.push('              <elements>');
-	  parts.push(`                <DOMBitmapInstance libraryItemName="${esc(med.name)}">`);
-	  parts.push('                  <matrix>');
-	  parts.push(`                    <Matrix a="${fmt(lm[0]*1e-4)}" b="${fmt(lm[1]*1e-4)}" c="${fmt(lm[2]*1e-4)}" d="${fmt(lm[3]*1e-4)}" tx="${fmt(lm[4])}" ty="${fmt(lm[5])}"/>`);
-	  parts.push('                  </matrix>');
-	  parts.push('                </DOMBitmapInstance>');
-	  parts.push('              </elements>');
-	  parts.push('            </DOMFrame>');
-	  idx += 1;
-	}
-	if (idx < totalFrames) parts.push(`            <DOMFrame index="${idx}" keyMode="14688" duration="${totalFrames-idx}"><elements/></DOMFrame>`);
-	parts.push('          </frames>');
-	parts.push('        </DOMLayer>');
-	layerXml.push(parts.join('\n'));
+	shapes.push(e);
   }
-  totalFrames = Math.max(totalFrames, maxEndFrame);
-  /* ── DOMDocument.xml ── */
+
+  /* ── 3 · 静态 vs 动画部件 ── */
+  for (const e of shapes){
+	const vis = e._per.filter(Boolean);
+	let span = 0;
+	if (vis.length){
+	  for (let j = 0; j < 6; j++){
+		let mn = Infinity, mx = -Infinity;
+		for (const m of vis){ if (m[j] < mn) mn = m[j]; if (m[j] > mx) mx = m[j]; }
+		span = Math.max(span, mx - mn);
+	  }
+	}
+	e._static = vis.length > 0 && span < 2e-3;
+  }
+  const anims = shapes.filter(e => !e._static && e._per.some(Boolean));
+  const statics = shapes.filter(e => e._static && e._per.some(Boolean));
+
+  /* ── 4 · label 分段（动画部件可见性边界） ── */
+  const cuts = new Set([0, L]);
+  for (const e of anims){
+	let prev = null;
+	for (let fr = 0; fr < L; fr++){
+	  const vis = !!e._per[fr];
+	  if (vis !== prev){ cuts.add(fr); prev = vis; }
+	}
+  }
+  const cutArr = [...cuts].filter(x => x >= 0 && x <= L).sort((a,b) => a-b);
+  const labels = [];
+  for (let i = 0; i < cutArr.length - 1; i++){
+	const f0 = cutArr[i], f1 = cutArr[i+1] - 1;
+	if (f1 < f0) continue;
+	const parts = [];
+	for (const e of anims){
+	  let ok = true;
+	  for (let fr = f0; fr <= f1; fr++) if (!e._per[fr]){ ok = false; break; }
+	  if (ok) parts.push(e);
+	}
+	for (const e of statics){
+	  for (let fr = f0; fr <= f1; fr++) if (e._per[fr]){ parts.push(e); break; }
+	}
+	if (parts.length) labels.push({ f0, f1, parts });
+  }
+  if (!labels.length && shapes.length) labels.push({ f0: 0, f1: L-1, parts: shapes.filter(e => e._per.some(Boolean)) });
+
+  /* ── 5 · 命名：部件公共语义前缀，退化 label_N ── */
+  const usedNames = new Set();
+  labels.forEach((lab, idx) => {
+	let best = null;
+	for (const p of lab.parts){
+	  const nm = p._short;
+	  if (best === null) best = nm;
+	  else { let k2 = 0; while (k2 < best.length && k2 < nm.length && best[k2] === nm[k2]) k2++; best = best.slice(0, k2); }
+	}
+	best = (best || '').replace(/[_\-\s]+$/, '');
+	if (best.length < 3) best = 'label_' + (idx + 1);
+	let uniq = best, n = 1;
+	while (usedNames.has(uniq)) uniq = best + '_' + (++n);
+	usedNames.add(uniq);
+	lab.name = uniq;
+  });
+
+  /* ── 6 · sprite 元件名分配 ── */
+  const sprOf = new Map();
+  for (const e of shapes){
+	if (sprOf.has(e.sh.img)) { e._spr = sprOf.get(e.sh.img); continue; }
+	let nm = 'sprite/' + safeName(e._short), n = 1;
+	while ([...sprOf.values()].includes(nm)) nm = 'sprite/' + safeName(e._short) + '_' + (++n);
+	sprOf.set(e.sh.img, nm);
+	e._spr = nm;
+  }
+
+  /* ── 7 · DOMDocument.xml ── */
+  /* [关键] 位图必须打包成 Animate 原生 dat（bitmapDataHRef 指向），Animate 从 dat 解位图；
+     直接塞 PNG 进去 Animate 会全部打不开。PNG 仅作 href 预览图保留。 */
+  for (const t of texs.values()) t.datBytes = await makeFlaDat(t.bytes);
   const D = [];
   D.push("<?xml version='1.0' encoding='UTF-8' ?>");
-  D.push('<!-- 由 FLA⇄AMPROJ 网页转换器 从 Alight Motion 工程逆向转换而来 -->');
-  /* 文档头带上 Animate 标准 XFL 属性（xflVersion/creatorInfo/版本号/灭点）,
-	 提升严格导入器的兼容性; 真实来源已在上方注释声明。 */
+  D.push('<!-- 由 FLA⇄AMPROJ 网页转换器 从 Alight Motion 工程逆向转换而来（结构修复版） -->');
   D.push('<DOMDocument xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://ns.adobe.com/xfl/2008/"');
+  D.push(`  backgroundColor="${model.bgcolor || '#FFFFFF'}" width="${W}" height="${H}" frameRate="${fps}" currentTimeline="1"`);
   D.push('  xflVersion="2.971" creatorInfo="Adobe Animate" platform="Windows" versionInfo="Saved by Animate Windows 20.0 build 17400" majorVersion="20" buildNumber="17400"');
-  D.push(`  width="${W}" height="${H}" frameRate="${fps}" backgroundColor="${model.bgcolor || '#FFFFFF'}" currentTimeline="1" vanishingPoint3DX="${Math.round(W/2)}" vanishingPoint3DY="${Math.round(H/2)}">`);
-  D.push('  <folders>');
-  D.push('    <DOMFolderItem name="media" itemID="c0nv0000-00000001" isExpanded="true"/>');
-  D.push('  </folders>');
-  /* 段落顺序与真实 Animate 导出一致: folders → media → symbols → timelines */
-  D.push('  <media>');
-  let item = 0;
-  const orderedMedia = [...mediaByFile.values()];
-  for (const m of orderedMedia){
-	item++;
-	/* 与第二种 FLA 的 DOMBitmapItem 字段对齐: href/bitmapDataHRef 指向
-	   media/<file>, 并补上 frameRight/frameBottom(twip, 1px=20twip)。 */
-	const href = 'media/' + m.file;
-	D.push(`    <DOMBitmapItem name="${esc(m.name)}" itemID="${String(item).padStart(8,'0')}" href="${esc(href)}" bitmapDataHRef="${esc(href)}" sourceExternalFilepath="./LIBRARY/${esc(href)}" sourceLastImported="0" externalFileSize="${m.bytes.length}" originalCompressionType="lossless" frameRight="${Math.round(m.iw*20)}" frameBottom="${Math.round(m.ih*20)}" allowSmoothing="true" useImportedJPEGData="false" compressionType="lossless" quality="100"/>`);
+  D.push(`  vanishingPoint3DX="${R(W/2)}" vanishingPoint3DY="${R(H/2)}" playOptionsPlayFrameActions="false"`);
+  D.push(`  filetypeGUID="DD0DDBBF-5BEF-45B2-9F24-A3048D2A676F" fileGUID="${xflUuid()}">`);
+  D.push('     <folders>');
+  for (const nm of ['image', 'label', 'media', 'sprite'])
+	D.push(`          <DOMFolderItem name="${nm}" itemID="${xflItemId()}" isExpanded="true"/>`);
+  D.push('     </folders>');
+  D.push('     <media>');
+  let binN = 0;
+  for (const t of texs.values()){
+	t.dat = 'B ' + (++binN) + ' 1790728191.dat';
+	D.push(`          <DOMBitmapItem name="media/${t.base}" itemID="${xflItemId()}" sourceLastImported="0" externalFileSize="${t.bytes.length}" originalCompressionType="lossless" href="media/${t.base}.png" bitmapDataHRef="${t.dat}" frameRight="${R(t.w*20)}" frameBottom="${R(t.h*20)}" maxScaleUsed="1"/>`);
   }
-  D.push('  </media>');
-  D.push('  <symbols/>');
-  D.push('  <timelines>');
-  D.push('    <DOMTimeline name="场景 1">');
-  D.push('      <layers>');
-  D.push(layerXml.reverse().join('\n'));
-  D.push('      </layers>');
-  D.push('    </DOMTimeline>');
-  D.push('  </timelines>');
+  D.push('     </media>');
+  D.push('     <symbols>');
+  for (const t of texs.values())
+	D.push(`          <Include href="image/${t.base}.xml" itemIcon="1" loadImmediate="false" itemID="${xflItemId()}"/>`);
+  for (const t of texs.values())
+	D.push(`          <Include href="${esc(sprOf.get([...texs.keys()].find(k => texs.get(k) === t)))}.xml" itemIcon="1" loadImmediate="false" itemID="${xflItemId()}"/>`);
+  for (const lab of labels)
+	D.push(`          <Include href="label/${esc(lab.name)}.xml" itemIcon="1" loadImmediate="false" itemID="${xflItemId()}"/>`);
+  D.push('     </symbols>');
+  D.push('     <timelines>');
+  D.push('          <DOMTimeline name="animation">');
+  D.push('               <layers>');
+  /* label 层 */
+  D.push('                    <DOMLayer name="label" color="#4F4FFF" current="true" isSelected="true" heightLiteral="24">');
+  D.push('                         <frames>');
+  for (const lab of labels){
+	D.push(`                              <DOMFrame index="${lab.f0}" duration="${lab.f1 - lab.f0 + 1}" name="${esc(lab.name)}" labelType="name" keyMode="9728">`);
+	D.push('                                   <elements/>');
+	D.push('                              </DOMFrame>');
+  }
+  D.push('                         </frames>');
+  D.push('                    </DOMLayer>');
+  /* action 层：每个 label 末帧 stop() */
+  D.push('                    <DOMLayer name="action" color="#4F4FFF" heightLiteral="24">');
+  D.push('                         <frames>');
+  for (const lab of labels){
+	if (lab.f1 > lab.f0){
+	  D.push(`                              <DOMFrame index="${lab.f0}" duration="${lab.f1 - lab.f0}" keyMode="9728">`);
+	  D.push('                                   <elements/>');
+	  D.push('                              </DOMFrame>');
+	}
+	D.push(`                              <DOMFrame index="${lab.f1}" keyMode="9728">`);
+	D.push('                                        <' + 'Actionscript>');
+	D.push('                                          <' + 'script><![CDATA[stop();]]><' + '/script>');
+	D.push('                                        <' + '/Actionscript>');
+	D.push('                                   <elements/>');
+	D.push('                              </DOMFrame>');
+  }
+  D.push('                         </frames>');
+  D.push('                    </DOMLayer>');
+  /* instance 层 */
+  D.push('                    <DOMLayer name="instance" color="#4F4FFF" heightLiteral="24">');
+  D.push('                         <frames>');
+  for (const lab of labels){
+	D.push(`                              <DOMFrame index="${lab.f0}" duration="${lab.f1 - lab.f0 + 1}" keyMode="9728">`);
+	D.push('                                   <elements>');
+	D.push(`                                        <DOMSymbolInstance libraryItemName="label/${esc(lab.name)}" symbolType="graphic" loop="loop"/>`);
+	D.push('                                   </elements>');
+	D.push('                              </DOMFrame>');
+  }
+  D.push('                         </frames>');
+  D.push('                    </DOMLayer>');
+  D.push('               </layers>');
+  D.push('          </DOMTimeline>');
+  D.push('     </timelines>');
+  D.push('     <scripts/>');
+  D.push('     <PrinterSettings/>');
+  D.push('     <publishHistory/>');
   D.push('</DOMDocument>');
-  const entries = [
-	{ name: 'mimetype', data: enc.encode('application/vnd.adobe.xfl') },
-	{ name: 'DOMDocument.xml', data: enc.encode(D.join('\n') + '\n') },
-  ];
-  /* 位图实体按第二种 FLA 的库路径 LIBRARY/media/ 存放 */
-  for (const m of orderedMedia) entries.push({ name: 'LIBRARY/media/' + m.file, data: m.bytes });
-  return { bytes: zipStore(entries), xml: D.join('\n'), layers: layerXml.length, media: orderedMedia.length, totalFrames, W, H, fps };
+  const domXml = D.join('\n') + '\n';
+
+  /* ── 8 · 打包（DOMDocument.xml 紧随 mimetype 且 deflate 压缩） ── */
+  const entries = [];
+  const pushStore = (name, data) => entries.push({ name, data, crc: crc32(data), usize: data.length, deflate: false });
+  const pushDefl  = async (name, raw) => entries.push({ name, data: await deflateRawBytes(raw), crc: crc32(raw), usize: raw.length, deflate: true });
+  pushStore('mimetype', enc.encode('application/vnd.adobe.xfl'));
+  pushStore('ZOMBIE_TUTORIAL_IMP.xfl', enc.encode('PROXY-CS5'));
+  await pushDefl('DOMDocument.xml', enc.encode(domXml));
+  pushStore('META-INF/', XFL_EMPTY);
+  pushStore('META-INF/metadata.xml', XFL_EMPTY);
+  await pushDefl('PublishSettings.xml', enc.encode(
+`<?xml version="1.0" encoding="UTF-8"?>
+<PublishSettings xmlns="http://ns.adobe.com/xfl/2008/">
+  <PublishFormatProperties includedClasses="preloader" width="${W}" height="${H}" matchMovieDim="true" />
+  <PublishHtmlProperties enabled="1" />
+</PublishSettings>
+`));
+  pushStore('MobileSettings.xml', XFL_EMPTY);
+  for (const d of ['publishtemplates/', 'LIBRARY/', 'LIBRARY/image/', 'LIBRARY/label/', 'LIBRARY/media/', 'LIBRARY/sprite/'])
+	pushStore(d, XFL_EMPTY);
+  const imgs = [...texs.values()];
+  for (const t of imgs) await pushDefl(`LIBRARY/image/${t.base}.xml`, enc.encode(xflImageSymbol('image/' + t.base, 'media/' + t.base)));
+  for (const k of texs.keys()) await pushDefl(`LIBRARY/${sprOf.get(k)}.xml`, enc.encode(xflSpriteSymbol(sprOf.get(k), 'image/' + texs.get(k).base)));
+  for (const lab of labels) await pushDefl(`LIBRARY/label/${lab.name}.xml`, enc.encode(xflLabelSymbol('label/' + lab.name, lab.name, lab.parts, lab.f0, lab.f1)));
+  for (const t of imgs){
+	pushStore(`LIBRARY/media/${t.base}.png`, t.bytes);
+	pushStore('bin/' + t.dat, t.datBytes);
+  }
+  return { bytes: zipWrite(entries), xml: domXml, layers: labels.length, media: texs.size,
+		   totalFrames: L, W, H, fps };
 }
+
 /* ══════════════════════════════════════════════════════════════════════════
    10 · 界面逻辑：模式切换 / 转换 / 预览 / 往返自测 / 下载
    ══════════════════════════════════════════════════════════════════════════ */
@@ -2122,7 +2481,7 @@ async function runConvert(){
 		+ model.shapes.length + ' 个, 素材 ' + model.media.size + ', 时长 '
 		+ model.totalTime.toFixed(0) + 'ms', 'ok');
 	const t0 = performance.now();
-	const res = am2fla(model);
+	const res = await am2fla(model);
 	const ms = performance.now() - t0;
 	OUT = { name: baseName(SRC.name) + '.fla', bytes: res.bytes, kind: 'fla' };
 	log('  输出 ' + res.layers + ' 图层 / ' + res.media + ' 位图, '
@@ -2224,7 +2583,7 @@ async function selfTest(){
 	const r1 = conv.writeAmproj(baseName(SRC.name));
 	const files1 = await unzip(r1.bytes);
 	const model = parseAmproj(files1); await decodeAmTextures(model);
-	const r2 = am2fla(model);
+	const r2 = await am2fla(model);
 	const files2 = await unzip(r2.bytes);
 	const doc1 = loadDoc(files2); await decodeFlaBitmaps(doc1);
 	const fps = doc0.fps, total = timelineFrames(doc0.main);
@@ -2232,7 +2591,7 @@ async function selfTest(){
 	report(errs, 'FLA→AM→FLA');
   } else {
 	const model0 = parseAmproj(files); await decodeAmTextures(model0);
-	const r1 = am2fla(model0);
+	const r1 = await am2fla(model0);
 	const files1 = await unzip(r1.bytes);
 	const doc = loadDoc(files1); await decodeFlaBitmaps(doc);
 	const conv = new Fla2Am(doc, 2);
@@ -3831,6 +4190,19 @@ async function amprojToTriplet(model, labelCfg, baseNameStr, memo){
   /* pass 1：可信性判定（沿用坑36/36b/36c/37 的判据） */
   const cls = new Map();     // sh.id -> {elemIdx, leafNo, isNew, gapFill}
   const pend = [];           // 待定（不可信）的 shape
+  /* ★ [坑49 · 新增元件顶替原版编号] 实测（坚果 + 冰晶翅膀）：
+	用户在 AM 里新增一个图层后，AM 会按**图层顺序**重新生成该 shape 的 id。
+	 新图层排在图层列表最前 → id 落在编码区间内（如 1000000+0*100+0 = 1000000）
+	 → 被当成"可信元件"，解码出 elemIdx = 0/1/2。
+	 而原版 0/1/2 是坚果本体（wallnut_body_rear）—— 新增元件直接**顶替**了它，
+	 后面每个原版元件只能顺延 +3。
+	 后果：main_sprite 里所有 append/change/remove 的 index 全部对错 sprite。
+	 现象极具迷惑性：**动画矩阵一个字都没错**（所以动画节奏/变形全对），
+	 但每个位置画出来的是别的元件 —— 看起来就像"从精灵图随便截一块贴上去"。
+	 实测 290 个元件里 287 个整体偏移 +3，零例外。
+	 【判据修正】新增元件的素材 stem **必然不在**原版元件的素材集合里（坑36c），
+	 所以「素材对不上」必须**一票否决**，而不是仅在 st 存在时才检查。
+	 同时补一道：解码出的 elemIdx 必须真的在备忘录 elemToSprite 里存在。 */
   for (const sh of model.shapes){
 	const m = shapeSamples.get(sh.id);
 	if (!m) continue;
@@ -3841,11 +4213,24 @@ async function amprojToTriplet(model, labelCfg, baseNameStr, memo){
 	if (trusted){
 	  const dec0 = sh.id - 1000000;
 	  const ei0 = Math.floor(dec0 / 100), ln0 = dec0 % 100;
-	  const rels = (memo.elemLeafRel) ? (memo.elemLeafRel[String(ei0)] || memo.elemLeafRel[ei0]) : null;
-	  if (rels && Array.isArray(rels) && ln0 >= rels.length) trusted = false;
+	  /* [坑49a] 解码出的元件号必须真的存在于备忘录里 */
+	  if (memoElemMap.size && !memoElemMap.has(ei0)) trusted = false;
+	  if (trusted && memo.elemLeafRel){
+		const rels = (memo.elemLeafRel[String(ei0)] || memo.elemLeafRel[ei0]) || null;
+		if (rels && Array.isArray(rels) && ln0 >= rels.length) trusted = false;
+	  }
+	  /* [坑49b] 素材 stem 必须匹配。原版元件 → 素材集是已知的：
+		 对得上才可信；**对不上就必须否决**（旧实现写成「st 存在且不匹配才否决」，
+		 一旦原版元件没有可用 stem 数据就整条放行，新增图层于是长驱直入）。 */
 	  if (trusted){
 		const st = elemStems.get(ei0);
-		if (st && st.size && !st.has(stemOfShape(sh))) trusted = false;
+		if (st && st.size){
+		  if (!st.has(stemOfShape(sh))) trusted = false;
+		} else if (memoElemMap.size && memoElemMap.has(ei0)){
+		  /* 该原版元件在 memo 里存在，却推不出素材集 —— 数据不足，保守判为不可信 */
+		  const v = memoElemMap.get(ei0);
+		  if (!(v && v.sprite === false && v.resource == null)) trusted = false;
+		}
 	  }
 	}
 	if (trusted){
@@ -3874,7 +4259,16 @@ async function amprojToTriplet(model, labelCfg, baseNameStr, memo){
   }
 
   /* pass 4：真正的新增元件才分配新 index（且只分配一次，见坑30） */
+  /* ★ [坑49c · 新增元件编号安全垫] 新增元件一律从「备忘录最大 index + 1」起，
+	 且与已知原版编号区间**绝不重叠**。这样即使 [坑49b] 的判断出现漏网，
+	 新增元件也不会挤占原版元件的编号空间（原版编号永不被顶替）。 */
   let cn = elemCounter.n;
+  if (memo && memo.elemToSprite){
+	/* 兜底：确保起点严格大于所有已登记的原版编号 */
+	let mx = -1;
+	for (const k of Object.keys(memo.elemToSprite)){ const v = Number(k); if (isFinite(v) && v > mx) mx = v; }
+	if (mx >= 0) cn = Math.max(cn, mx + 1);
+  }
   for (const sh of pend){
 	if (!cls.has(sh.id)) cls.set(sh.id, { elemIdx: cn++, leafNo: 0, isNew: true, gapFill: false });
   }
@@ -4462,6 +4856,36 @@ async function amprojToTriplet(model, labelCfg, baseNameStr, memo){
 	  ...(r.atlas ? { width: r.width, height: r.height } : { ax: r.ax, ay: r.ay, aw: r.aw, ah: r.ah }),
 	}));
 	entries.push({ name: MEMO_FILE, data: enc.encode(JSON.stringify(outMemo)) });
+  }
+  /* ══════════ [坑49 · 交付前自检：元件编号是否被顶替] ══════════════════
+	 症状（坚果 + 冰晶翅膀）：动画矩阵完全正确，但每个位置画出来的是别的元件。
+	 成因：AM 新增图层的 id 落在编码区间内，被当成可信元件解码成低位编号，
+	 顶替了原版元件，后续全部顺延。
+	 这里在出包前做一次**骨架一致性核对**：把本次产出的 elemIdx → sprite 名，
+	 与备忘录记录的 elemIdx → sprite 名逐条比对。任何一条对不上就告警，
+	 让这类"静默错位"当场暴露，不再靠肉眼在游戏里发现。 */
+  if (memo && memo.elemToSprite && Array.isArray(memo.sprite) && memo.sprite.length){
+	let checked = 0, bad = [];
+	for (const [ei, v] of memoElemMap){
+	  const oldV = memo.elemToSprite[String(ei)] || memo.elemToSprite[ei];
+	  if (!oldV) continue;
+	  const oldName = (oldV.sprite && memo.sprite[oldV.resource]) ? (memo.sprite[oldV.resource].name || '') : '';
+	  const newName = (v && v.sprite && resSprites[v.resource]) ? (resSprites[v.resource].name || '') : '';
+	  if (!oldName && !newName) continue;
+	  checked++;
+	  /* 只比较「具名 sprite」这一类；新增元件本就无对应，跳过 */
+	  if (oldV.sprite !== !!v.sprite){ bad.push('元件 ' + ei + '：原为' + (oldV.sprite ? '具名' : '直连图') + '，现为' + (v.sprite ? '具名' : '直连图')); continue; }
+	  if (oldName && newName && oldName !== newName){
+		bad.push('元件 ' + ei + '：原 ' + oldName + ' → 现 ' + newName);
+	  }
+	}
+	if (bad.length){
+	  log('  ⚠ [自检] 有 ' + bad.length + '/' + checked + ' 个元件的 sprite 指向与备忘录不一致，'
+		+ '元件位置可能错乱（典型成因：AM 新增图层顶替了原版编号）。示例：', 'w');
+	  bad.slice(0, 5).forEach(s => log('       · ' + s, 'w'));
+	} else if (checked){
+	  log('  ✓ [自检] ' + checked + ' 个元件的 sprite 指向与备忘录一致', 'ok');
+	}
   }
   return { bytes: zipStore(entries), pam, resJson, atlasPng, W: packed.W, H: packed.H,
 		   images: images.length, totalFrames, labels: labels.length,
