@@ -853,7 +853,12 @@ function matWithTP(e){
 function parseFrameEl(f){
   const fr = { index: atI(f,'index',0), duration: Math.max(1, atI(f,'duration',1)),
 	keyMode: atI(f,'keyMode',0), tweenType: at(f,'tweenType',''), easeMethod: at(f,'easeMethodName',''),
-	customEase: [], elements: [] };
+	customEase: [], elements: [],
+	/* ★ [label 保留] FLA 的动画分段靠 DOMFrame 的 name/labelType="name" 记录
+	   (如 idle/walk/eat/die/...)。旧实现整条丢弃 —— 于是 FLA→AM 之后分段信息
+	   彻底消失, AM→三件套只能退化成单行 "all"(实测第三代/第四代 label 全为 all)。
+	   这里原样读入, 供 FLA→AM 生成 label 备忘录。 */
+	label: at(f,'name','') };
   const tw = ch(f,'tweens'); const ce = tw ? ch(tw,'CustomEase') : null;
   if (ce) for (const p of chs(ce,'Point')) fr.customEase.push([atF(p,'x',0), atF(p,'y',0)]);
   const els = ch(f,'elements');
@@ -861,6 +866,12 @@ function parseFrameEl(f){
 	const tag = e.localName;
 	if (tag === 'DOMSymbolInstance'){
 	  const el = { isSymbol:true, libName: at(e,'libraryItemName',''), mat: matWithTP(e),
+				   /* ★ [firstFrame] 图形元件实例可以指定「内部时间线从第几帧开始」。
+				      main_sprite 在主时间线被摆了两次: 第 0 帧(firstFrame 缺省→0)
+				      和第 850 帧(firstFrame=850)。旧实现完全忽略该属性, 内层采样一律
+				      从 0 起算 → 第二段只取到内层 0~42 帧, 于是内层 858 帧往后的
+				      concrete / 元件 1 / zombot_drone_bullet 虽被光栅化却从不出现。 */
+				   firstFrame: atI(e,'firstFrame',0), symbolType: at(e,'symbolType',''),
 				   alpha:1, brightness:0, tintMult:0, tint:null, colorMult:null, filters: parseFilters(e) };
 	  const cn = ch(e,'color'); const cc = cn ? ch(cn,'Color') : null;
 	  if (cc){
@@ -900,6 +911,22 @@ function timelineFrames(tl){
   for (const l of tl.layers) for (const f of l.frames) n = Math.max(n, f.index + Math.max(1, f.duration));
   return n;
 }
+/* ★ [静态元件误判修复] 一个元件是否"逐帧动画", 不能拿时间线长度(sym.duration)判断。
+   静态矢量元件常把唯一关键帧的 duration 写成整段时长(实测 元件 1=864, jackhammer/
+   concrete/zombot_drone* = 529): 内容全程不变, 但 duration 远大于 1。旧实现据此
+   把这些元件当成多帧动画, 在 _slicedShapes 里 continue 掉 —— 于是武器/电钻/无人机
+   等静态道具整批丢失(第一代 FLA→第二代 AM 即为此现象)。
+   正确判据: 图层里"含元素的关键帧"个数。任意图层 >1 才是真动画。 */
+function symbolFrameCount(tl){
+  if (!tl) return 1;
+  let n = 0;
+  for (const l of tl.layers){
+    let k = 0;
+    for (const f of l.frames) if (f.elements && f.elements.length) k++;
+    if (k > n) n = k;
+  }
+  return Math.max(1, n);
+}
 function loadDoc(files){
   const dx = files.get('DOMDocument.xml');
   if (!dx) throw new Error('压缩包内缺少 DOMDocument.xml');
@@ -923,10 +950,15 @@ function loadDoc(files){
 	if (!blob) continue;
 	let r; try { r = parseXml(blob).documentElement; } catch(err){ continue; }
 	const name = at(r,'name','') || href.replace(/\.xml$/i,'');
-	const sym = { name, itemId: at(r,'itemID',itemId), symbolType: at(r,'symbolType','graphic'), timeline:null, duration:1 };
+	const sym = { name, itemId: at(r,'itemID',itemId), symbolType: at(r,'symbolType','graphic'), timeline:null, duration:1, frameCount:1 };
 	let stl = ch(r,'timeline'); if (stl) stl = ch(stl,'DOMTimeline');
 	if (!stl){ const t2 = ch(r,'timelines'); if (t2){ const c = chs(t2,'DOMTimeline'); stl = c[0] || null; } }
-	if (stl){ sym.timeline = parseTimeline(stl); sym.duration = Math.max(1, timelineFrames(sym.timeline)); }
+	if (stl){
+	  sym.timeline = parseTimeline(stl);
+	  sym.duration = Math.max(1, timelineFrames(sym.timeline));
+	  /* frameCount = 真·动画帧数(含元素的关键帧个数); 与 duration(时间线长度)区分开 */
+	  sym.frameCount = symbolFrameCount(sym.timeline);
+	}
 	doc.symbols.set(name, sym);
   }
   /* 位图素材（第二种 FLA: 位图实例只出现在 LIBRARY/image/*.xml 符号里,
@@ -953,6 +985,24 @@ function loadDoc(files){
 function flaFormatOf(doc){
   const nBmp = doc.bitmapItems ? doc.bitmapItems.size : 0;
   return { code: nBmp ? 2 : 1, name: nBmp ? '第二种（位图素材 + 嵌套符号）' : '第一种（纯矢量图形）', bitmapCount: nBmp };
+}
+/* ★ [label 保留] 主时间线上每个帧的动画分段名(来自 DOMFrame name/labelType="name")。
+   返回长度 = totalFrames 的数组, 未标注的帧为 null; 段从某个已命名帧起、延续到
+   下一个已命名帧之前(与 FLA 的 label 语义一致)。 */
+function flaFrameLabels(doc, totalFrames){
+  const labs = new Array(Math.max(1, totalFrames)).fill(null);
+  const tl = doc && doc.main;
+  if (!tl) return labs;
+  const named = [];
+  for (const l of tl.layers) for (const f of l.frames) if (f.label) named.push({ name:f.label, start:f.index });
+  if (!named.length) return labs;
+  named.sort((a,b) => a.start - b.start);
+  for (let k=0;k<named.length;k++){
+	const s = Math.max(0, named[k].start);
+	const e = Math.min(labs.length, (k+1 < named.length) ? named[k+1].start : labs.length);
+	for (let i=s;i<e;i++) labs[i] = named[k].name;
+  }
+  return labs;
 }
 function bitmapBytes(doc, libName){
   const files = doc.files;
@@ -1486,7 +1536,7 @@ class Fla2Am {
 	const name = elem.libName;
 	const sym = this.doc.symbols.get(name);
 	if (!sym || !sym.timeline) return null;
-	if (sym.duration > 1){
+	if (sym.frameCount > 1){
 	  const png = this.framePng.get(name + '|' + inner) || this.symPng.get(name);
 	  if (!png) return null;
 	  const [hw, hh] = this.symHalf.get(name) || [1,1];
@@ -1538,7 +1588,7 @@ class Fla2Am {
 	  for (const e of f.elements){
 		if (!e.isSymbol){ allStatic = false; break; }
 		const sym = this.doc.symbols.get(e.libName);
-		if (!sym || sym.duration > 1){ allStatic = false; break; }
+		if (!sym || sym.frameCount > 1){ allStatic = false; break; }
 	  }
 	  if (!allStatic) break;
 	}
@@ -1622,7 +1672,9 @@ class Fla2Am {
 		if (!el.isSymbol || el.bitmap) continue;
 		const sym = this.doc.symbols.get(el.libName);
 		if (!sym || !sym.timeline){ continue; }
-		const symDur = Math.max(1, sym.duration);
+		/* 静态元件(含元素关键帧仅 1 个)没有内部动画可切: 内层帧索引恒为 0,
+		   避免误用超长 duration(元件 1=864, 道具=529)导致大量重复采样。 */
+		const symDur = sym.frameCount > 1 ? Math.max(1, sym.duration) : 1;
 		let emitted = 0;
 		/* XFL 的 DOMLayer 顺序是"最上层在前", AMPROJ 的 shape 顺序是"先写先垫底",
 		   因此必须反序遍历, 否则部件前后遮挡整个翻过来。 */
@@ -1638,14 +1690,20 @@ class Fla2Am {
 		  for (const partName of partNames){
 			const partSym = this.doc.symbols.get(partName);
 			if (!partSym || !partSym.timeline) continue;
-			/* 部件自身还是逐帧动画 -> 交回逐帧路径(本工程无此情况, 仅为保险) */
-			if (partSym.duration > 1){ continue; }
+			/* 部件自身还是逐帧动画 -> 交回逐帧路径(本工程无此情况, 仅为保险)
+			   注意: 判据必须是 frameCount(真帧数), 不能用 duration —— 静态矢量
+			   道具(duration=529) 会被 duration 判据误杀, 导致武器/电钻/无人机
+			   等部件在 main_sprite 里被整批 continue 掉。 */
+			if (partSym.frameCount > 1){ continue; }
 			const m = this._symMeta(partName, el);
 			if (!m) continue;
+			/* ★ [firstFrame] 外层实例的内层起点偏移。内层绝对帧 = (k + 外层实例 firstFrame)。
+			   例: main_sprite 第二段实例 firstFrame=850, 则 k=8 对应内层 858 帧的 concrete。 */
+			const ff = el.firstFrame || 0;
 			const samples = [];
 			for (let k=0; k<instDur; k++){
 			  const fr = frStart + k;
-			  const inF = k % symDur;
+			  const inF = symDur > 1 ? ((k + ff) % symDur) : 0;
 			  const hit = layerItemsAt(inner, inF).find(([e]) => e.libName === partName);
 			  if (!hit){ samples.push({ t: fr/fps*1000, kf: null }); continue; }
 			  /* 部件局部 -> 舞台: 外层实例矩阵 ∘ 部件矩阵 */
@@ -1670,11 +1728,14 @@ class Fla2Am {
 	return outs;
   }
   _bakeSymbolRuns(el, sym, frStart, instDur, fps){
-	if (sym.duration > 1) this.buildSymbolFrames(el.libName, sym);
+	const animated = sym.frameCount > 1;
+	if (animated) this.buildSymbolFrames(el.libName, sym);
 	else this.buildSymbolPng(el.libName);
 	const seq = [];
+	const loop = animated ? Math.max(1, sym.duration) : 1;
+	const ff = el.firstFrame || 0;
 	for (let k=0; k<instDur; k++){
-	  const fr = frStart + k, inner = k % Math.max(1, sym.duration);
+	  const fr = frStart + k, inner = (k + ff) % loop;
 	  const r = this._elemPng(el, inner);
 	  if (!r) continue;
 	  seq.push({ png: r.png, hw: r.hw, hh: r.hh, fr, mat: el.mat });
@@ -1867,8 +1928,8 @@ function amNodeMatrixAt(nd, tGlob){
   const skw = trackAt(nd.skw, u, [0,0]);
   let m = composeTrs(rot[0]*Math.PI/180, scl[0], scl[1], skw[0], skw[1], loc[0], loc[1]);
   if (nd.piv && nd.piv.kfs.length){
-    const p = trackAt(nd.piv, u, [0,0]);
-    if (p[0] || p[1]) m = matMul(m, [1,0,0,1, -(p[0]||0), -(p[1]||0)]);
+	const p = trackAt(nd.piv, u, [0,0]);
+	if (p[0] || p[1]) m = matMul(m, [1,0,0,1, -(p[0]||0), -(p[1]||0)]);
   }
   let op = 1;
   if (nd.op && nd.op.kfs.length){ const o = trackAt(nd.op, u, [1])[0]; op = isFinite(o) ? o : 1; }
@@ -1877,9 +1938,9 @@ function amNodeMatrixAt(nd, tGlob){
 function amChainAt(chain, tGlob){
   let m = null, op = 1;
   for (const nd of chain){
-    const r = amNodeMatrixAt(nd, tGlob);
-    m = m ? matMul(m, r.m) : r.m;
-    op *= r.op;
+	const r = amNodeMatrixAt(nd, tGlob);
+	m = m ? matMul(m, r.m) : r.m;
+	op *= r.op;
   }
   return { m, op };
 }
@@ -1887,76 +1948,76 @@ function amChainAt(chain, tGlob){
 function amSampleEffects(sh, u, warned){
   const out = { sclMul: [1,1], preM: null, raster: [], unsupported: [] };
   for (const ef of (sh.effects || [])){
-    const short = (ef.id || '').split('.').pop();
-    const P = (n, d) => { const p = ef.props.find(x => x.name === n); return p ? amPropNum(p, u, d) : d; };
-    const PS = (n, d) => { const p = ef.props.find(x => x.name === n); return p ? p.raw : d; };
-    if (short === 'scaleassist'){
-      const s = P('scale', [1])[0] || 1; const ax = P('axis', [0])[0] | 0;
-      if (ax === 1) out.sclMul[0] *= s; else if (ax === 2) out.sclMul[1] *= s;
-      else { out.sclMul[0] *= s; out.sclMul[1] *= s; }
-    } else if (short === 'transform2'){
-      const px = P('posx',[0])[0]||0, py = P('posy',[0])[0]||0, ang = P('angle',[0])[0]||0;
-      const sx2 = P('scalex',[1])[0]||1, sy2 = P('scaley',[1])[0]||1;
-      const m2 = composeTrs(ang*Math.PI/180, sx2, sy2, 0, 0, px, py);
-      out.preM = out.preM ? matMul(out.preM, m2) : m2;
-    } else if (short === 'jitter'){
-      const mag = P('mag',[0])[0]||0, fr = P('freq',[0])[0]||0, sd = P('seed',[0])[0]||0, ang = P('angle',[0])[0]||0;
-      if (mag){
-        const ph = 2*Math.PI*fr*u + sd*7;
-        const dx = mag*Math.cos(ang*Math.PI/180)*Math.sin(ph);
-        const dy = mag*Math.sin(ang*Math.PI/180)*Math.cos(ph);
-        const m2 = [1,0,0,1,dx,dy];
-        out.preM = out.preM ? matMul(out.preM, m2) : m2;
-      }
-    } else if (short === 'pixelate2'){
-      const ps = Math.max(1, P('size',[1])[0]||1);
-      if (ps > 1.01) out.raster.push({ kind: 'pixelate', ps });
-    } else if (short === 'threshold'){
-      const t = P('threshold',[0.5])[0]!==undefined?P('threshold',[0.5])[0]:0.5;
-      const f = P('feather',[0])[0]||0;
-      const iv = PS('invert','false');
-      out.raster.push({ kind: 'threshold', t, f, inv: /^(true|1)$/i.test(String(iv)) });
-    } else if (short === 'palettemap'){
-      const cols = [];
-      for (let i=1;i<=8;i++){ const c = PS('color'+i, null); if (c) cols.push(argbColor(c)); }
-      const a = P('alpha',[1])[0]; const alpha = (a===undefined||!isFinite(a))?1:a;
-      const npal = Math.max(1, Math.min(cols.length, P('palette',[cols.length])[0] | 0 || cols.length));
-      out.raster.push({ kind: 'palette', cols: cols.slice(0, npal), alpha });
-    } else if (short === 'gaussianblur'){
-      const st = P('strength',[0])[0]||0;
-      if (st > 0.05) out.raster.push({ kind: 'blur', r: st });
-    } else if (short === 'chromakey-adv'){
-      const keys = [];
-      for (let i=1;i<=4;i++){
-        const c = PS('c'+i+'color', null); if (!c) continue;
-        const md = PS('c'+i+'mode','key');
-        if (/^off$/i.test(String(md))) continue;
-        keys.push({ col: argbColor(c), tol: P('c'+i+'threshold',[0])[0]||0, f: P('c'+i+'feather',[0])[0]||0 });
-      }
-      if (keys.length) out.raster.push({ kind: 'chroma', keys });
-    } else if (short === 'chromakey'){
-      out.raster.push({ kind: 'chroma', keys: [{ col: argbColor(PS('keyColor','#ff00ff00')),
-        tol: P('threshold',[0.2])[0]||0, f: P('feather',[0.05])[0]||0 }] });
-    } else if (short === 'softglow'){
-      /* 辉光：模糊+提亮副本以 lighter 叠加（预览近似） */
-      out.raster.push({ kind: 'glow',
-        strength: P('strength',[1])[0], brightness: P('brightness',[0])[0],
-        blend: P('blend',[0])[0], outsideAlpha: P('outsideAlpha',[0])[0] });
-    } else if (short === 'looks-blink'){
-      const frq = P('freq',[0])[0]||0, fl = P('fill',[0])[0]||0, ex = P('exposure',[0])[0]||0;
-      const ofs = P('offset',[0])[0]||0;
-      out.raster.push({ kind: 'blink', frq, fill: fl, exposure: ex, offset: ofs });
-    } else if (short === 'line'){
-      const cnt = P('count',[1])[0]|0;
-      if (cnt !== 1 && out.unsupported.indexOf(ef.id) < 0) out.unsupported.push(ef.id || short);
-    } else if (short){
-      if (out.unsupported.indexOf(ef.id) < 0) out.unsupported.push(ef.id || short);
-    }
+	const short = (ef.id || '').split('.').pop();
+	const P = (n, d) => { const p = ef.props.find(x => x.name === n); return p ? amPropNum(p, u, d) : d; };
+	const PS = (n, d) => { const p = ef.props.find(x => x.name === n); return p ? p.raw : d; };
+	if (short === 'scaleassist'){
+	  const s = P('scale', [1])[0] || 1; const ax = P('axis', [0])[0] | 0;
+	  if (ax === 1) out.sclMul[0] *= s; else if (ax === 2) out.sclMul[1] *= s;
+	  else { out.sclMul[0] *= s; out.sclMul[1] *= s; }
+	} else if (short === 'transform2'){
+	  const px = P('posx',[0])[0]||0, py = P('posy',[0])[0]||0, ang = P('angle',[0])[0]||0;
+	  const sx2 = P('scalex',[1])[0]||1, sy2 = P('scaley',[1])[0]||1;
+	  const m2 = composeTrs(ang*Math.PI/180, sx2, sy2, 0, 0, px, py);
+	  out.preM = out.preM ? matMul(out.preM, m2) : m2;
+	} else if (short === 'jitter'){
+	  const mag = P('mag',[0])[0]||0, fr = P('freq',[0])[0]||0, sd = P('seed',[0])[0]||0, ang = P('angle',[0])[0]||0;
+	  if (mag){
+		const ph = 2*Math.PI*fr*u + sd*7;
+		const dx = mag*Math.cos(ang*Math.PI/180)*Math.sin(ph);
+		const dy = mag*Math.sin(ang*Math.PI/180)*Math.cos(ph);
+		const m2 = [1,0,0,1,dx,dy];
+		out.preM = out.preM ? matMul(out.preM, m2) : m2;
+	  }
+	} else if (short === 'pixelate2'){
+	  const ps = Math.max(1, P('size',[1])[0]||1);
+	  if (ps > 1.01) out.raster.push({ kind: 'pixelate', ps });
+	} else if (short === 'threshold'){
+	  const t = P('threshold',[0.5])[0]!==undefined?P('threshold',[0.5])[0]:0.5;
+	  const f = P('feather',[0])[0]||0;
+	  const iv = PS('invert','false');
+	  out.raster.push({ kind: 'threshold', t, f, inv: /^(true|1)$/i.test(String(iv)) });
+	} else if (short === 'palettemap'){
+	  const cols = [];
+	  for (let i=1;i<=8;i++){ const c = PS('color'+i, null); if (c) cols.push(argbColor(c)); }
+	  const a = P('alpha',[1])[0]; const alpha = (a===undefined||!isFinite(a))?1:a;
+	  const npal = Math.max(1, Math.min(cols.length, P('palette',[cols.length])[0] | 0 || cols.length));
+	  out.raster.push({ kind: 'palette', cols: cols.slice(0, npal), alpha });
+	} else if (short === 'gaussianblur'){
+	  const st = P('strength',[0])[0]||0;
+	  if (st > 0.05) out.raster.push({ kind: 'blur', r: st });
+	} else if (short === 'chromakey-adv'){
+	  const keys = [];
+	  for (let i=1;i<=4;i++){
+		const c = PS('c'+i+'color', null); if (!c) continue;
+		const md = PS('c'+i+'mode','key');
+		if (/^off$/i.test(String(md))) continue;
+		keys.push({ col: argbColor(c), tol: P('c'+i+'threshold',[0])[0]||0, f: P('c'+i+'feather',[0])[0]||0 });
+	  }
+	  if (keys.length) out.raster.push({ kind: 'chroma', keys });
+	} else if (short === 'chromakey'){
+	  out.raster.push({ kind: 'chroma', keys: [{ col: argbColor(PS('keyColor','#ff00ff00')),
+		tol: P('threshold',[0.2])[0]||0, f: P('feather',[0.05])[0]||0 }] });
+	} else if (short === 'softglow'){
+	  /* 辉光：模糊+提亮副本以 lighter 叠加（预览近似） */
+	  out.raster.push({ kind: 'glow',
+		strength: P('strength',[1])[0], brightness: P('brightness',[0])[0],
+		blend: P('blend',[0])[0], outsideAlpha: P('outsideAlpha',[0])[0] });
+	} else if (short === 'looks-blink'){
+	  const frq = P('freq',[0])[0]||0, fl = P('fill',[0])[0]||0, ex = P('exposure',[0])[0]||0;
+	  const ofs = P('offset',[0])[0]||0;
+	  out.raster.push({ kind: 'blink', frq, fill: fl, exposure: ex, offset: ofs });
+	} else if (short === 'line'){
+	  const cnt = P('count',[1])[0]|0;
+	  if (cnt !== 1 && out.unsupported.indexOf(ef.id) < 0) out.unsupported.push(ef.id || short);
+	} else if (short){
+	  if (out.unsupported.indexOf(ef.id) < 0) out.unsupported.push(ef.id || short);
+	}
   }
   if (warned){
-    for (const idd of out.unsupported){
-      if (!warned.has(idd)){ warned.add(idd); log('  ⚠ 特效暂不支持（已忽略）: ' + String(idd).split('.').pop(), 'w'); }
-    }
+	for (const idd of out.unsupported){
+	  if (!warned.has(idd)){ warned.add(idd); log('  ⚠ 特效暂不支持（已忽略）: ' + String(idd).split('.').pop(), 'w'); }
+	}
   }
   return out;
 }
@@ -1967,25 +2028,25 @@ function amRasterPath(d, col, psEl){
   const segs = []; let i = 0; let cmd = null;
   const num = () => { const v = parseFloat(toks[i++]); return isFinite(v) ? v : 0; };
   while (i < toks.length){
-    const t = toks[i];
-    if (/^[A-Za-z]$/.test(t)){ cmd = t.toUpperCase(); i++; if (cmd === 'Z'){ segs.push(['Z']); cmd = null; } continue; }
-    if (cmd === 'M'){ segs.push(['M', num(), num()]); cmd = 'L'; }
-    else if (cmd === 'L') segs.push(['L', num(), num()]);
-    else if (cmd === 'C') segs.push(['C', num(), num(), num(), num(), num(), num()]);
-    else if (cmd === 'Q'){ const ax = num(), ay = num(), bx = num(), by = num(); segs.push(['C', ax, ay, ax, ay, bx, by]); }
-    else i++;
+	const t = toks[i];
+	if (/^[A-Za-z]$/.test(t)){ cmd = t.toUpperCase(); i++; if (cmd === 'Z'){ segs.push(['Z']); cmd = null; } continue; }
+	if (cmd === 'M'){ segs.push(['M', num(), num()]); cmd = 'L'; }
+	else if (cmd === 'L') segs.push(['L', num(), num()]);
+	else if (cmd === 'C') segs.push(['C', num(), num(), num(), num(), num(), num()]);
+	else if (cmd === 'Q'){ const ax = num(), ay = num(), bx = num(), by = num(); segs.push(['C', ax, ay, ax, ay, bx, by]); }
+	else i++;
   }
   if (!segs.length) return null;
   const strokeW = psEl ? Math.max(0.1, atF(ch(psEl,'size'),'value', 1) || 0) : 0;
   const pad = strokeW ? strokeW / 2 + 1 : 0.5;
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const sg of segs){
-    for (let k = 1; k < sg.length; k += 2){
-      const x = sg[k], y = sg[k+1];
-      if (!isFinite(x) || !isFinite(y)) continue;
-      if (x < x0) x0 = x; if (x > x1) x1 = x;
-      if (y < y0) y0 = y; if (y > y1) y1 = y;
-    }
+	for (let k = 1; k < sg.length; k += 2){
+	  const x = sg[k], y = sg[k+1];
+	  if (!isFinite(x) || !isFinite(y)) continue;
+	  if (x < x0) x0 = x; if (x > x1) x1 = x;
+	  if (y < y0) y0 = y; if (y > y1) y1 = y;
+	}
   }
   if (!isFinite(x0)) return null;
   const bw = (x1 - x0) + pad*2, bh = (y1 - y0) + pad*2;
@@ -1996,16 +2057,16 @@ function amRasterPath(d, col, psEl){
   g.translate(pad - x0, pad - y0);
   g.beginPath();
   for (const sg of segs){
-    if (sg[0] === 'M') g.moveTo(sg[1], sg[2]);
-    else if (sg[0] === 'L') g.lineTo(sg[1], sg[2]);
-    else if (sg[0] === 'C') g.bezierCurveTo(sg[1], sg[2], sg[3], sg[4], sg[5], sg[6]);
-    else if (sg[0] === 'Z') g.closePath();
+	if (sg[0] === 'M') g.moveTo(sg[1], sg[2]);
+	else if (sg[0] === 'L') g.lineTo(sg[1], sg[2]);
+	else if (sg[0] === 'C') g.bezierCurveTo(sg[1], sg[2], sg[3], sg[4], sg[5], sg[6]);
+	else if (sg[0] === 'Z') g.closePath();
   }
   const rgba = (c) => 'rgba(' + Math.round(c[0]*255) + ',' + Math.round(c[1]*255) + ',' + Math.round(c[2]*255) + ',' + c[3] + ')';
   if (strokeW){
-    g.strokeStyle = rgba(col); g.lineWidth = strokeW; g.lineJoin = 'round'; g.stroke();
+	g.strokeStyle = rgba(col); g.lineWidth = strokeW; g.lineJoin = 'round'; g.stroke();
   } else {
-    g.fillStyle = rgba(col); g.fill();
+	g.fillStyle = rgba(col); g.fill();
   }
   return { cv, w: bw, h: bh };
 }
@@ -2016,71 +2077,71 @@ function amRasterizeEffects(tex, sx, sy, cw, chh, fx, u){
   const cv = newCanvas(W, H);
   const g = cv.getContext('2d');
   for (const r of fx){
-    if (r.kind === 'blur') g.filter = 'blur(' + (r.r*k).toFixed(2) + 'px)';
+	if (r.kind === 'blur') g.filter = 'blur(' + (r.r*k).toFixed(2) + 'px)';
   }
   g.drawImage(tex, sx, sy, cw, chh, 0, 0, W, H);
   g.filter = 'none';
   for (const r of fx){
-    if (r.kind === 'glow'){
-      const bc = newCanvas(W, H); const bx = bc.getContext('2d');
-      const rad = Math.min(24, 4 + 18 * Math.max(0, Math.min(1, r.strength === undefined ? 1 : r.strength)));
-      bx.filter = 'blur(' + rad.toFixed(1) + 'px) brightness(' + (1 + Math.max(0, r.brightness || 0)).toFixed(2) + ')';
-      bx.drawImage(cv, 0, 0);
-      g.globalCompositeOperation = 'lighter';
-      g.globalAlpha = Math.min(1, ((r.blend || 0) + (r.outsideAlpha === undefined ? 0.6 : r.outsideAlpha)) * Math.max(0.2, Math.min(1, r.strength === undefined ? 1 : r.strength)));
-      g.drawImage(bc, 0, 0);
-      g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1;
-    } else if (r.kind === 'pixelate'){
-      const ps = Math.max(2, Math.round(r.ps*k));
-      const sw = Math.max(1, Math.round(W/ps)), shh = Math.max(1, Math.round(H/ps));
-      const sm = newCanvas(sw, shh); const sg = sm.getContext('2d');
-      sg.imageSmoothingEnabled = true; sg.drawImage(cv, 0, 0, sw, shh);
-      g.imageSmoothingEnabled = false; g.clearRect(0,0,W,H); g.drawImage(sm, 0, 0, sw, shh, 0, 0, W, H);
-      g.imageSmoothingEnabled = true;
-    } else if (r.kind === 'threshold' || r.kind === 'palette' || r.kind === 'chroma'){
-      let img;
-      try { img = g.getImageData(0, 0, W, H); } catch(e){ continue; }
-      const d = img.data;
-      for (let pi = 0; pi < d.length; pi += 4){
-        if (d[pi+3] === 0) continue;
-        if (r.kind === 'threshold'){
-          const lum = (0.2126*d[pi] + 0.7152*d[pi+1] + 0.0722*d[pi+2]) / 255;
-          const on = r.inv ? lum < r.t : lum > r.t;
-          const v = on ? 255 : 0;
-          d[pi] = d[pi+1] = d[pi+2] = v;
-        } else if (r.kind === 'palette'){
-          if (!r.cols.length) continue;
-          let best = r.cols[0], bd = Infinity;
-          for (const c of r.cols){
-            const dd = (d[pi]-c[0]*255)*(d[pi]-c[0]*255) + (d[pi+1]-c[1]*255)*(d[pi+1]-c[1]*255) + (d[pi+2]-c[2]*255)*(d[pi+2]-c[2]*255);
-            if (dd < bd){ bd = dd; best = c; }
-          }
-          const a = Math.max(0, Math.min(1, r.alpha));
-          d[pi]   = d[pi]   + (best[0]*255 - d[pi]) * a;
-          d[pi+1] = d[pi+1] + (best[1]*255 - d[pi+1]) * a;
-          d[pi+2] = d[pi+2] + (best[2]*255 - d[pi+2]) * a;
-        } else if (r.kind === 'chroma'){
-          for (const kk of r.keys){
-            const dd = Math.sqrt((d[pi]-kk.col[0]*255)*(d[pi]-kk.col[0]*255) + (d[pi+1]-kk.col[1]*255)*(d[pi+1]-kk.col[1]*255) + (d[pi+2]-kk.col[2]*255)*(d[pi+2]-kk.col[2]*255));
-            const t0 = kk.tol*255, t1 = t0 + Math.max(1, kk.f*255);
-            if (dd <= t1) d[pi+3] = Math.min(d[pi+3], Math.round(255 * Math.max(0, (dd - t0) / (t1 - t0))));
-          }
-        }
-      }
-      g.putImageData(img, 0, 0);
-    } else if (r.kind === 'blink'){
-      const frq = r.frq || 0, fl = Math.max(0, Math.min(1, r.fill||0)), ex = r.exposure||0;
-      if (frq > 0 && (fl > 0 || ex !== 0)){
-        const ph = ((u * frq + (r.offset||0)) % 1 + 1) % 1;
-        if (ph < fl){
-          const f = 1 + Math.max(0, ex) * (1 - ph/fl);
-          g.globalCompositeOperation = 'source-atop';
-          g.fillStyle = 'rgba(255,255,255,' + Math.max(0, Math.min(1, (f-1)/Math.max(0.001,f))) + ')';
-          g.fillRect(0, 0, W, H);
-          g.globalCompositeOperation = 'source-over';
-        }
-      }
-    }
+	if (r.kind === 'glow'){
+	  const bc = newCanvas(W, H); const bx = bc.getContext('2d');
+	  const rad = Math.min(24, 4 + 18 * Math.max(0, Math.min(1, r.strength === undefined ? 1 : r.strength)));
+	  bx.filter = 'blur(' + rad.toFixed(1) + 'px) brightness(' + (1 + Math.max(0, r.brightness || 0)).toFixed(2) + ')';
+	  bx.drawImage(cv, 0, 0);
+	  g.globalCompositeOperation = 'lighter';
+	  g.globalAlpha = Math.min(1, ((r.blend || 0) + (r.outsideAlpha === undefined ? 0.6 : r.outsideAlpha)) * Math.max(0.2, Math.min(1, r.strength === undefined ? 1 : r.strength)));
+	  g.drawImage(bc, 0, 0);
+	  g.globalCompositeOperation = 'source-over'; g.globalAlpha = 1;
+	} else if (r.kind === 'pixelate'){
+	  const ps = Math.max(2, Math.round(r.ps*k));
+	  const sw = Math.max(1, Math.round(W/ps)), shh = Math.max(1, Math.round(H/ps));
+	  const sm = newCanvas(sw, shh); const sg = sm.getContext('2d');
+	  sg.imageSmoothingEnabled = true; sg.drawImage(cv, 0, 0, sw, shh);
+	  g.imageSmoothingEnabled = false; g.clearRect(0,0,W,H); g.drawImage(sm, 0, 0, sw, shh, 0, 0, W, H);
+	  g.imageSmoothingEnabled = true;
+	} else if (r.kind === 'threshold' || r.kind === 'palette' || r.kind === 'chroma'){
+	  let img;
+	  try { img = g.getImageData(0, 0, W, H); } catch(e){ continue; }
+	  const d = img.data;
+	  for (let pi = 0; pi < d.length; pi += 4){
+		if (d[pi+3] === 0) continue;
+		if (r.kind === 'threshold'){
+		  const lum = (0.2126*d[pi] + 0.7152*d[pi+1] + 0.0722*d[pi+2]) / 255;
+		  const on = r.inv ? lum < r.t : lum > r.t;
+		  const v = on ? 255 : 0;
+		  d[pi] = d[pi+1] = d[pi+2] = v;
+		} else if (r.kind === 'palette'){
+		  if (!r.cols.length) continue;
+		  let best = r.cols[0], bd = Infinity;
+		  for (const c of r.cols){
+			const dd = (d[pi]-c[0]*255)*(d[pi]-c[0]*255) + (d[pi+1]-c[1]*255)*(d[pi+1]-c[1]*255) + (d[pi+2]-c[2]*255)*(d[pi+2]-c[2]*255);
+			if (dd < bd){ bd = dd; best = c; }
+		  }
+		  const a = Math.max(0, Math.min(1, r.alpha));
+		  d[pi]   = d[pi]   + (best[0]*255 - d[pi]) * a;
+		  d[pi+1] = d[pi+1] + (best[1]*255 - d[pi+1]) * a;
+		  d[pi+2] = d[pi+2] + (best[2]*255 - d[pi+2]) * a;
+		} else if (r.kind === 'chroma'){
+		  for (const kk of r.keys){
+			const dd = Math.sqrt((d[pi]-kk.col[0]*255)*(d[pi]-kk.col[0]*255) + (d[pi+1]-kk.col[1]*255)*(d[pi+1]-kk.col[1]*255) + (d[pi+2]-kk.col[2]*255)*(d[pi+2]-kk.col[2]*255));
+			const t0 = kk.tol*255, t1 = t0 + Math.max(1, kk.f*255);
+			if (dd <= t1) d[pi+3] = Math.min(d[pi+3], Math.round(255 * Math.max(0, (dd - t0) / (t1 - t0))));
+		  }
+		}
+	  }
+	  g.putImageData(img, 0, 0);
+	} else if (r.kind === 'blink'){
+	  const frq = r.frq || 0, fl = Math.max(0, Math.min(1, r.fill||0)), ex = r.exposure||0;
+	  if (frq > 0 && (fl > 0 || ex !== 0)){
+		const ph = ((u * frq + (r.offset||0)) % 1 + 1) % 1;
+		if (ph < fl){
+		  const f = 1 + Math.max(0, ex) * (1 - ph/fl);
+		  g.globalCompositeOperation = 'source-atop';
+		  g.fillStyle = 'rgba(255,255,255,' + Math.max(0, Math.min(1, (f-1)/Math.max(0.001,f))) + ')';
+		  g.fillRect(0, 0, W, H);
+		  g.globalCompositeOperation = 'source-over';
+		}
+	  }
+	}
   }
   return cv;
 }
@@ -2507,7 +2568,7 @@ function xflLabelSymbol(name, short, parts, f0, f1){
 /* ═══ [特效降级] 导出前的特效烘焙 ═══
    FLA / 原版三件套都不承载 AM 特效。为把「转换前后差距」压到最小：
    · 像素类（pixelate2/palettemap/threshold/gaussianblur/chromakey/softglow/looks-blink）
-     → 采样行程中点 u=0.5，把特效直接烘焙进派生纹理（导出期间替换 sh.img，导完还原）；
+	 → 采样行程中点 u=0.5，把特效直接烘焙进派生纹理（导出期间替换 sh.img，导完还原）；
    · 几何类（scaleassist/transform2/jitter）→ 已进逐帧矩阵；
    · palettemap 的动画 alpha / looks-blink 的曝光 → 进逐帧 Color（FLA 才有，PAM 无此字段）。 */
 const PIXEL_FX_KINDS = ['pixelate','palette','threshold','blur','chroma','glow','blink'];
@@ -2976,6 +3037,23 @@ async function runConvert(){
 	const amFiles = await unzip(res.bytes);
 	const model = parseAmproj(amFiles);
 	await decodeAmTextures(model);
+	/* ★ [label 保留] 把 FLA 的动画分段(idle/walk/eat/…)写成备忘录, 供后续
+	   「AM→三件套」自动还原 label。AM 工程本身不承载分段信息, 备忘录需与
+	   amproj 一起留档(与另一方向的 pam_memo.txt 用法一致)。 */
+	{
+	  const tf = Math.max(1, Math.round(res.totalMs/1000*doc.fps));
+	  const labs = flaFrameLabels(doc, tf);
+	  if (labs.some(Boolean)){
+		const frameMeta = labs.map(lb => ({ label: lb, stop:false, command:[] }));
+		OUT_MEMO = { name: baseName(SRC.name) + '.' + MEMO_FILE,
+					 bytes: enc.encode(JSON.stringify({ main_sprite: { frameMeta } })) };
+		const segs = [];
+		for (let i=0;i<labs.length;i++) if (labs[i] && (!segs.length || segs[segs.length-1].name !== labs[i])) segs.push({ name:labs[i], start:i });
+		log('  ✓ 已生成 label 备忘录（' + segs.length + ' 段：'
+			+ segs.map(s=>s.name+'@'+s.start).slice(0,8).join(', ') + (segs.length>8?'…':'')
+			+ '）→ 请点「下载备忘录 txt」保存，AM 编辑后与 amproj 一起上传即可还原分段', 'ok');
+	  }
+	}
 	PV = { mode:'fla2am', W:doc.width, H:doc.height, fps:doc.fps, doc, model,
 		   totalFrames: Math.max(1, Math.round(res.totalMs/1000*doc.fps)), bgA: doc.bg, bgB: model.bgcolor };
 	$('info').innerHTML = kv('画布', doc.width + ' × ' + doc.height)
@@ -4016,7 +4094,7 @@ function decompPamMat(m, subW, subH, k){
 	   d = sin·shear + cos·sy
    旧实现写成 c = −sin·sy + kx、d = cos·sy + ky（把 shear 只加在 c、漏了 d），
    与分解式不互逆，凭空产生 c 分量偏差 ±0.05~0.06。 */
-function composePamMatFromAm(loc, scl, rotDeg, skew, subW, subH, k, relMat, preM){
+function composePamMatFromAm(loc, scl, rotDeg, skew, subW, subH, k, relMat, preM, piv){
   const r = rotDeg * Math.PI / 180;
   const cos = Math.cos(r), sin = Math.sin(r);
   const kk = (k && isFinite(k) && k > 0) ? k : 1;
@@ -4026,7 +4104,15 @@ function composePamMatFromAm(loc, scl, rotDeg, skew, subW, subH, k, relMat, preM
   const kx = (skew && skew[0]) || 0, ky = (skew && skew[1]) || 0;
   const a = sx*(cos - sin*ky), b = sx*(sin + cos*ky);
   const c = sy*(cos*kx - sin), d = sy*(sin*kx + cos);
-  const ox = subW / 2, oy = subH / 2;
+  /* ★ [坑48 · pivot 丢失] AM 的 transform 里 pivot 表示「内容点 pivot 落在
+	 location 上」，其完整矩阵是 M = T(loc)·L·preM·T(-piv)（见 renderAmFrame）。
+	 子图中心对应的内容点 = 子图中心 + pivot，因此锚点偏移必须加上 pivot：
+	   canvas(p) = loc + L·(p - center - piv)
+	 → tx = loc.x − (a·(cx+px) + c·(cy+py))。
+	 旧实现只减 center，凡带非零 pivot 的图层（实测四臂僵尸 9 个骨骼
+	 pivot 达 500~1721px）在导出三件套时被整体错位/脱离绑定。 */
+  const px = piv ? (piv[0] || 0) : 0, py = piv ? (piv[1] || 0) : 0;
+  const ox = subW / 2 + px, oy = subH / 2 + py;
   const tx = loc[0] - (a*ox + c*oy);
   const ty = loc[1] - (b*ox + d*oy);
   /* ★ [坑16] AM 的 shape 承载的是「叶子完整复合 M_full = M_change · relMat」，
@@ -4401,6 +4487,9 @@ async function __amprojToTripletImpl(model, labelCfg, baseNameStr, memo){
 	  let scl = trackAt(sh.scl, u, [1,1]);
 	  const rot = trackAt(sh.rot, u, [0]);
 	  const skw = trackAt(sh.skw, u, [0,0]);
+	  /* [坑48] pivot 是元件的固有变换(内容锚点), 必须逐帧采样并写进 change,
+	     否则带 pivot 的图层会脱离绑定/整体错位。 */
+	  const piv = (sh.piv && sh.piv.kfs.length) ? trackAt(sh.piv, u, [0,0]) : null;
 	  /* [特效降级] 几何类特效：scaleassist 折进缩放，transform2/jitter 作为 fxm */
 	  let fxm = null;
 	  const _fx = amSampleEffects(sh, u, null);
@@ -4411,7 +4500,7 @@ async function __amprojToTripletImpl(model, labelCfg, baseNameStr, memo){
 	  if (sh.chain && sh.chain.length){ const c = amChainAt(sh.chain, tms); cm = c.m; op = c.op; }
 	  if (sh.op && sh.op.kfs.length){ const o = trackAt(sh.op, u, [1])[0]; op *= (isFinite(o) ? o : 1); }
 	  if (op <= 0.02) continue;
-	  m.set(f, { visible:true, loc:[loc[0], loc[1]], scl:[scl[0], scl[1]], rot:rot[0], skw:[skw[0], skw[1]], cm, op, fxm });
+	  m.set(f, { visible:true, loc:[loc[0], loc[1]], scl:[scl[0], scl[1]], rot:rot[0], skw:[skw[0], skw[1]], piv, cm, op, fxm });
 	}
 	shapeSamples.set(sh.id, m);
   }
@@ -4880,7 +4969,7 @@ async function __amprojToTripletImpl(model, labelCfg, baseNameStr, memo){
 		/* [坑25] subW/subH 必须是**逻辑尺寸**，不是图集像素 */
 		let _pmm = composePamMatFromAm(sm.loc, sm.scl, sm.rot, sm.skw,
 		  img._logW || img._aw || img.w, img._logH || img._ah || img.h,
-		  (img._effK != null ? img._effK : 1), leafRel, sm.fxm);
+		  (img._effK != null ? img._effK : 1), leafRel, sm.fxm, sm.piv);
 		if (sm.cm) _pmm = mulMat(sm.cm, _pmm);   /* [嵌套合成修复] 祖先链预乘 */
 		const mat = quantPamTransform(_pmm);
 		frameCfg[f].changes.push({ index: elemIdx, transform: mat });
@@ -5707,7 +5796,18 @@ function labelRowsFromMemo(memo, total){
   if (!fm || !fm.length) return null;
   const N = total || Math.max(1, fm.length);
   const segs = [];
-  for (let i=0;i<fm.length;i++) if (fm[i].label) segs.push({ name: fm[i].label, s: i });
+  for (let i=0;i<fm.length;i++){
+	const lb = fm[i].label;
+	if (!lb) continue;
+	/* ★ [label 分组] 备忘录是**逐帧**记录(FLA→AM 时同一段内每一帧标签相同)。
+	   必须把「连续同名的逐帧标签」合并成一个区段, 否则 25 段会被拆成
+	   totalFrames 个单帧行 —— 实测 gen1 893 帧生成 893 条 1 帧 label,
+	   导出的三件套会在**每一帧**都写 label(原版只在段首写), 既不符合规范,
+	   又让 labels.forEach × shapes 退化成 O(帧数×元件数)。 */
+	const last = segs[segs.length-1];
+	if (last && last.name === lb) continue;
+	segs.push({ name: lb, s: i });
+  }
   if (!segs.length) return null;
   for (let k=0;k<segs.length;k++) segs[k].e = (k+1 < segs.length) ? (segs[k+1].s - 1) : (fm.length - 1);
   const scale = (fm.length !== N) ? (N - 1) / Math.max(1, fm.length - 1) : 1;
