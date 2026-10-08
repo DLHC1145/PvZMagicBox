@@ -89,6 +89,15 @@
 	  <input type="range" id="ss" min="1" max="3" step="1" value="2" style="width:100%"/>
 	  <div class="kv" style="border:0"><span>烘焙团建滤镜（Blur/Glow）</span><span><input type="checkbox" id="doFilters" checked></span></div>
 	  <div class="kv" style="border:0"><span>逆向烘焙帧率</span><span><input type="text" id="rbFps" value="30" style="width:60px;text-align:right"></span></div>
+	  <div class="kv" style="border:0"><span>降级为序列帧（先烘焙再互换）</span><span><input type="checkbox" id="bakeMode" checked></span></div>
+	  <div class="hint" id="bakeHint" style="margin-top:6px">
+		FLA→AM / AM→FLA 先把源工程<b>全部降级</b>，只保留「位图序列 + 世界变换」再互换：
+		AM 的<b>编组父子链 / pivot / 透视组 / 嵌套合成</b>、FLA 的<b>矢量 / 运动补间 /
+		嵌套符号 / 滤镜 / 图形元件内帧偏移</b>，一律烘焙进位图与逐帧世界矩阵。
+		粒度是<b>元件级</b>（不是整幅）：FLA 侧穿透 label 分段符号一层，每个部件一个 part，
+		跨 idle/walk/eat 段按元件名合并；AM 侧每个 shape 一个 part。
+		内容恒定的部件（位图、静态元件）自动去重成<b>单张图</b>，不会逐帧膨胀。
+	  </div>
 	</div>
 
 	<div class="card" id="labelCard" style="display:none">
@@ -445,6 +454,51 @@ async function makeFlaDat(pngBytes){
   dv.setUint16(dst, 0, true);                           /* 结束标记 */
   return out;
 }
+
+/* ── Animate 原生位图 dat → PNG（makeFlaDat 的逆运算）─────────────────────
+   [坑10 · 位图变空气] Animate 保存的 FLA 里，位图像素**不在** href 指向的 .png
+   （那个文件常常根本不在包内），而在 DOMBitmapItem@bitmapDataHRef 指向的
+   bin/*.dat。旧实现只按 href 找 PNG 字节，整批位图取不到 → 图层被跳过 →
+   转换结果里位图全变「空气」。这里把 dat 还原成 PNG，布局与 makeFlaDat 完全对称：
+   32B 头 + 分段(deflate+adler32BE) + u16 0 结束；zlib 头两字节 78 01 不落在数据区
+   （需自行补回）；像素为 A,R,G,B **预乘**，须反预乘后才能当普通 RGBA 用。 */
+async function flaDatToPngBytes(dat){
+  const dv = new DataView(dat.buffer, dat.byteOffset, dat.byteLength);
+  const n = dat.length;
+  if (n < 34 || dat[0] !== 3 || dat[1] !== 5) throw new Error('非 Animate 位图 dat');
+  const w = dv.getUint16(4, true), h = dv.getUint16(6, true);
+  if (!w || !h) throw new Error('dat 尺寸为 0');
+  const parts = [];
+  let p = 32, seg = dv.getUint16(30, true), guard = 0;
+  while (seg > 0 && p + seg <= n && guard++ < 200000){
+	parts.push(dat.subarray(p, p + seg));
+	p += seg;
+	if (p + 2 > n) break;
+	seg = dv.getUint16(p, true); p += 2;
+  }
+  let total = 0; for (const q of parts) total += q.length;
+  if (total < 8) throw new Error('dat 数据段为空');
+  const z = new Uint8Array(2 + total);
+  z[0] = 0x78; z[1] = 0x01;                             /* 补回被剥离的 zlib 头 */
+  let o = 2; for (const q of parts){ z.set(q, o); o += q.length; }
+  const raw = await inflateZlibBytes(z);
+  const need = w * h * 4;
+  if (raw.length < need) throw new Error('dat 像素不足 ' + raw.length + ' < ' + need);
+  const cv = newCanvas(w, h), ctx = cv.getContext('2d');
+  const img = ctx.createImageData(w, h), px = img.data;
+  for (let i = 0, j = 0; i < need; i += 4, j += 4){
+	const a = raw[i];
+	px[j+3] = a;
+	if (a){                                             /* 反预乘 */
+	  px[j]   = Math.min(255, raw[i+1] * 255 / a) | 0;
+	  px[j+1] = Math.min(255, raw[i+2] * 255 / a) | 0;
+	  px[j+2] = Math.min(255, raw[i+3] * 255 / a) | 0;
+	}
+  }
+  ctx.putImageData(img, 0, 0);
+  return canvasPng(cv);
+}
+const isPngBytes = b => b && b.length > 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4E && b[3] === 0x47;
 
 /* ══════════════════════════════════════════════════════════════════════════
    2 · XML（DOMParser + 按 localName 取，彻底躲开命名空间）
@@ -921,9 +975,9 @@ function symbolFrameCount(tl){
   if (!tl) return 1;
   let n = 0;
   for (const l of tl.layers){
-    let k = 0;
-    for (const f of l.frames) if (f.elements && f.elements.length) k++;
-    if (k > n) n = k;
+	let k = 0;
+	for (const f of l.frames) if (f.elements && f.elements.length) k++;
+	if (k > n) n = k;
   }
   return Math.max(1, n);
 }
@@ -971,7 +1025,8 @@ function loadDoc(files){
 	   会因 it.w=0 直接放弃该元件 -> 整条 label/sprite 链渲染为空。 */
 	const w = atI(b,'width',0) || Math.round(atF(b,'frameRight',0)/20);
 	const h = atI(b,'height',0) || Math.round(atF(b,'frameBottom',0)/20);
-	doc.bitmapItems.set(at(b,'name',''), { href: at(b,'href',''), w, h });
+	/* [坑10] bitmapDataHRef 才是真正装着像素的 bin/*.dat；href 指向的 png 常不存在 */
+	doc.bitmapItems.set(at(b,'name',''), { href: at(b,'href',''), dat: at(b,'bitmapDataHRef',''), w, h });
   }
   doc.files = files;
   doc.bitmaps = new Map();
@@ -1008,22 +1063,32 @@ function bitmapBytes(doc, libName){
   const files = doc.files;
   const it = doc.bitmapItems ? doc.bitmapItems.get(libName) : null;
   const cands = [];
+  /* [坑10] Animate 保存的 FLA：像素在 bitmapDataHRef 的 bin/*.dat，必须先试 dat，
+	 否则会命中不存在的 href png 或直接 miss → 整批位图变空气。 */
+  if (it && it.dat) cands.push('bin/' + it.dat, it.dat);
   if (it && it.href) cands.push('bin/' + it.href, it.href, 'LIBRARY/' + it.href);
   cands.push('bin/' + libName, libName, 'LIBRARY/' + libName);
   for (const c of cands) if (files.has(c)) return files.get(c);
-  const base = ((it && it.href) || libName).split('/').pop();
-  for (const [k,v] of files) if (k.split('/').pop() === base) return v;
+  for (const base of [((it && it.dat) || ''), ((it && it.href) || libName)].filter(Boolean).map(s => s.split('/').pop())){
+	for (const [k,v] of files) if (k.split('/').pop() === base) return v;
+  }
   return null;
 }
 async function decodeFlaBitmaps(doc){
   for (const libName of doc.bitmapItems.keys()){
 	if (doc.bitmaps.has(libName)) continue;
-	const bytes = bitmapBytes(doc, libName);
+	let bytes = bitmapBytes(doc, libName);
 	if (!bytes) continue;
-	let ext = libName.toLowerCase();
+	/* [坑10] 拿到的是 Animate 原生 dat 容器时，先还原成 PNG 再解码 */
+	if (!isPngBytes(bytes)){
+	  const isDat = (bytes[0] === 3 && bytes[1] === 5);
+	  try { bytes = await flaDatToPngBytes(bytes); doc.datDecoded = (doc.datDecoded || 0) + 1; }
+	  catch(e){ log('  位图 dat 解码失败 ' + libName + '（' + (isDat ? 'dat 解析异常' : '非 PNG 且非 dat') + '）: ' + (e && e.message), 'w'); continue; }
+	}
+	let ext = ((doc.bitmapItems.get(libName) || {}).dat || libName).toLowerCase();
 	let type = ext.endsWith('.jpg') || ext.endsWith('.jpeg') ? 'image/jpeg' : (ext.endsWith('.webp') ? 'image/webp' : 'image/png');
 	try {
-	  const bmp = await createImageBitmap(new Blob([bytes], { type }), { premultiplyAlpha: 'none' });
+	  const bmp = await createImageBitmap(new Blob([bytes], { type: 'image/png' }), { premultiplyAlpha: 'none' });
 	  doc.bitmaps.set(libName, bmp);
 	  /* [格式二] 以真实解码尺寸为准, 覆盖 XML 里可能缺失/不准的 w/h */
 	  const it = doc.bitmapItems.get(libName);
@@ -1254,7 +1319,13 @@ function renderTimeline(ctx, tl, frame, doc, depth){
 		   绝对取模会从内帧 120 开始播(整个动画错位), 相对则正确地 0..127。
 		   FLA→AM 拆分与参考渲染必须同用此约定, 否则两侧姿态对不上。 */
 		const d = Math.max(1, sym.duration);
-		const inner = ((frame - (kfStart || 0)) % d + d) % d;
+		/* [坑11 · firstFrame] 图形实例可指定「内部时间线从第几帧起播」，
+		   内帧 = firstFrame + (当前帧 - 实例所在关键帧)。旧预览侧完全忽略
+		   firstFrame，而转换侧(_slicedShapes)按 firstFrame 采样 —— 两边内帧
+		   口径不一致，凡 firstFrame≠0 的实例（如 main_sprite 第二段=850）
+		   预览画的是错姿态，A/B 差异图整片红，却根本不是转换的锅。
+		   这里补上 firstFrame，让预览与转换、与降级烘焙三者口径统一。 */
+		const inner = ((frame - (kfStart || 0) + (elem.firstFrame || 0)) % d + d) % d;
 		const hasFx = elem.filters || elem.alpha !== 1 || elem.tintMult > 0 || elem.brightness !== 0;
 		if (!hasFx){
 		  ctx.save(); ctx.transform(m[0],m[1],m[2],m[3],m[4],m[5]);
@@ -1918,6 +1989,21 @@ function amPropNum(p, u, def){
   const v = String(p.raw || '').split(',').map(Number);
   return (v.length && v.every(x => isFinite(x))) ? v : def;
 }
+/* ★★ [坑18 · AM pivot 语义] AM 的 location 是「已扣除 pivot 的位移」，
+   真实位移 = location + pivot，完整矩阵为：
+	 M = T(loc + pivot) · R · S · T(-pivot)
+   证据（速抽骗子 / 四臂僵尸）：9 个带 pivot 的骨骼，location + pivot ≈ 0
+   （误差 < 8），说明 pivot 就是骨骼关节、且关节落在父级原点 ——
+   标准骨骼绑定。旧实现写成 M = T(loc)·R·S·T(-piv)，少加回 pivot，
+   于是每个带 pivot 的部件被整体推走 |pivot| 距离（实测小臂 1721 单位），
+   表现为「四肢与躯干分离散开、但动画时序正常」。
+   修复后该工程内容 bbox 由 2083×3640（填充率 5%、最大空行间隙 1203）
+   收敛为 703×698（填充率 59%、间隙 0）。 */
+var AMX = { pivShape: 1, pivNode: 1, chainOuter: 0 };
+function amComposePiv(rotDeg, sx, sy, kx, ky, loc, piv, on){
+  const px = (on && piv) ? (piv[0] || 0) : 0, py = (on && piv) ? (piv[1] || 0) : 0;
+  return composeTrs(rotDeg*Math.PI/180, sx, sy, kx, ky, (loc[0]||0)+px, (loc[1]||0)+py);
+}
 function amNodeMatrixAt(nd, tGlob){
   const tLoc = nd.remap ? nd.remap(tGlob) : tGlob;
   const span = Math.max(1, nd.t1 - nd.t0);
@@ -1926,11 +2012,9 @@ function amNodeMatrixAt(nd, tGlob){
   const scl = trackAt(nd.scl, u, [1,1]);
   const rot = trackAt(nd.rot, u, [0]);
   const skw = trackAt(nd.skw, u, [0,0]);
-  let m = composeTrs(rot[0]*Math.PI/180, scl[0], scl[1], skw[0], skw[1], loc[0], loc[1]);
-  if (nd.piv && nd.piv.kfs.length){
-	const p = trackAt(nd.piv, u, [0,0]);
-	if (p[0] || p[1]) m = matMul(m, [1,0,0,1, -(p[0]||0), -(p[1]||0)]);
-  }
+  const _pv = (nd.piv && nd.piv.kfs.length) ? trackAt(nd.piv, u, [0,0]) : null;
+  let m = amComposePiv(rot[0], scl[0], scl[1], skw[0], skw[1], loc, _pv, AMX.pivNode);
+  if (_pv && (_pv[0] || _pv[1])) m = matMul(m, [1,0,0,1, -(_pv[0]||0), -(_pv[1]||0)]);
   let op = 1;
   if (nd.op && nd.op.kfs.length){ const o = trackAt(nd.op, u, [1])[0]; op = isFinite(o) ? o : 1; }
   return { m, op };
@@ -2271,11 +2355,41 @@ function parseAmproj(files){
 	return sh;
   }
   let maxGlobalEnd = 0;
+  /* 内部 scene 是否自包含：存在无 parent 的顶层节点（自带绝对定位） */
+  function sceneSelfContained(sc){
+	for (const c of sc.children){
+	  const tg = c.tagName || '';
+	  if ((tg === 'shape' || tg === 'nullobj') && !at(c,'parent','')) return true;
+	}
+	return false;
+  }
   function walkScene(sceneEl, env){
+	if (!env.zpath) env.zpath = [];
 	const idMap = new Map();
+	/* 本层序号：含 nullobj / embedScene，因为编组本身也占一个 z 位 */
+	const ordOf = new Map();
+	let ord = 0;
 	for (const c of sceneEl.children){
 	  const tg = c.tagName || '';
-	  if (tg === 'shape' || tg === 'nullobj' || tg === 'embedScene') idMap.set(at(c,'id',''), c);
+	  if (tg === 'shape' || tg === 'nullobj' || tg === 'embedScene'){ idMap.set(at(c,'id',''), c); ordOf.set(at(c,'id',''), ord++); }
+	}
+	/* [坑13 · z 序] 图层树的深度优先路径：父在前、子在后，字典序即绘制顺序。
+	   AM 的 XML 数组顺序并不等于图层面板顺序（编组常以「子→父」逆序存放），
+	   且 shape 的 z 应由**顶层祖先**决定 —— 编组整体移动时子必须跟着走。
+	   只按数组下标排会让编组内的子散到错误层级。 */
+	function zpathOf(el){
+	  const out = [ordOf.has(at(el,'id','')) ? ordOf.get(at(el,'id','')) : ord++];
+	  const seen = new Set(); let cur = el;
+	  while (cur){
+		const pid = at(cur,'parent','');
+		if (!pid) break;
+		const p = idMap.get(pid);
+		if (!p || seen.has(p)) break;
+		seen.add(p);
+		out.unshift(ordOf.has(pid) ? ordOf.get(pid) : ord++);
+		cur = p;
+	  }
+	  return out;
 	}
 	function parentChain(el){
 	  const out = [];
@@ -2300,7 +2414,15 @@ function parseAmproj(files){
 		if (env.depth >= 8){ warn('嵌套合成超过 8 层，过深部分已跳过'); continue; }
 		const T0 = atF(c,'startTime',0), T1 = atF(c,'endTime', T0 + 1);
 		const NT = Math.max(1e-3, atF(sc,'totalTime',0) || (T1 - T0));
-		const pchain = parentChain(c);
+		/* [坑14 · Alemon 编组冗余父链] Alemon 导出「编组」(embedScene) 时会把组内
+		   元素连同其**原有父链整体复制**进内部 scene —— 内部顶层节点自带绝对定位
+		   (如"身体4" location=2124,2122)；同时 embedScene 的 parent 仍指向原父链
+		   ("身体1/2/3"，顶层 location=2124,2149)。两套定位语义重复。
+		   若两层都套用，部件位置被叠加两次(2124+2124≈4248)直接飞出 4096 画布，
+		   表现为「各元件分离散开、但动画时序还在」——正是速抽骗子的症状。
+		   内部 scene 的元素只能引用内部 id，故恒自包含：跳过外层父链，
+		   只保留 embedScene 自身的 transform（编组相对偏移）。 */
+		const pchain = (sceneSelfContained(sc) && !AMX.chainOuter) ? [] : parentChain(c);
 		const selfNode = nodeOf(c, env.nt);
 		selfNode.t0 = T0; selfNode.t1 = Math.max(T0 + 1, T1);
 		const childChain = env.chain.concat(pchain, [selfNode]);
@@ -2310,7 +2432,8 @@ function parseAmproj(files){
 		const spanC = Math.max(1e-6, T1 - T0);
 		const invR = (tau) => upU(T0 + (Math.max(0, Math.min(NT, tau)) / NT) * (T1 - T0));
 		const fwdR = (t) => { const tl = upR(t); return Math.max(0, Math.min(NT, ((tl - T0) / spanC) * NT)); };
-		walkScene(sc, { remap: fwdR, unremap: invR, chain: childChain, nt: NT, depth: env.depth + 1 });
+		walkScene(sc, { remap: fwdR, unremap: invR, chain: childChain, nt: NT, depth: env.depth + 1,
+					   zpath: env.zpath.concat([ordOf.has(at(c,'id','')) ? ordOf.get(at(c,'id','')) : ord++]) });
 		maxGlobalEnd = Math.max(maxGlobalEnd, invR(NT));
 		continue;
 	  }
@@ -2318,11 +2441,13 @@ function parseAmproj(files){
 	  if (at(c,'hidden','false') === 'true' || at(c,'visible','true') === 'false') continue;
 	  if (at(c,'blending','') === 'mask'){ warn('blending=mask 遮罩图层暂不支持，已跳过: ' + at(c,'label','')); continue; }
 	  const sh = buildShape(c, env, parentChain(c));
-	  if (sh) model.shapes.push(sh);
+	  if (sh){ sh.zpath = env.zpath.concat(zpathOf(c)); model.shapes.push(sh); }
 	}
   }
   const rootNT = atF(root,'totalTime',0) || 0;
-  walkScene(root, { remap: (t)=>t, unremap: (t)=>t, chain: [], nt: rootNT, depth: 0 });
+  walkScene(root, { remap: (t)=>t, unremap: (t)=>t, chain: [], nt: rootNT, depth: 0, zpath: [] });
+  /* 按图层树深度优先路径重排：model.shapes 顺序 == 从底到顶的绘制顺序 */
+  model.shapes.sort((a, b) => cmpPath(a.zpath || [], b.zpath || []));
   if (maxGlobalEnd > model.totalTime) model.totalTime = maxGlobalEnd;
   if (!model.totalTime) model.totalTime = 1000;
   if (model.hasEffects) warn('导出格式（FLA/三件套）不承载 AM 特效，像素/几何特效仅在预览中尽量还原');
@@ -2358,13 +2483,10 @@ function renderAmFrame(ctx, model, tMs){
 	}
 	const fx = amSampleEffects(sh, u, warned);
 	const sxm = scl[0] * fx.sclMul[0], sym = scl[1] * fx.sclMul[1];
-	let m = composeTrs(rot[0]*Math.PI/180, sxm, sym, skw[0], skw[1], loc[0], loc[1]);
+	const _pv = (sh.piv && sh.piv.kfs.length) ? trackAt(sh.piv, u, [0,0]) : null;
+	let m = amComposePiv(rot[0], sxm, sym, skw[0], skw[1], loc, _pv, AMX.pivShape);
 	if (fx.preM) m = matMul(m, fx.preM);
-	/* pivot：内容点 pivot 落在 location 上 */
-	if (sh.piv && sh.piv.kfs.length){
-	  const p = trackAt(sh.piv, u, [0,0]);
-	  if (p[0] || p[1]) m = matMul(m, [1,0,0,1, -(p[0]||0), -(p[1]||0)]);
-	}
+	if (_pv && (_pv[0] || _pv[1])) m = matMul(m, [1,0,0,1, -(_pv[0]||0), -(_pv[1]||0)]);
 	/* 父链（embedScene / nullobj / 图层父子），在全局时间采样 */
 	let cop = 1;
 	if (sh.chain && sh.chain.length){
@@ -2911,6 +3033,661 @@ async function __am2flaImpl(model){
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
+   9.5 · 降级管线：先把两侧烘焙成「标准图形序列帧」再互换
+   ──────────────────────────────────────────────────────────────────────────
+   思路：FLA 与 AM 的结构差异（编组父子 / 运动补间 / 矢量形状 / 嵌套合成 /
+   滤镜特效）是转换错位的唯一来源。与其逐条去猜两边的语义，不如在转换之前
+   先把两边**降级**成同一个标准中间模型：
+
+	 part（一个元件 / 一个编组）= 
+		· 一组「位图序列帧」：每帧一张已光栅化的标准图形
+		  （内部动画、形状补间、矢量、滤镜、色彩效果全部烘焙进像素）
+		· 一组「逐帧世界变换」：位置 / 旋转 / 缩放 / 切变 / 透明度
+		  （编组父子链、运动补间、缓动已全部展平进世界矩阵）
+
+   降级后两侧结构完全同构，互换只剩「贴图 + 变换」这一件事，不会再错位。
+   标准中间模型（baked）:
+	 { W, H, fps, totalFrames, parts:[ { name, z,
+		 frames:[ { img, hw, hh, mat:[a,b,c,d,tx,ty], alpha } | null ] } ],
+	   imgs: Map<pngName, bytes> }
+   mat 一律是「位图像素空间 → 舞台世界坐标」的仿射矩阵，位图本地原点在左上角，
+   与 FLA 的 DOMBitmapInstance 语义完全一致；loc/rot/scl 由该矩阵中心点分解而来。
+   ══════════════════════════════════════════════════════════════════════════ */
+const BAKE = { ss: 2, maxPx: 2048, atlas: false };
+
+/* 裁掉多余透明留白 —— 但必须以**画布中心**为中心对称裁剪。
+   [坑12] 若按非透明包围盒裁（左上角对齐），裁剪后位图的中心就不再是原内容
+   中心，而旋转/缩放一律绕中心进行 → 带旋转的部件会整体偏移半个包围盒。
+   这里改为「以中心为基准取覆盖全部内容的最小正方形」，中心严格不变。 */
+function trimCanvas(cv){
+  const W = cv.width, H = cv.height;
+  const d = cv.getContext('2d').getImageData(0, 0, W, H).data;
+  let x0 = W, y0 = H, x1 = -1, y1 = -1;
+  for (let y = 0; y < H; y++){
+	const row = y * W;
+	for (let x = 0; x < W; x++){
+	  if (d[(row + x) * 4 + 3] > 0){ if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+	}
+  }
+  if (x1 < 0) return null;                                   /* 整张全透明 */
+  const ccx = W / 2, ccy = H / 2;
+  const rx = Math.max(Math.abs((x0 + x1 + 1) / 2 - ccx) + (x1 - x0 + 1) / 2, 1);
+  const ry = Math.max(Math.abs((y0 + y1 + 1) / 2 - ccy) + (y1 - y0 + 1) / 2, 1);
+  const r = Math.min(Math.ceil(Math.max(rx, ry)), Math.floor(Math.min(W, H) / 2));
+  if (r * 2 >= W && r * 2 >= H) return { cv, ox: 0, oy: 0 };
+  const sx = Math.round(ccx - r), sy = Math.round(ccy - r), side = r * 2;
+  const out = newCanvas(side, side);
+  out.getContext('2d').drawImage(cv, sx, sy, side, side, 0, 0, side, side);
+  return { cv: out, ox: sx, oy: sy };
+}
+/* 位图去重：内容相同则复用同一张 PNG（静态部件因此永远只有 1 张图） */
+function bakeImgSink(){
+  const imgs = new Map(), bySig = new Map();
+  return {
+	imgs,
+	add(cv){
+	  const bytes = canvasPng(cv);
+	  const sig = sha1Hex(bytes);
+	  /* [坑15] 命中缓存时必须回传**同一结构的记录**{name,w,h}。
+		 旧实现 bySig 存的是 name 字符串，第二次命中就返回字符串：
+		 调用方拿到的 ref 是 string，ref.name === undefined，
+		 于是 frame.img=undefined —— bakedToAm 侧 pngSize(undefined) 直接崩，
+		 bakedToFla 侧写出 libraryItemName="undefined"（静默错图）。
+		 这正是「AM→FLA 转得出来、FLA→AM 转不回去」的根因。 */
+	  const hit = bySig.get(sig);
+	  if (hit) return hit;
+	  const [w, h] = pngSize(bytes);
+	  const name = 'bake_' + sig.slice(0, 12) + '.png';
+	  const rec = { name, w, h };
+	  imgs.set(name, bytes); bySig.set(sig, rec);
+	  return rec;
+	}
+  };
+}
+/* 图层路径字典序比较（短者优先 = 父在子前），用于 z 序排序 */
+function cmpPath(a, b){
+  const n = Math.min(a.length, b.length);
+  for (let i = 0; i < n; i++) if (a[i] !== b[i]) return a[i] - b[i];
+  return a.length - b.length;
+}
+
+/* 一帧记录的两段式构造 —— 裁白 + PNG 编码 + SHA1 去重只依赖「位图内容」，
+   与逐帧变化的世界矩阵无关。拆开后静态部件全程只编码一次；
+   否则 900 帧 × 44 部件 = 4 万次 getImageData + toDataURL，慢到不可用。 */
+function bakeImgRef(sink, cv){
+  const tr = trimCanvas(cv);
+  if (!tr) return null;
+  return { ref: sink.add(tr.cv), ox: tr.ox, oy: tr.oy };
+}
+/* 已知位图引用 + 本帧世界矩阵 → 一帧记录。
+   mat = world ∘ B：位图像素坐标 → 舞台世界坐标（位图本地原点在左上角）。
+   wm  = world：只含世界变换，供分解 scale/rot/skew —— AM 侧 size 是本地半尺寸，
+		若拿 mat 去分解会把像素比例 k 再乘一次，导致部件放大 1/k 倍。 */
+function bakeRecFrom(ir, world, k, oxPx, oyPx, alpha){
+  if (!ir) return null;
+  const s = k;
+  const B = [s, 0, 0, s, (oxPx + ir.ox) * s, (oyPx + ir.oy) * s];
+  return { img: ir.ref.name, hw: ir.ref.w * s / 2, hh: ir.ref.h * s / 2,
+		   mat: matMul(world, B), wm: world.slice(),
+		   alpha: (alpha === undefined ? 1 : alpha) };
+}
+
+/* ── FLA → 标准序列帧 ────────────────────────────────────────────────────
+   主时间线每个图层里的每个顶层实例 = 一个 part。逐帧:
+	 · 世界矩阵 = 图层实例矩阵（layerItemsAt 已算好运动补间与缓动）
+	 · 内容     = 该实例内帧渲染出的位图（矢量/形状补间/滤镜/色调全烘焙）
+   静态元件（frameCount==1）只渲染一次，位图自动去重 → 不会逐帧膨胀。 */
+async function bakeFla(doc, opts){
+  opts = opts || {};
+  const ss = opts.ss || BAKE.ss;
+  const main = doc.main;
+  if (!main) throw new Error('FLA 主时间线缺失');
+  const fps = doc.fps, totalFrames = timelineFrames(main);
+  const sink = bakeImgSink();
+  const parts = [], byKey = new Map(), cache = new Map();
+  /* 实例级滤镜/透明度/色调会影响像素，必须进缓存 key，否则会串图 */
+  function fxSig(elem){
+	if (!elem) return '';
+	let t = '';
+	if (elem.alpha !== undefined && elem.alpha !== 1) t += 'a' + elem.alpha.toFixed(3);
+	if (elem.brightness) t += 'b' + elem.brightness.toFixed(3);
+	if (elem.tintMult) t += 't' + elem.tintMult.toFixed(3);
+	if (elem.filters) for (const f of elem.filters)
+	  t += '|' + f.kind + ':' + (f.bx||0) + ',' + (f.by||0) + ',' + (f.dist||0) + ',' + (f.strength||0);
+	return t;
+  }
+  const refCache = new Map();
+  /* [坑13 · z 序] part 的绘制次序必须由它在图层树中的**路径**决定，
+	 不能靠「首次出现在第几帧」——否则后出现的部件（如 walk 段才有的
+	 ground_swatch 地面）会被排在先出现部件（zombie_torso）之上，
+	 地面盖住身体。zPath = [主层索引, 内层索引, …]，字典序即 z 序。 */
+  function put(key, name, ck, cv, world, k, oxPx, oyPx, alpha, fr, zPath){
+	let P = byKey.get(key);
+	if (!P){
+	  P = { name: name || 'part', z: parts.length, zPath: zPath.slice(),
+			frames: new Array(totalFrames).fill(null) };
+	  byKey.set(key, P); parts.push(P);
+	} else if (cmpPath(zPath, P.zPath) < 0){
+	  P.zPath = zPath.slice();
+	}
+	let ir = refCache.get(ck);
+	if (ir === undefined){ ir = bakeImgRef(sink, cv); refCache.set(ck, ir); }
+	P.frames[fr] = bakeRecFrom(ir, world, k, oxPx || 0, oyPx || 0, alpha);
+  }
+  /* 递归收集元件。depth===0 时遇到符号只穿透一层（分段/label 符号），
+	 其内部图层里的元素即一个元件；主时间线直接摆位图/矢量时本身就是元件。 */
+  function collect(mat, tl, frame, depth, fr, zPath){
+	zPath = zPath || [];
+	const n = tl.layers.length;
+	for (let li = 0; li < n; li++){
+	  const layer = tl.layers[n - 1 - li];        /* XFL 上层在前 → 反序垫底 */
+	  if (!layer.visible || layer.layerType === 'guide' || layer.layerType === 'folder') continue;
+	  for (const [elem, m, kfStart] of layerItemsAt(layer, frame)){
+		const world = matMul(mat, m);
+		if (elem.bitmap){
+		  const bmp = doc.bitmaps && doc.bitmaps.get(elem.libName);
+		  if (!bmp) continue;
+		  const ck = 'bmp:' + elem.libName;
+		  let cv = cache.get(ck);
+		  if (!cv){ cv = newCanvas(bmp.width, bmp.height); cv.getContext('2d').drawImage(bmp, 0, 0); cache.set(ck, cv); }
+		  put(ck, (elem.libName || 'part').split('/').pop(), ck, cv, world, 1, 0, 0, elem.alpha, fr, zPath.concat([li]));
+		  continue;
+		}
+		if (elem.shape){
+		  /* 矢量：该帧光栅化。key 绑定到「图层索引」而不是形状对象，
+			 形状补间才会落到同一 part 的不同序列帧上（而不是拆成多个 part）。 */
+		  const bb = shapeBBox(elem.shape);
+		  if (!bb) continue;
+		  const pad = elemFilterPad(elem) + 2;
+		  const w = (bb[2] - bb[0]) + pad*2, h = (bb[3] - bb[1]) + pad*2;
+		  if (w > 6000 || h > 6000) continue;
+		  const kk = Math.min(ss, Math.max(1, BAKE.maxPx / Math.max(w, h)));
+		  const cv = newCanvas(Math.max(1, Math.ceil(w*kk)), Math.max(1, Math.ceil(h*kk)));
+		  const c2 = cv.getContext('2d');
+		  c2.imageSmoothingEnabled = true; c2.imageSmoothingQuality = 'high';
+		  c2.scale(kk, kk);
+		  c2.translate(-(bb[0] - pad), -(bb[1] - pad));
+		  paintShape(c2, elem.shape);
+		  put('shape#' + li, 'shape_' + li, 'shape#' + li + '|' + fr, cv, world, 1/kk, (bb[0]-pad)*kk, (bb[1]-pad)*kk, elem.alpha, fr, zPath.concat([li]));
+		  continue;
+		}
+		if (!elem.isSymbol) continue;
+		const sym = doc.symbols.get(elem.libName);
+		if (depth === 0 && sym && sym.timeline){       /* 只穿透一层：分段/label 符号 */
+		  const d = Math.max(1, sym.duration);
+		  const inner = ((frame - (kfStart || 0) + (elem.firstFrame || 0)) % d + d) % d;
+		  collect(world, sym.timeline, inner, depth + 1, fr, zPath.concat([li]));
+		  continue;
+		}
+		if (!sym || !sym.timeline) continue;
+		/* 静态元件（含元素关键帧仅 1 个）内帧恒为 0 → 全段共用一张位图，不膨胀 */
+		const stat = sym.frameCount <= 1;
+		const d = Math.max(1, sym.duration);
+		const inner = stat ? 0 : (((frame - (kfStart || 0) + (elem.firstFrame || 0)) % d + d) % d);
+		const fx = fxSig(elem);
+		const ck = elem.libName + '|' + inner + '|' + fx;
+		let r = cache.get(ck);
+		if (r === undefined){
+		  /* [坑17] 这里的「可复用」判据只看**真正改变像素**的东西：
+			 滤镜 / 亮度 / 色调。alpha 不改变像素（它由 bakeRecFrom 的 alpha
+			 参数单独承载、FLA 侧写 Color.alphaMultiplier），若把 alpha 也算进去，
+			 带淡入淡出的部件会全体退回逐帧光栅化 —— 465 张图瞬间吃满内存
+			 把页面搞崩，而实际上只有 24 张不同的源位图。 */
+		  const pixFree = !(elem.filters && elem.filters.length) && !elem.brightness && !elem.tintMult;
+		  r = pixFree ? symbolFlatBitmap(sym, inner, doc, 0) : null;
+		  if (!r) r = renderSymbolLocalBake(sym, inner, doc, elem, ss);
+		  cache.set(ck, r);
+		}
+		if (!r) continue;
+		put(elem.libName + '|' + fx, (elem.libName || 'part').split('/').pop(), ck,
+			r.cv, matMul(world, r.pre), r.k, 0, 0, elem.alpha, fr, zPath.concat([li]));
+	  }
+	}
+  }
+  for (let fr = 0; fr < totalFrames; fr++) collect(IDENT, main, fr, 0, fr, []);
+  /* 按图层路径重排：parts 数组顺序 == 从底到顶的绘制顺序 */
+  parts.sort((a, b) => cmpPath(a.zPath, b.zPath));
+  parts.forEach((p, i) => { p.z = i; });
+  return { W: doc.width, H: doc.height, fps, totalFrames, parts, imgs: sink.imgs, src: 'fla' };
+}
+/* [坑16 · 序列帧回环] 本工具产出的 FLA，其元件是「位图序列帧 sprite」：
+   sprite(inner) → image/xxx → DOMBitmapInstance，全程 matrix 为 identity。
+   若再转回 AM 时仍走 renderSymbolLocalBake 逐帧光栅化，每个元件都要开一张
+   bbox 尺寸的大 canvas（可达 2048×2048≈16MB），461 张图 ≈ 数 GB → 页面直接崩。
+   这里先试「扁平位图」路径：直接复用以有的像素，零光栅化、且绝对无损。
+   返回 { cv, k, pre }，pre = 符号局部空间 → 位图像素空间。 */
+const _bmpCanvasCache = new WeakMap();
+function bitmapCanvas(bmp){
+  let cv = _bmpCanvasCache.get(bmp);
+  if (cv) return cv;
+  cv = newCanvas(bmp.width, bmp.height);
+  cv.getContext('2d').drawImage(bmp, 0, 0);
+  _bmpCanvasCache.set(bmp, cv);
+  return cv;
+}
+function symbolFlatBitmap(sym, inner, doc, depth){
+  if (!sym || !sym.timeline || (depth || 0) > 4) return null;
+  const tl = sym.timeline;
+  if (tl.layers.length !== 1) return null;
+  const layer = tl.layers[0];
+  if (!layer.visible || layer.layerType === 'guide' || layer.layerType === 'folder') return null;
+  let found = 0, res = null;
+  for (const [elem, m, kfStart] of layerItemsAt(layer, inner)){
+	if (++found > 1) return null;                  /* 一帧多个元素：不是扁平位图 */
+	if (elem.filters && elem.filters.length) return null;
+	if (elem.bitmap){
+	  const bmp = doc.bitmaps && doc.bitmaps.get(elem.libName);
+	  if (!bmp) return null;
+	  res = { cv: bitmapCanvas(bmp), k: 1, pre: m.slice() };
+	} else if (elem.isSymbol){
+	  const sub = doc.symbols.get(elem.libName);
+	  if (!sub || !sub.timeline) return null;
+	  const sd = Math.max(1, sub.duration);
+	  const subInner = ((inner - (kfStart || 0) + (elem.firstFrame || 0)) % sd + sd) % sd;
+	  const r = symbolFlatBitmap(sub, subInner, doc, (depth || 0) + 1);
+	  if (!r) return null;
+	  res = { cv: r.cv, k: r.k, pre: matMul(m, r.pre) };
+	} else return null;
+  }
+  return (found === 1) ? res : null;
+}
+
+/* 把一个符号实例在指定内帧渲染成位图（含实例级滤镜 / 透明度 / 色调） */
+function renderSymbolLocalBake(sym, inner, doc, elem, ss){
+  const bb = symbolBBox(sym, doc);
+  if (!bb) return null;
+  const cx = (bb[0] + bb[2]) / 2, cy = (bb[1] + bb[3]) / 2;
+  let half = Math.max(bb[2] - bb[0], bb[3] - bb[1]) * 0.5;
+  if (!(half > 0)) half = 1;
+  /* 外扩留白：滤镜光晕/阴影/模糊不能被裁掉 */
+  let pad = 1;
+  if (elem && elem.filters) for (const f of elem.filters){
+	pad = Math.max(pad, elemFilterPad(elem) + 1);
+  }
+  half += pad;
+  const px = Math.max(16, Math.min(BAKE.maxPx, Math.ceil(half * 2 * ss)));
+  const k = half * 2 / px;                       /* 每个像素代表多少局部单位 */
+  const cv = newCanvas(px, px), ctx = cv.getContext('2d');
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  ctx.scale(px / (half * 2), px / (half * 2));
+  ctx.translate(-(cx - half), -(cy - half));
+  if (elem && elem.alpha !== 1) ctx.globalAlpha = elem.alpha;
+  if (elem && elem.filters && elem.filters.length){
+	const parts = [];
+	for (const f of elem.filters){
+	  if (f.kind === 'blur') parts.push(`blur(${Math.max(f.bx||0, f.by||0)}px)`);
+	}
+	if (elem.brightness) parts.push(`brightness(${(1 + elem.brightness).toFixed(3)})`);
+	if (parts.length) ctx.filter = parts.join(' ');
+  }
+  renderTimeline(ctx, sym.timeline, inner, doc, 0);
+  ctx.filter = 'none';
+  /* pre: 局部空间 → 该位图像素所覆盖的局部原点，即 translate(cx-half, cy-half) 的逆
+	 这里直接返回位图左上角在「元件局部空间」中的坐标 */
+  return { cv, k, pre: [1, 0, 0, 1, cx - half, cy - half] };
+}
+
+/* ── AM → 标准序列帧 ────────────────────────────────────────────────────
+   每个 shape（含其编组父链）= 一个 part。逐帧:
+	 · 世界矩阵 = 父链矩阵 ∘ 自身矩阵（nullobj 编组已展平）
+	 · 内容     = 纹理（含像素类特效烘焙）
+	 · 透明度   = 链上 opacity 乘积 */
+async function bakeAm(model, opts){
+  opts = opts || {};
+  const ss = opts.ss || BAKE.ss;
+  const fps = model.fps || 30;
+  const frameMs = 1000 / fps;
+  const L = Math.max(1, Math.round(model.totalTime / 1000 * fps));
+  const sink = bakeImgSink();
+  const parts = [];
+  const warned = new Set();
+  const refCache = new Map();
+  let si = 0;
+  for (const sh of model.shapes){
+	const t0 = sh.t0, t1 = Math.max(sh.t0 + 1, sh.t1);
+	const spanN = Math.max(1, t1 - t0);
+	const remapT = sh.remap || (t => t);
+	const g0 = (sh.g0 !== undefined) ? sh.g0 : t0;
+	const g1 = (sh.g1 !== undefined) ? sh.g1 : t1;
+	const P = { name: (sh.label || 'part').split('/').pop(), z: si++, frames: new Array(L).fill(null) };
+	parts.push(P);
+	/* 纹理裁出可见区域（rect 图集模式） */
+	const tex = model.textures.get(sh.img);
+	if (!tex) continue;
+	let sx = 0, sy = 0, cw = tex.width, chh = tex.height;
+	if (sh.rect){ sx = sh.rect[0]; sy = sh.rect[1]; cw = Math.max(1, sh.rect[2]); chh = Math.max(1, sh.rect[3]); }
+	for (let fr = 0; fr < L; fr++){
+	  const ms = (fr + 0.5) * frameMs;
+	  if (ms < g0 - 1e-6 || ms > g1 + 1e-6) continue;
+	  const tN = remapT(ms);
+	  const u = Math.min(1, Math.max(0, (tN - t0) / spanN));
+	  const loc = trackAt(sh.loc, u, [0,0,0]);
+	  const scl = trackAt(sh.scl, u, [1,1]);
+	  const rot = trackAt(sh.rot, u, [0])[0];
+	  const skw = trackAt(sh.skw, u, [0,0]);
+	  if (Math.abs(scl[0]) < 5e-3 || Math.abs(scl[1]) < 5e-3) continue;
+	  const cs = Math.cos(rot*Math.PI/180), sn = Math.sin(rot*Math.PI/180);
+	  const _pv = (sh.piv && sh.piv.kfs.length) ? trackAt(sh.piv, u, [0,0]) : null;
+	  const _px = (AMX.pivShape && _pv) ? (_pv[0]||0) : 0, _py = (AMX.pivShape && _pv) ? (_pv[1]||0) : 0;
+	  let A = [scl[0]*(cs - sn*skw[1]), scl[0]*(sn + cs*skw[1]),
+			   scl[1]*(cs*skw[0] - sn), scl[1]*(sn*skw[0] + cs), loc[0]+_px, loc[1]+_py];
+	  const fx = amSampleEffects(sh, u, warned);
+	  if (fx.sclMul[0] !== 1 || fx.sclMul[1] !== 1) A = matMul(A, [fx.sclMul[0],0,0,fx.sclMul[1],0,0]);
+	  if (fx.preM) A = matMul(A, fx.preM);
+	  if (_pv && (_pv[0] || _pv[1])) A = matMul(A, [1,0,0,1,-(_pv[0]||0),-(_pv[1]||0)]);
+	  let op = 1;
+	  if (sh.op && sh.op.kfs.length){ const o = trackAt(sh.op, u, [1])[0]; op *= (isFinite(o) ? o : 1); }
+	  if (sh.chain && sh.chain.length){ const c = amChainAt(sh.chain, ms); if (c.m) A = matMul(c.m, A); op *= c.op; }
+	  if (op <= 0.02) continue;
+	  /* 内容：纹理 + 像素类特效。无特效时内容恒定 → 缓存，全程只编码一次。
+		 [坑12] k 必须按「本帧实际位图尺寸」算：像素类特效会改变 cv 尺寸，
+		 若沿用缓存尺寸会让带特效的帧比例失真。 */
+	  const pix = fx.raster.filter(r => PIXEL_FX_KINDS.indexOf(r.kind) >= 0);
+	  const ck = sh.img + (pix.length ? '|fx|' + fr : '|raw');
+	  let ir = refCache.get(ck);
+	  if (ir === undefined){
+		let cv = null;
+		if (pix.length){
+		  try { cv = amRasterizeEffects(tex, sx, sy, cw, chh, pix, u); }
+		  catch(e){ cv = null; }
+		}
+		if (!cv){
+		  cv = newCanvas(Math.max(1, Math.round(cw)), Math.max(1, Math.round(chh)));
+		  cv.getContext('2d').drawImage(tex, sx, sy, cw, chh, 0, 0, cv.width, cv.height);
+		}
+		/* 纹理像素 → 局部 ±halfW/±halfH */
+		const k = (sh.halfW * 2) / cv.width;
+		const B = [k, 0, 0, (sh.halfH * 2) / cv.height, -sh.halfW, -sh.halfH];
+		ir = { ref: bakeImgRef(sink, cv), k, B };
+		refCache.set(ck, ir);
+	  }
+	  if (!ir || !ir.ref) continue;
+	  P.frames[fr] = bakeRecFrom(ir.ref, matMul(A, ir.B), 1, 0, 0, op);
+	}
+  }
+  return { W: model.width, H: model.height, fps, totalFrames: L, parts, imgs: sink.imgs, src: 'am' };
+}
+
+/* ── 标准序列帧 → AMPROJ ────────────────────────────────────────────────
+   AM 的 shape.fillImage 不支持逐帧关键帧，因此「位图不变的连续区间 = 一个
+   shape」，位图一切换就切开 —— 内容由序列帧保证，变换仍走关键帧，不逐帧膨胀。 */
+function bakedToAm(baked, title){
+  const fps = baked.fps, W = baked.W, H = baked.H;
+  const frameMs = 1000 / fps;
+  const L = [];
+  L.push("<?xml version='1.0' encoding='UTF-8' ?>");
+  L.push('<!-- 由 FLA⇄AMPROJ 网页转换器「降级为序列帧」管线生成 -->');
+  L.push(`<scene title="${esc(title || 'baked')}" width="${W}" height="${H}" exportWidth="${W}" exportHeight="${H}" precompose="dynamicResolution" bgcolor="#00000000" totalTime="${Math.round(baked.totalFrames * frameMs)}" fps="${fps}" retime="freeze" retimeAdaptFPS="false">`);
+  for (const fn of [...baked.imgs.keys()].sort()){
+	const data = baked.imgs.get(fn); if (!data) continue;
+	const [iw, ih] = pngSize(data);
+	L.push(`  <media uri="amproj:${esc(fn)}" filename="${esc(fn)}" title="${esc(fn)}" type="image/png" duration="0" size="${data.length}" sig="${sha1Hex(data)}" orientation="0" width="${iw}" height="${ih}" />`);
+  }
+  let sid = 100, nSeg = 0;
+  for (const P of baked.parts){
+	if (!P.frames.some(Boolean)) continue;
+	let i = 0;
+	while (i < baked.totalFrames){
+	  const f0 = P.frames[i];
+	  if (!f0){ i++; continue; }
+	  let j = i;
+	  while (j + 1 < baked.totalFrames && P.frames[j+1] && P.frames[j+1].img === f0.img) j++;
+	  /* 区间 [i, j]，位图恒定 → 一个 shape，变换走关键帧 */
+	  const t0 = Math.floor(i * frameMs), t1 = Math.floor((j + 1) * frameMs);
+	  sid++; nSeg++;
+	  L.push(`  <shape id="${sid}" label="${esc(P.name)}" startTime="${t0}" endTime="${Math.max(t0+1, t1)}" fillType="media" fillImage="amproj:${esc(f0.img)}" mediaFillMode="fill" s=".rect">`);
+	  L.push('    <transform lockAspectRatio="false">');
+	  const span = Math.max(1, j - i + 1);   /* 段 [i,j] 覆盖 (j+1-i) 帧，与 AM 读取端 (t1-t0) 同基准 */
+	  /* 关键帧取「位图中心 → 世界」的位置，与 FLA 侧 DOMBitmapInstance 口径一致。
+	     变换恒定的连续帧合并（只留首尾），避免每个 part 都逐帧膨胀成上百个 kf。 */
+	  const raw = [];
+	  for (let k = i; k <= j; k++){
+		const r = P.frames[k]; if (!r) continue;
+		const _b = baked.imgs.get(r.img);
+		if (!_b) continue;                       /* 素材缺失：跳过而不是崩整个转换 */
+		const [w, h] = pngSize(_b);
+		const p = matApply(r.mat, w/2, h/2);
+		const [rot, sx, sy, kx, ky] = trsFromFineDecompose(r.wm || r.mat);
+		raw.push({ t: (k - i) / span, loc: [p[0], p[1]], scl: [sx, sy], rot: rot*180/Math.PI, skew: [kx, ky], alpha: r.alpha, _m: r.mat });
+	  }
+	  const ck = [];
+	  for (let k = 0; k < raw.length; k++){
+		const samePrev = k > 0 && matEq(raw[k]._m, raw[k-1]._m) && Math.abs(raw[k].alpha - raw[k-1].alpha) < 1e-4;
+		const sameNext = k + 1 < raw.length && matEq(raw[k]._m, raw[k+1]._m) && Math.abs(raw[k].alpha - raw[k+1].alpha) < 1e-4;
+		if (!samePrev || !sameNext) ck.push(raw[k]);
+	  }
+	  if (!ck.length) ck.push(raw[0]);
+	  L.push('      <location>');
+	  for (const k2 of ck) L.push(`        <kf t="${fmt(k2.t)}" v="${fmt(k2.loc[0])},${fmt(k2.loc[1])},0.000000" />`);
+	  L.push('      </location>');
+	  L.push('      <scale>');
+	  for (const k2 of ck) L.push(`        <kf t="${fmt(k2.t)}" v="${fmt(k2.scl[0])},${fmt(k2.scl[1])}" />`);
+	  L.push('      </scale>');
+	  L.push('      <rotation>');
+	  let prev = null;
+	  for (const k2 of ck){
+		let v = k2.rot;
+		if (prev !== null){ while (v - prev > 180) v -= 360; while (v - prev < -180) v += 360; }
+		prev = v;
+		L.push(`        <kf t="${fmt(k2.t)}" v="${fmt(v)}" />`);
+	  }
+	  L.push('      </rotation>');
+	  if (ck.some(k2 => Math.abs(k2.skew[0]) > 1e-7 || Math.abs(k2.skew[1]) > 1e-7)){
+		L.push('      <skew>');
+		for (const k2 of ck) L.push(`        <kf t="${fmt(k2.t)}" v="${fmt(k2.skew[0])},${fmt(k2.skew[1])}" />`);
+		L.push('      </skew>');
+	  }
+	  if (ck.some(k2 => k2.alpha < 0.999)){
+		L.push('      <opacity>');
+		for (const k2 of ck) L.push(`        <kf t="${fmt(k2.t)}" v="${fmt(Math.max(0, Math.min(1, k2.alpha)))}" />`);
+		L.push('      </opacity>');
+	  }
+	  L.push('    </transform>');
+	  L.push(`    <property name="size" type="vec2" value="${fmt(f0.hw)},${fmt(f0.hh)}" />`);
+	  L.push('  </shape>');
+	  i = j + 1;
+	}
+  }
+  L.push('</scene>');
+  const xmlText = L.join('\n') + '\n';
+  const xmlName = 'converted-from-fla.xml';
+  const manifest = [...baked.imgs.keys()].sort().map(fn => `${sha1Hex(baked.imgs.get(fn))}:${fn}`).join('\n');
+  const entries = [];
+  for (const fn of [...baked.imgs.keys()].sort()) entries.push({ name: fn, data: baked.imgs.get(fn) });
+  entries.push({ name: xmlName, data: enc.encode(xmlText) });
+  entries.push({ name: 'manifest.txt', data: enc.encode(manifest) });
+  return { bytes: zipStore(entries), xml: xmlText, totalFrames: baked.totalFrames, totalMs: baked.totalFrames*frameMs,
+		   pngCount: baked.imgs.size, shapes: nSeg, W, H };
+}
+
+/* ── 标准序列帧 → FLA ───────────────────────────────────────────────────
+   每个 part = 一个 graphic symbol，内部逐帧放不同位图（真·序列帧元件）；
+   主时间线只放该 symbol 的实例 + 变换关键帧。位图恒定的 part 自然只有 1 帧，
+   不会逐帧膨胀。结构与现有 fla2am 的 label→sprite→image 读取链兼容。 */
+async function bakedToFla(baked, title){
+  const fps = baked.fps, W = baked.W, H = baked.H;
+  const usdPng = new Map();                       /* imgName -> { base, w, h } */
+  for (const [fn, bytes] of baked.imgs){
+	const [w, h] = pngSize(bytes);
+	usdPng.set(fn, { base: safeName(fn.replace(/\.png$/i, '')), w, h, bytes });
+  }
+  const imgLib = new Map();
+  for (const [fn, t] of usdPng) imgLib.set(fn, 'image/' + t.base);
+  /* sprite 元件：逐帧序列 */
+  const sprXml = new Map(), sprName = new Map();
+  let pi = 0;
+  for (const P of baked.parts){
+	if (!P.frames.some(Boolean)) continue;
+	const nm = 'sprite/' + safeName(P.name) + '_' + (++pi);
+	sprName.set(P, nm);
+	/* [帧号对齐] sprite 内部用「相对帧号」(k - f0)。label 层该 sprite 实例的
+	   index = f0、firstFrame 缺省 0，故播放时 inner = frame - f0 正好落到
+	   相对帧号上。若内部也用绝对帧号，part 从非 0 帧起会出现内帧偏移 → 序列帧错位。 */
+	let f0 = -1, fLast = -1;
+	for (let k = 0; k < baked.totalFrames; k++) if (P.frames[k]){ if (f0 < 0) f0 = k; fLast = k; }
+	P._f0 = f0; P._fLast = fLast;
+	const fr = [];
+	let k = f0;
+	while (k <= fLast){
+	  const r = P.frames[k];
+	  if (!r){ k++; continue; }
+	  let j = k;
+	  while (j + 1 <= fLast && P.frames[j+1] && P.frames[j+1].img === r.img) j++;
+	  const dur = j - k + 1;
+	  fr.push(`            <DOMFrame index="${k - f0}"${dur > 1 ? ` duration="${dur}"` : ''} keyMode="9728">
+			  <elements>
+				<DOMSymbolInstance libraryItemName="${esc(imgLib.get(r.img))}" symbolType="graphic" loop="loop"/>
+			  </elements>
+			</DOMFrame>`);
+	  k = j + 1;
+	}
+	sprXml.set(nm, `<DOMSymbolItem xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://ns.adobe.com/xfl/2008/" name="${esc(nm)}" itemID="${xflItemId()}" symbolType="graphic">
+  <timeline>
+	<DOMTimeline name="${esc(P.name)}">
+	  <layers>
+		<DOMLayer color="#4F4FFF" current="true" isSelected="true">
+		  <frames>
+` + fr.join('\n') + `
+		  </frames>
+		</DOMLayer>
+	  </layers>
+	</DOMTimeline>
+  </timeline>
+</DOMSymbolItem>
+`);
+  }
+  /* label 元件：每层一个 sprite 实例 + 变换关键帧 */
+  const layArr = [];
+  for (let z = baked.parts.length - 1; z >= 0; z--){
+	const P = baked.parts[z];
+	if (!sprName.has(P)) continue;
+	const fr = [];
+	let k = 0;
+	while (k < baked.totalFrames){
+	  const r = P.frames[k];
+	  if (!r){ k++; continue; }
+	  let j = k;
+	  /* 变换恒定则合并，避免逐帧关键帧 */
+	  while (j + 1 < baked.totalFrames && P.frames[j+1] &&
+			 matEq(P.frames[j+1].mat, r.mat) && Math.abs(P.frames[j+1].alpha - r.alpha) < 1e-4) j++;
+	  const dur = j - k + 1;
+	  const col = (r.alpha < 0.999) ? `
+				  <color>
+					<Color alphaMultiplier="${fmt(Math.max(0, Math.min(1, r.alpha)))}"/>
+				  </color>` : '';
+	  fr.push(`            <DOMFrame index="${k}"${dur > 1 ? ` duration="${dur}"` : ''} keyMode="9728">
+			  <elements>
+				<DOMSymbolInstance libraryItemName="${esc(sprName.get(P))}" symbolType="graphic" loop="loop">
+				  <matrix>
+					<Matrix ${xflMat(r.mat)}/>
+				  </matrix>${col}
+				</DOMSymbolInstance>
+			  </elements>
+			</DOMFrame>`);
+	  k = j + 1;
+	}
+	layArr.push(`        <DOMLayer name="${esc(P.name)}" color="#4F4FFF">
+		  <frames>
+` + fr.join('\n') + `
+		  </frames>
+		</DOMLayer>`);
+  }
+  const labName = 'label/' + safeName(title || 'animation');
+  const labXml = `<DOMSymbolItem xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://ns.adobe.com/xfl/2008/" name="${esc(labName)}" itemID="${xflItemId()}" symbolType="graphic">
+  <timeline>
+	<DOMTimeline name="${esc(title || 'animation')}">
+	  <layers>
+` + layArr.join('\n') + `
+	  </layers>
+	</DOMTimeline>
+  </timeline>
+</DOMSymbolItem>
+`;
+  /* DOMDocument */
+  for (const t of usdPng.values()) t.datBytes = await makeFlaDat(t.bytes);
+  const R = Math.round;
+  const D = [];
+  D.push("<?xml version='1.0' encoding='UTF-8' ?>");
+  D.push('<!-- 由 FLA⇄AMPROJ 网页转换器「降级为序列帧」管线生成 -->');
+  D.push('<DOMDocument xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://ns.adobe.com/xfl/2008/"');
+  D.push(`  backgroundColor="#FFFFFF" width="${W}" height="${H}" frameRate="${fps}" currentTimeline="1"`);
+  D.push('  xflVersion="2.971" creatorInfo="Adobe Animate" platform="Windows" versionInfo="Saved by Animate Windows 20.0 build 17400" majorVersion="20" buildNumber="17400"');
+  D.push(`  vanishingPoint3DX="${R(W/2)}" vanishingPoint3DY="${R(H/2)}" playOptionsPlayFrameActions="false"`);
+  D.push(`  filetypeGUID="DD0DDBBF-5BEF-45B2-9F24-A3048D2A676F" fileGUID="${xflUuid()}">`);
+  D.push('     <folders>');
+  for (const nm of ['image', 'label', 'media', 'sprite'])
+	D.push(`          <DOMFolderItem name="${nm}" itemID="${xflItemId()}" isExpanded="true"/>`);
+  D.push('     </folders>');
+  D.push('     <media>');
+  let binN = 0;
+  for (const t of usdPng.values()){
+	t.dat = 'B ' + (++binN) + ' 1790728191.dat';
+	D.push(`          <DOMBitmapItem name="media/${t.base}" itemID="${xflItemId()}" sourceLastImported="0" externalFileSize="${t.bytes.length}" originalCompressionType="lossless" href="media/${t.base}.png" bitmapDataHRef="${t.dat}" frameRight="${R(t.w*20)}" frameBottom="${R(t.h*20)}" maxScaleUsed="1"/>`);
+  }
+  D.push('     </media>');
+  D.push('     <symbols>');
+  for (const t of usdPng.values())
+	D.push(`          <Include href="image/${t.base}.xml" itemIcon="1" loadImmediate="false" itemID="${xflItemId()}"/>`);
+  for (const nm of sprXml.keys())
+	D.push(`          <Include href="${esc(nm)}.xml" itemIcon="1" loadImmediate="false" itemID="${xflItemId()}"/>`);
+  D.push(`          <Include href="${esc(labName)}.xml" itemIcon="1" loadImmediate="false" itemID="${xflItemId()}"/>`);
+  D.push('     </symbols>');
+  D.push('     <timelines>');
+  D.push('          <DOMTimeline name="animation">');
+  D.push('               <layers>');
+  D.push('                    <DOMLayer name="instance" color="#4F4FFF" current="true" isSelected="true">');
+  D.push('                         <frames>');
+  D.push(`                              <DOMFrame index="0" duration="${Math.max(1, baked.totalFrames)}" keyMode="9728">`);
+  D.push('                                   <elements>');
+  D.push(`                                        <DOMSymbolInstance libraryItemName="${esc(labName)}" symbolType="graphic" loop="loop"/>`);
+  D.push('                                   </elements>');
+  D.push('                              </DOMFrame>');
+  D.push('                         </frames>');
+  D.push('                    </DOMLayer>');
+  D.push('               </layers>');
+  D.push('          </DOMTimeline>');
+  D.push('     </timelines>');
+  D.push('     <scripts/>');
+  D.push('     <PrinterSettings/>');
+  D.push('     <publishHistory/>');
+  D.push('</DOMDocument>');
+  const domXml = D.join('\n') + '\n';
+  const entries = [];
+  const pushStore = (name, data) => entries.push({ name, data, crc: crc32(data), usize: data.length, deflate: false });
+  const pushDefl  = async (name, raw) => entries.push({ name, data: await deflateRawBytes(raw), crc: crc32(raw), usize: raw.length, deflate: true });
+  pushStore('mimetype', enc.encode('application/vnd.adobe.xfl'));
+  pushStore((title || 'animation') + '.xfl', enc.encode('PROXY-CS5'));
+  await pushDefl('DOMDocument.xml', enc.encode(domXml));
+  pushStore('META-INF/', XFL_EMPTY);
+  pushStore('META-INF/metadata.xml', XFL_EMPTY);
+  await pushDefl('PublishSettings.xml', enc.encode(
+`<?xml version="1.0" encoding="UTF-8"?>
+<PublishSettings xmlns="http://ns.adobe.com/xfl/2008/">
+  <PublishFormatProperties includedClasses="preloader" width="${W}" height="${H}" matchMovieDim="true" />
+  <PublishHtmlProperties enabled="1" />
+</PublishSettings>
+`));
+  pushStore('MobileSettings.xml', XFL_EMPTY);
+  for (const d of ['publishtemplates/', 'LIBRARY/', 'LIBRARY/image/', 'LIBRARY/label/', 'LIBRARY/media/', 'LIBRARY/sprite/'])
+	pushStore(d, XFL_EMPTY);
+  for (const t of usdPng.values())
+	await pushDefl(`LIBRARY/image/${t.base}.xml`, enc.encode(xflImageSymbol('image/' + t.base, 'media/' + t.base)));
+  for (const [nm, xml] of sprXml) await pushDefl(`LIBRARY/${nm}.xml`, enc.encode(xml));
+  await pushDefl(`LIBRARY/${labName}.xml`, enc.encode(labXml));
+  for (const t of usdPng.values()){
+	pushStore(`LIBRARY/media/${t.base}.png`, t.bytes);
+	pushStore('bin/' + t.dat, t.datBytes);
+  }
+  return { bytes: zipWrite(entries), xml: domXml, layers: baked.parts.length, media: usdPng.size,
+		   totalFrames: baked.totalFrames, W, H, fps };
+}
+const matEq = (a, b) => {
+  if (!a || !b) return false;
+  for (let i = 0; i < 6; i++) if (Math.abs(a[i] - b[i]) > 1e-7) return false;
+  return true;
+};
+
+/* ══════════════════════════════════════════════════════════════════════════
    10 · 界面逻辑：模式切换 / 转换 / 预览 / 往返自测 / 下载
    ══════════════════════════════════════════════════════════════════════════ */
 let MODE = 'fla2am';
@@ -2949,6 +3726,12 @@ function setMode(m){
   $('dlBtn').disabled = true; $('dlMemoBtn').disabled = true;
 }
 for (const b of $('modeSeg').children) b.onclick = () => setMode(b.dataset.mode);
+/* 「降级为序列帧」只对 FLA→AM / AM→FLA 两个方向有意义 */
+$('bakeMode').onchange = () => {
+  const on = $('bakeMode').checked;
+  $('bakeHint').style.display = on ? '' : 'none';
+};
+$('bakeHint').style.display = $('bakeMode').checked ? '' : 'none';
 
 $('ss').oninput = () => { $('ssVal').textContent = $('ss').value; };
 /* ★ [坑22 配套] 单独下载的备忘录要能再上传。除了「打进压缩包里」这条老路，
@@ -3028,8 +3811,18 @@ async function runConvert(){
 	const ss = parseInt($('ss').value, 10) || 2;
 	const doFilters = $('doFilters').checked;
 	const t0 = performance.now();
-	const conv = new Fla2Am(doc, ss, { doFilters });
-	const res = conv.writeAmproj(baseName(SRC.name));
+	let res;
+	if ($('bakeMode').checked){
+	  log('  · 降级模式：先把 FLA 全部烘焙成标准序列帧…', 'w');
+	  const baked = await bakeFla(doc, { ss });
+	  log('    ' + baked.parts.length + ' 个部件 / ' + baked.totalFrames + ' 帧 / '
+		  + baked.imgs.size + ' 张唯一位图（内容去重后）', 'ok');
+	  res = bakedToAm(baked, baseName(SRC.name));
+	  res.pngCount = baked.imgs.size; res.shapes = res.shapes || baked.parts.length;
+	} else {
+	  const conv = new Fla2Am(doc, ss, { doFilters });
+	  res = conv.writeAmproj(baseName(SRC.name));
+	}
 	const ms = performance.now() - t0;
 	OUT = { name: baseName(SRC.name) + '.amproj', bytes: res.bytes, kind: 'amproj' };
 	log('  输出 ' + res.shapes.length + ' 个 shape / ' + res.pngCount + ' 张 PNG, '
@@ -3069,7 +3862,16 @@ async function runConvert(){
 		+ model.shapes.length + ' 个, 素材 ' + model.media.size + ', 时长 '
 		+ model.totalTime.toFixed(0) + 'ms', 'ok');
 	const t0 = performance.now();
-	const res = await am2fla(model);
+	let res;
+	if ($('bakeMode').checked){
+	  log('  · 降级模式：先把 AM 全部烘焙成标准序列帧…', 'w');
+	  const baked = await bakeAm(model, { ss: parseInt($('ss').value, 10) || 2 });
+	  log('    ' + baked.parts.length + ' 个部件 / ' + baked.totalFrames + ' 帧 / '
+		  + baked.imgs.size + ' 张唯一位图（内容去重后）', 'ok');
+	  res = await bakedToFla(baked, baseName(SRC.name));
+	} else {
+	  res = await am2fla(model);
+	}
 	const ms = performance.now() - t0;
 	OUT = { name: baseName(SRC.name) + '.fla', bytes: res.bytes, kind: 'fla' };
 	log('  输出 ' + res.layers + ' 图层 / ' + res.media + ' 位图, '
@@ -5085,15 +5887,27 @@ async function __amprojToTripletImpl(model, labelCfg, baseNameStr, memo){
 	 实测：eat 后半段的新法杖（元件 193）拿到 spriteIdx=42，
 	 而 sprite[] 只有 42 条（索引 0~41）→ 渲染时整根法杖解析不到。
 	 修法：复用判定提前到这里做，两处共用同一份映射表。 */
+  /* ★ [坑51 · sprite 下标撞车] buildPamSprites 在**没有可用备忘录 sprite** 时，
+	 会为每个 image 生成一条占位 sprite，且顺序与 images[] 严格一一对应
+	 （sprite[i] ↔ image[i]）。而旧代码此时 IMG_TO_SPRITE 是空的，
+	 新增元件于是从 spriteIdx=0 开始递增 —— 直接撞上占位 sprite：
+	 元件本应显示 image[9]，却指到 sprite[9]=image[9] 之外的错位项，
+	 实测「火焰」元件被指向了法杖的 sprite，PAM 与 AM 帧差高达 24%。
+	 修法：占位模式下先把 i→i 灌进 IMG_TO_SPRITE，让新增元件复用占位 sprite，
+	 与 buildPamSprites 的产物完全对齐（绝不多建、绝不撞车）。 */
+  const USE_MEMO_SPRITES = !!(memo && Array.isArray(memo.sprite) && memo.sprite.length);
+  const SPRITE_BASE = USE_MEMO_SPRITES ? memoSpriteCount : images.length;
   let SPRITE_TOTAL = 0;
   const IMG_TO_SPRITE = new Map();
-  {
+  if (!USE_MEMO_SPRITES){
+	for (let i=0;i<images.length;i++) IMG_TO_SPRITE.set(i, i);
+  } else {
 	const remap2 = new Map();
 	for (let j=0;j<images.length;j++){
 	  const mi = images[j] && images[j]._mi;
 	  if (mi && mi.i != null && !remap2.has(mi.i)) remap2.set(mi.i, j);
 	}
-	const src = (memo && Array.isArray(memo.sprite)) ? memo.sprite : [];
+	const src = memo.sprite;
 	for (let i=0;i<src.length;i++){
 	  const sp = src[i];
 	  const fr = sp && sp.frame && sp.frame[0];
@@ -5108,13 +5922,15 @@ async function __amprojToTripletImpl(model, labelCfg, baseNameStr, memo){
 	let k = 0;
 	for (const [elemIdx, ne] of newElems){
 	  const _im = images[ne.imgIdx];
-	  if (_im && _im._mi && IMG_TO_SPRITE.has(ne.imgIdx)){
+	  /* 占位模式下 IMG_TO_SPRITE 天然覆盖每个 image（i→i），无需再要求 _mi；
+		 备忘录模式下这张表只登记「确属原版素材」的项，判定条件不变。 */
+	  if (_im && IMG_TO_SPRITE.has(ne.imgIdx)){
 		ne.spriteIdx = IMG_TO_SPRITE.get(ne.imgIdx); ne.reuse = true; continue;
 	  }
-	  ne.spriteIdx = memoSpriteCount + k++;
+	  ne.spriteIdx = SPRITE_BASE + k++;
 	  ne.reuse = false;
 	}
-	SPRITE_TOTAL = memoSpriteCount + k;   /* [坑45b] 最终 sprite[] 条数 */
+	SPRITE_TOTAL = SPRITE_BASE + k;   /* [坑45b] 最终 sprite[] 条数 */
   }
 
   /* 4) 组装 main_sprite.frame[]：每帧一个 FrameInfo
@@ -5415,7 +6231,9 @@ async function __amprojToTripletImpl(model, labelCfg, baseNameStr, memo){
 		 scl 0.496→0.925, rot 0→26.8°）。判据：该 image 有 memo 对应才复用。 */
 	  if (ne.reuse) continue;   /* [坑45] 已在区段 4 判定为复用，不补建 */
 	  const _im = images[ne.imgIdx];
-	  if (_im && _im._mi && imgToSprite.has(ne.imgIdx)){ ne.spriteIdx = imgToSprite.get(ne.imgIdx); continue; }
+	  /* [坑51] 与区段 4 判定保持一致：占位模式下 IMG_TO_SPRITE 覆盖每个 image，
+		 此时一律复用，绝不补建；备忘录模式下仍要求确属原版素材（_mi）。 */
+	  if (_im && (USE_MEMO_SPRITES ? _im._mi : true) && imgToSprite.has(ne.imgIdx)){ ne.spriteIdx = imgToSprite.get(ne.imgIdx); continue; }
 	  const base = idName(ne.label || (images[ne.imgIdx] && images[ne.imgIdx].logical) || ('elem_' + elemIdx));
 	  let nm = base;
 	  if (used.has(nm)){ let n2 = 2; while (used.has(nm + '_' + n2)) n2++; nm = base + '_' + n2; }
